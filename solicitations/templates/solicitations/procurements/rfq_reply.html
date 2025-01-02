@@ -1,0 +1,97 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+  <title>RFQ || Automated Program</title>
+  <meta content="" name="description">
+  <meta content="" name="keywords">
+  <link rel="shortcut icon" href="#" type="image/x-icon">
+
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Jost:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="{% static 'solicitations/assets/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+  <link href="{% static 'solicitations/assets/css/style.css' %}" rel="stylesheet">
+</head>
+<body>
+    <!-- ======= Top Bar ======= -->
+  <div id="topbar" class="d-flex align-items-center header-top fixed-top py-2">
+    <div class="container d-flex justify-content-between">
+      <div class="contact-info align-items-center">
+        <a class="text-white" href="#">Welcome to RFQ Automated Program</a>
+      </div>
+      <div class="d-none d-lg-flex gap-3 social-links align-items-center">
+        <a href="mailto:support@rfqsys.com" class="text-white">Support: support@rfqsys.com</a>
+      </div>
+    </div>
+  </div>
+    <!-- ======= Header ======= -->
+    <header id="header" class="header-top fixed-top py-3  mt-4 pt-4 bg-white mb-3">
+        <div class="container d-flex align-items-center">
+    
+          <h6 class="me-auto py-2"><a class='fs-3 bold logo' href="#">LOGO</a>
+          </h6>
+    
+          <nav id="navbar" class="navbar">
+            <ul>
+            <i class="bi bi-list mobile-nav-toggle text-warning"></i>
+          </nav><!-- .navbar -->
+        </div>
+      </header><!-- End Header -->
+
+
+  <section class="mt-5 pt-5 mb-4 pb-4">
+    <div class="container bg-light mt-3 rounded-2 p-3">
+      <div class="">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="fs-6">
+              Product Detail
+            </div>
+            <hr>
+            <p><strong>Item Name:</strong> {{ rfq.solicitation.item_name }}</p>
+            <p><strong>Quantity:</strong> {{ rfq.solicitation.quantity }}</p>
+            <p><strong>Part Number:</strong> {{ rfq.solicitation.part_number }}</p>
+            <p><strong>NSN:</strong> {{ rfq.solicitation.NSN }}</p>
+          </div>
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-body">
+                <div class="text-center text-muted fs-6">Fill out this form and if the cost is competitive we will be back to you as soon as possible</div>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit" class="btn mybg text-white w-100">Submit Reply</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+    <footer id="footer" class="footer">
+        <div class="copyright">
+          &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+        </div>
+        <div class="credits">
+          Designed by <a href="#">Gil Tech</a>
+        </div>
+    </footer><!-- End Footer -->
+    
+    <!-- Vendor JS Files -->
+    <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+</body>
+</html>

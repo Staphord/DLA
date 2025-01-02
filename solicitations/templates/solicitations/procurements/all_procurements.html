@@ -1,0 +1,33 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section>
+    <div class="d-flex justify-content-between">
+        <div class="">
+            Procurements History
+        </div>
+        <div class="d-flex gap-3">
+            <a href="{% url 'solicitations:sent-rfq' %}" class="btn bg-dark text-white position-relative">RFQs Sent
+                <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
+                    {{total_sent_rfqs}}+
+                    <span class="visually-hidden">Sent Rfqs</span>
+                </span>
+            </a>
+            <a href="#" class="btn bg-secondary text-white position-relative">Replied RFQs
+                <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
+                    99+
+                    <span class="visually-hidden">unread messages</span>
+                </span>
+            </a>
+            <a href="#" class="btn mybg hoverbg text-white position-relative">Accepted Bids
+                <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
+                    99+
+                    <span class="visually-hidden">unread messages</span>
+                </span>
+            </a>
+        </div>
+    </div>
+{% endblock content %}

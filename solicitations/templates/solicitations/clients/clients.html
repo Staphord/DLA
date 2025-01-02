@@ -1,0 +1,49 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section>
+    <div class="d-flex justify-content-between">
+        <div class="">
+            Total Clients <span class="badge bg-light text-dark">{{total_clients}}</span>
+        </div>
+        <div class="">
+            <a href="{% url 'solicitations:add-client' %}" class="btn mybg hoverbg text-white">Add Client</a>
+        </div>
+    </div>
+
+    <div class="my-4">
+        <div class="card py-4">
+            <div class="card-body">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                      <th>Business Name</th>
+                      <th>Address</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th colspan="1">Operation</th>
+                    </thead>
+                    <tbody>
+                        
+                        {% for client in clients %}
+                        <tr>
+                            <td>{{client.companyName}}</td>
+                            <td>{{client.address}}</td>
+                            <td>{{client.email}}</td>
+                            <td>{{client.phone}}</td>
+                            <td><a href="{% url 'solicitations:client-details' client.id %}" class="btn mybg hoverbg text-white">View</a></td>
+                          </tr>
+                        {% endfor %}
+                            
+                    </tbody>
+                  </table>
+                  
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock content %}
+    

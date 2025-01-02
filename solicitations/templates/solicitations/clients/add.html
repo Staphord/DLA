@@ -1,0 +1,93 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section>
+    <div class="d-flex justify-content-between mt-3">
+        <div class="">
+            Add New Cient...
+        </div>
+        <div class="">
+            
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <div class="card">
+            <div class="card-body">
+                <form action="" method="post" class="py-3" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row my-2">
+                        <div class="col-md-6">
+                            <label for="">First Name:</label>
+                            {{form.first_name}}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="">Last Name:</label>
+                            {{form.last_name}}
+                        </div>
+                    </div>
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">Email:</label>
+                            {{form.email}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Phone:</label>
+                            {{form.phone}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Company Name:</label>
+                            {{form.companyName}}
+                        </div>
+                    </div>
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">Address:</label>
+                            {{form.address}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">User Type:</label>
+                            {{form.user_type}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Logo:</label>
+                            {{form.logo}}
+                        </div>
+                    </div>
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">User Name:</label>
+                            {{form.username}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Password:</label>
+                            <input type="password" name="password1" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Confirm Password:</label>
+                            <input type="password" name="password2" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="my-3 d-flex justify-content-end gap-3">
+                        <a href="{% url 'solicitations:clients' %}" class="btn btn-danger">Cancel</a>
+                        <button type="submit" class="btn mybg hoverbg text-white">Add Client</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    
+
+    
+</section>
+
+{% endblock content %}
+    

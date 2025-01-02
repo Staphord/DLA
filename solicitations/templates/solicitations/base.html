@@ -1,0 +1,270 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+  <title>RFQ || Automated Program</title>
+  <meta content="" name="description">
+  <meta content="" name="keywords">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+<link href="{% static 'gil/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/boxicons/css/boxicons.min.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/quill/quill.snow.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/quill/quill.bubble.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/simple-datatables/style.css' %}" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+<link href="{% static 'gil/css/style.css' %}" rel="stylesheet">
+</head>
+
+<body>
+  {% if user.is_authenticated %}
+
+  <!-- ======= Header ======= -->
+  <header id="header" class="header fixed-top d-flex align-items-center">
+
+    <div class="d-flex align-items-center justify-content-between">
+      <a href="#" class="logo d-flex align-items-center">
+        <span class="d-none d-lg-block my-text">RFQSYS</span>
+      </a>
+      <i class="bi bi-list toggle-sidebar-btn my-text"></i>
+    </div><!-- End Logo -->
+
+    <nav class="header-nav ms-auto">
+      <ul class="d-flex align-items-center">
+
+        <li class="nav-item d-block d-lg-none">
+          <a class="nav-link nav-icon search-bar-toggle " href="#">
+            <i class="bi bi-search"></i>
+          </a>
+        </li><!-- End Search Icon-->
+
+        <li class="nav-item dropdown">
+
+          <a class="nav-link nav-icon" href="#" data-bs-toggle="dropdown">
+            <i class="bi bi-bell"></i>
+            <span class="badge mybg badge-number">4</span>
+          </a><!-- End Notification Icon -->
+
+          <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow notifications">
+            <li class="dropdown-header">
+              You have 4 new notifications
+              <a href="#"><span class="badge rounded-pill bg-primary p-2 ms-2">View all</span></a>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li class="notification-item">
+              <i class="bi bi-exclamation-circle text-warning"></i>
+              <div>
+                <h4>Lorem Ipsum</h4>
+                <p>Quae dolorem earum veritatis oditseno</p>
+                <p>30 min. ago</p>
+              </div>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li class="notification-item">
+              <i class="bi bi-x-circle text-danger"></i>
+              <div>
+                <h4>Atque rerum nesciunt</h4>
+                <p>Quae dolorem earum veritatis oditseno</p>
+                <p>1 hr. ago</p>
+              </div>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li class="notification-item">
+              <i class="bi bi-check-circle text-success"></i>
+              <div>
+                <h4>Sit rerum fuga</h4>
+                <p>Quae dolorem earum veritatis oditseno</p>
+                <p>2 hrs. ago</p>
+              </div>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li class="notification-item">
+              <i class="bi bi-info-circle text-primary"></i>
+              <div>
+                <h4>Dicta reprehenderit</h4>
+                <p>Quae dolorem earum veritatis oditseno</p>
+                <p>4 hrs. ago</p>
+              </div>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+            <li class="dropdown-footer">
+              <a href="#">Show all notifications</a>
+            </li>
+
+          </ul><!-- End Notification Dropdown Items -->
+
+        </li><!-- End Notification Nav -->
+
+        <li class="nav-item dropdown pe-3">
+
+          <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
+            <img src="{% static 'gil/img/profile-img.webp '%}" alt="Profile" class="rounded-circle">
+            <span class="d-none d-md-block dropdown-toggle ps-2">{{user.username}}</span>
+          </a><!-- End Profile Iamge Icon -->
+
+          <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
+            <li class="dropdown-header">
+              <h6>{{user.username}}</h6>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="#">
+                <i class="bi bi-person"></i>
+                <span>My Profile</span>
+              </a>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="#">
+                <i class="bi bi-gear"></i>
+                <span>Account Settings</span>
+              </a>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="#">
+                <i class="bi bi-question-circle"></i>
+                <span>Need Help?</span>
+              </a>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="{% url 'accounts:logout' %}">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Sign Out</span>
+              </a>
+            </li>
+
+          </ul><!-- End Profile Dropdown Items -->
+        </li><!-- End Profile Nav -->
+
+      </ul>
+    </nav><!-- End Icons Navigation -->
+
+  </header><!-- End Header -->
+
+  <!-- ======= Sidebar ======= -->
+  <aside id="sidebar" class="sidebar">
+
+    <ul class="sidebar-nav" id="sidebar-nav">
+
+      <li class="nav-item">
+        <a class="nav-link " href="{% url 'solicitations:home' %}">
+          <i class="bi bi-grid text-dark"></i>
+          <span class="text-dark">Dashboard</span>
+        </a>
+      </li><!-- End Dashboard Nav -->
+
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="{% url 'solicitations:solicitations' %}">
+          <i class="bi bi-files my-text"></i><span text-dark>Solicitations</span>
+        </a>
+      </li><!-- End Components Nav -->
+
+      {% if user.user_type == "admin" %}
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="{% url 'solicitations:clients' %}">
+          <i class="bi bi-people my-text"></i><span text-dark>Users</span>
+        </a>
+      </li><!-- End Components Nav -->
+      {% endif %}
+
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="#">
+          <i class="bi bi-buildings my-text"></i><span text-dark>Oem</span>
+        </a>
+      </li><!-- End Components Nav -->
+
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="{% url 'solicitations:sent-rfq' %}">
+          <i class="bi bi-truck my-text"></i><span text-dark>Procurements</span>
+        </a>
+      </li><!-- End Components Nav -->
+
+    </ul>
+
+  </aside><!-- End Sidebar-->
+  <main id="main" class="main bg-white">
+    {% block content %}
+
+    {% endblock %}
+</main>
+
+  <!-- ======= Footer ======= -->
+  <footer id="footer" class="footer">
+    <div class="copyright">
+      &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+    </div>
+    <div class="credits">
+      Designed by <a href="#">Gil Tech</a>
+    </div>
+  </footer><!-- End Footer -->
+
+  <a href="#" class="back-to-top d-flex align-items-center mybg justify-content-center"><i class="bi bi-arrow-up-short text-white"></i></a>
+
+  {% else %}
+  <div class="d-flex justify-content-center align-items-center vh-100">
+    <div class="text-center">
+        <div class="mb-3">YOU ARE NOT AUTHENTICATED. PLEASE LOGIN.</div>
+        <a href="{% url 'accounts:login-user' %}" class="btn btn-primary">Login Now</a>
+    </div>
+</div>
+
+  {% endif %}
+
+  <!-- Vendor JS Files -->
+  <script src="{% static 'gil/vendor/apexcharts/apexcharts.min.js' %}"></script>
+  <script src="{% static 'gil/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'gil/vendor/chart.js/chart.umd.js' %}"></script>
+  <script src="{% static 'gil/vendor/echarts/echarts.min.js' %}"></script>
+  <script src="{% static 'gil/vendor/quill/quill.js' %}"></script>
+  <script src="{% static 'gil/vendor/tinymce/tinymce.min.js' %}"></script>
+
+  <!-- Template Main JS File -->
+  <script src="{% static 'gil/js/main.js' %}"></script>
+
+</body>
+
+</html>

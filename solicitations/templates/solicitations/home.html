@@ -1,0 +1,218 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+
+{% if user.is_authenticated %}
+<div class="pagetitle">
+  <h1 class="text-dark">Dashboard</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="#">Home</a></li>
+      <li class="breadcrumb-item text-dark">Dashboard</li>
+    </ol>
+  </nav>
+</div><!-- End Page Title -->
+
+<section class="section dashboard">
+  
+  {% if user.user_type == "admin" %}
+  <div class="row">
+    <!-- Solicitation Card -->
+    <div class="col-xxl-4 col-md-4">
+      <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
+          <div class="card info-card revenue-card myhover">
+              <div class="card-body rounded-3">
+                <h5 class="card-title">Solicitations <span class="text-muted">| All</span></h5>
+                <div class="d-flex align-items-center">
+                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                      <i class="bi bi-files my-text"></i>
+                  </div>
+                  <div class="ps-3">
+                    <h6 class="">{{total_solicitations}}</h6>
+                    <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
+                  </div>
+                </div>
+              </div>
+          </div>
+      </a>
+    </div><!-- End Solicitation Card -->
+
+    <!-- Procurement Card -->
+    <div class="col-xxl-4 col-md-4">
+      <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
+        <div class="card info-card revenue-card myhover">
+          <div class="card-body rounded-3">
+            <h5 class="card-title">Procurements <span class="text-muted">| All</span></h5>
+            <div class="d-flex align-items-center">
+                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                  <i class="bi bi-truck my-text"></i>
+              </div>
+              <div class="ps-3">
+                <h6 class="">{{total_sent_rfqs}}</h6>
+                <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </a>
+    </div>
+    <!-- End Procurement Card -->
+
+    <!-- Users Card -->
+    <div class="col-xxl-4 col-md-4">
+      <a href="{% url 'solicitations:clients' %}" class="text-decoration-none">
+        <div class="card info-card revenue-card myhover">
+          <div class="card-body rounded-3">
+            <h5 class="card-title">Users <span class="">| All</span></h5>
+            <div class="d-flex align-items-center">
+              <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                <i class="bi bi-people my-text"></i>
+              </div>
+              <div class="ps-3">
+                <h6 class="">{{total_clients}}</h6>
+                <span class="text-primary small pt-1 fw-bold">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div><!-- End Users Card -->
+  </div>
+  {% else %}
+  <div class="row">
+    <!-- Solicitation Card -->
+    <div class="col-xxl-4 col-md-6">
+      <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
+          <div class="card info-card revenue-card myhover">
+              <div class="card-body rounded-3">
+                <h5 class="card-title">Solicitations <span class="text-muted">| All</span></h5>
+                <div class="d-flex align-items-center">
+                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                      <i class="bi bi-files my-text"></i>
+                  </div>
+                  <div class="ps-3">
+                    <h6 class="">{{total_solicitations}}</h6>
+                    <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
+                  </div>
+                </div>
+              </div>
+          </div>
+      </a>
+    </div><!-- End Solicitation Card -->
+
+    <!-- Procurement Card -->
+      <div class="col-xxl-4 col-md-6">
+        <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
+        <div class="card info-card revenue-card myhover">
+          <div class="card-body rounded-3">
+            <h5 class="card-title">Procurements <span class="text-muted">| All</span></h5>
+            <div class="d-flex align-items-center">
+                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                  <i class="bi bi-truck my-text"></i>
+              </div>
+              <div class="ps-3">
+                <h6 class="">{{total_sent_rfqs}}</h6>
+                <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </a>
+      </div>
+    <!-- End Procurement Card -->
+ </div>
+  {% endif%}
+    
+
+  <div class="row">
+
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title">Solicitations Chart</h5>
+
+            <!-- Line Chart -->
+            <canvas id="lineChart" style="max-height: 400px;"></canvas>
+            <script>
+              document.addEventListener("DOMContentLoaded", () => {
+                new Chart(document.querySelector('#lineChart'), {
+                  type: 'line',
+                  data: {
+                    labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
+                    datasets: [{
+                      label: 'Amount',
+                      data: [65, 59, 80, 81, 56, 55, 40],
+                      fill: false,
+                      borderColor: 'rgb(75, 192, 192)',
+                      tension: 0.1
+                    }]
+                  },
+                  options: {
+                    scales: {
+                      y: {
+                        beginAtZero: true
+                      }
+                    }
+                  }
+                });
+              });
+            </script>
+            <!-- End Line CHart -->
+
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Procurement Status Info</h5>
+
+              <!-- Doughnut Chart -->
+              <canvas id="doughnutChart" style="max-height: 200px;"></canvas>
+              <script>
+                document.addEventListener("DOMContentLoaded", () => {
+                  new Chart(document.querySelector('#doughnutChart'), {
+                    type: 'doughnut',
+                    data: {
+                      labels: [
+                        'Completed',
+                        'Pending',
+                      ],
+                      datasets: [{
+                        label: 'Procurement',
+                        data: [300, 50],
+                        backgroundColor: [
+                          'rgb(255, 99, 132)',
+                          'rgb(54, 162, 235)'
+                        ],
+                        hoverOffset: 4
+                      }]
+                    }
+                  });
+                });
+              </script>
+              <!-- End Doughnut CHart -->
+
+            </div>
+          </div>
+        </div>
+    </div>
+</section>
+{% else %}
+<div class="d-flex justify-content-center align-items-center vh-100">
+  <div class="text-center">
+      <div class="mb-3">YOU ARE NOT AUTHENTICATED. PLEASE LOGIN.</div>
+      <a href="{% url 'accounts:login-user' %}" class="btn btn-primary">Login Now</a>
+  </div>
+</div>
+
+{% endif %}
+  
+
+{% endblock %}

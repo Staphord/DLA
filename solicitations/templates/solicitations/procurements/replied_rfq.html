@@ -1,0 +1,78 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section>
+    <div class="d-flex justify-content-between">
+        <div class="">
+            <form action="{% url 'solicitations:search-replied' %}" method="post">
+                {% csrf_token %}
+                <div class="d-flex gap-2">
+                    <input type="text" name="search-replied" class="form-control" placeholder="Search by Id">
+                    <button type="submit" class="btn mybg myhover"><i class="bi bi-search text-white"></i></button>
+                </div>
+            </form>
+        </div>
+        <div class="d-flex gap-3">
+            <a href="{% url 'solicitations:sent-rfq' %}" class="btn bg-secondary text-white position-relative">Sent RFQs
+                <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
+                    {{total_sent_rfqs}}
+                    <span class="visually-hidden">Sent RFQs</span>
+                </span>
+            </a>
+            <a href="#" class="btn mybg hoverbg text-white position-relative">Accepted Bids
+                <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
+                    0+
+                    <span class="visually-hidden">accepted bids</span>
+                </span>
+            </a>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        Total Replied RFQs <span class="badge bg-light text-dark">{{total_replied_rfq}}</span>
+    </div>
+
+    <div class="my-4">
+        <div class="card">
+            <div class="card-body my-3">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                      <th class="text-secondary">RFQ Id</th>
+                      <th class="text-secondary">Replied Date</th>
+                      <th class="text-secondary">OEM Name</th>
+                      <th class="text-secondary" colspan="2">Operation</th>
+                    </thead>
+                    <tbody>
+                        {% for rfqs in rfq %}
+                        <tr>
+                            <td>{{rfqs.rfq.unique_id}}</td>
+                            <td>{{rfqs.created_at}}</td>
+                            <td>{{rfqs.rfq.oem.name|title}}</td>
+                            <td><a href="{% url 'solicitations:replied-rfq-detail' rfqs.id %}" class="btn mybg hoverbg text-white">View Data</a></td>
+                          </tr>
+                        {% endfor %}
+                    </tbody>
+                  </table>
+
+                  <div class="text-center" data-aos="fade-up" data-aos-delay="300">
+                    <div class="ms-1 rounded me-1 container mt-3 d-flex justify-content-center pagination">
+                        {% if rfq.has_previous %}
+                          <li><a class="page-link text-secondary" href="?page={{rfq.previous_page_number}}">&laquo Previous</a></li>
+                        {% endif %}
+                        
+                        <li class="page-item page-link text-secondary">page {{rfq.number}} of {{rfq.paginator.num_pages}}</li>
+                
+                        {% if rfq.has_next %}
+                          <li><a class="page-link text-secondary" href="?page={{rfq.next_page_number}}">next &raquo</a></li>
+                        {% endif %}
+                      </div>
+                  </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock content %}
