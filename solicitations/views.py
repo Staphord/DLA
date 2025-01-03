@@ -3,7 +3,7 @@ import os
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, RFQReply, Solicitation
+from . models import RFQ, RFQReply, Solicitation,OEM
 from django.contrib import messages
 import subprocess
 from . forms import UserRegistrationForm,RFQReplyForm
@@ -299,6 +299,19 @@ def delete_replied_rfq(request,rfq):
     delete_replied_rfq = RFQReply.objects.get(pk=rfq)
     delete_replied_rfq.delete()
     return redirect('solicitations:replied-rfq')
+
+## view to show all oems
+def all_oems(request):
+    oems = OEM.objects.all()
+    total_oems = oems.count()
+    context = {'oems':oems,'total_oems':total_oems}
+    return render(request,'solicitations/oems/all_oems.html',context)
+
+## view to show eom detail page
+def oem_detail(request,oem):
+    oem = OEM.objects.get(pk = oem)
+    context = {'oem':oem}
+    return render(request,'solicitations/oems/oem_detail.html',context)
 
 def send_rfqs(request):
     if request.method == "POST":

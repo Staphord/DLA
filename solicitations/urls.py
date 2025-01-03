@@ -19,4 +19,7 @@ urlpatterns = [
     path('replied-rfqs/', views.replied_rfq, name='replied-rfq'),
     path('replied-rfq-detail/<rfq>/', views.replied_rfq_detail, name='replied-rfq-detail'),
     path('delete-replied-rfq/<rfq>/', views.delete_replied_rfq, name='delete-replied-rfq'),
+    path('all-oems/', views.all_oems, name='all-oems'),
+    path('oem-detail/<oem>', views.oem_detail, name = 'oem-detail'), 
+
 ]
