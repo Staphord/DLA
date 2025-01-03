@@ -82,7 +82,7 @@ if len(sys.argv) > 1:
         print(f"user_data type: {type(user_data)}")
 
         # Extract the username from user_data
-        username = user_data.get("username")  # Replace "username" with the key in your JSON
+        username = user_data.get("username")  
         print(f"Extracted username: {username}")
 
         # Retrieve the CustomUser instance from the database
@@ -92,9 +92,6 @@ if len(sys.argv) > 1:
         except CustomUser.DoesNotExist:
             print(f"Error: No CustomUser found with username '{username}'")
             sys.exit(1)  # Exit the script with an error code
-
-        # Now, pass `created_by_user` wherever needed
-        # Example: create_rfq(solicitation, oem, created_by=created_by_user)
 
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON argument: {e}")
@@ -232,7 +229,7 @@ def save_oem_data(cage_code, organization_name, street_name, city_name, postal_c
 
 
 # Function to send an email
-def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_id):
+def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_id,sent_at):
     from_email = EMAIL_ADDRESS
     password = EMAIL_PASSWORD
 
@@ -246,6 +243,10 @@ def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_
         email_content = email_content.replace("{part_number}", str(part_number))
         email_content = email_content.replace("{NSN}", str(nsn))
         email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
+
+        # Format the sent_at date
+        formatted_sent_at = sent_at.strftime('%d-%m-%y')
+        email_content = email_content.replace("{sent_at}", formatted_sent_at)
         
 
         # Replace placeholders for user data
@@ -410,7 +411,7 @@ for record in cage_data:
         print("Preparing to send email...")
         
         try:
-            send_email("williambundala54@gmail.com",item_name,quantity,part_number,nsn,user_data,rfq_unique_id=rfq.unique_id)
+            send_email("williambundala54@gmail.com",item_name,quantity,part_number,nsn,user_data,rfq.unique_id,rfq.sent_at)
         except Exception as e:
             print(f"Failed to send email: {e}")
 

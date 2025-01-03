@@ -313,6 +313,17 @@ def oem_detail(request,oem):
     context = {'oem':oem}
     return render(request,'solicitations/oems/oem_detail.html',context)
 
+## view to search for OEM
+def search_oem(request):
+    if request.method == "POST":
+        searched = request.POST['search-oem']
+        oem = OEM.objects.filter(cage__icontains = searched).first()
+        context = {'searched': searched,'oem':oem}
+        return render(request,'solicitations/oems/searched_oem.html',context)
+    else:
+        return render(request,'solicitations/oems/all_oems.html')
+
+
 def send_rfqs(request):
     if request.method == "POST":
         try:

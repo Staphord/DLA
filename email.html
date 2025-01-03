@@ -6,82 +6,85 @@
     <title>Document</title>
 
     <style>
-      .ody{
-        background-color: rgba(249, 249, 249, 0.993);
-        padding: 10px;
-      }
-      .container{
-        margin-left: 55px;
-        margin-right: 55px;
-        margin-top: 5px;
-        margin-bottom: 5px;
-      }
-      .mylink{
-        text-decoration: none;
-        background-color: #4CAF50;
-        padding: 9px;
-        color: white;
-        border-radius: 4px;
-      }
-      .content{
-        padding: 15px;
-      }
-      table {
-    border-collapse: collapse;
-    width: 100%;
-}
-
-th, td {
-    text-align: left;
-    padding: 13px;
-}
-
-tr:nth-child(even){background-color: #f2f2f2}
-
-th {
-    background-color: #4CAF50;
-    color: white;
-}
+        .ody {
+            background-color: rgba(249, 249, 249, 0.993);
+            padding: 10px;
+        }
+        .container {
+            margin-left: 55px;
+            margin-right: 55px;
+            margin-top: 5px;
+            margin-bottom: 5px;
+        }
+        .mylink {
+            text-decoration: none;
+            background-color: #4CAF50;
+            padding: 9px;
+            color: white;
+            border-radius: 4px;
+        }
+        .content {
+            padding: 15px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        th, td {
+            text-align: left;
+            padding: 13px;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .shadow-box {
+            background-color: white;
+            padding: 15px;
+            color: black;
+            border-radius: 5px; /* Optional: Rounded corners */
+        }
     </style>
 </head>
 <body class="ody">
     <div class="container">
-      <div class="content">
-        <div class="" style="background-color: white; padding:15px;color:black">
-          <h3>From: {companyName}</h3>
-          <p>Phone: {phone}</p>
-          <p>Address: {address}</p>
-          <p>Reference #{rfq_unique_id}</p>
-          <p>Date: 29/12/2025</p> <br>
-        <hr>
-          <p>Dear Mr/Ms, <br>
-              I hope this message finds you well.We are currently looking for the following item.Kindly provide your lowest possible price
-          </p>
+        <div class="content">
+            <div class="shadow-box">
+                <h3>From: {companyName}</h3>
+                <p>Phone: {phone}</p>
+                <p>Address: {address}</p>
+                <p>Reference: #{rfq_unique_id}</p>
+                <p>Date: {sent_at}</p> <br>
+                <hr>
+                <p>Dear Mr/Ms, <br>
+                    I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.
+                </p>
 
-        <div class="">
-        <table >
-            <tr>
-              <th>Item Name</th>
-              <th>Quantity</th>
-              <th>Part Number</th>
-              <th>NSN</th>
-            </tr>
-            <tr>
-              <td>{item_name}</td>
-              <td>{quantity}</td>
-              <td>{part_number}</td>
-              <td>{NSN}</td>
-            </tr>
-          </table>
+                <div class="">
+                    <table>
+                        <tr>
+                            <th>Item Name</th>
+                            <th>Quantity</th>
+                            <th>Part Number</th>
+                            <th>NSN</th>
+                        </tr>
+                        <tr>
+                            <td>{item_name}</td>
+                            <td>{quantity}</td>
+                            <td>{part_number}</td>
+                            <td>{NSN}</td>
+                        </tr>
+                    </table>
+                </div>
+                <br>
+                <p>You can reply to this email by clicking the link below or you can reply as normal.</p> 
+                <br>
+                <a href="{form_link}" class="mylink" style="color: white;">Click here to input price</a>
+            </div>
         </div>
-        <br>
-       <p>You can reply by clicking to this email by clicking the link below or you can reply as normal.</p> 
-       <br>
-        
-        <a href="{form_link}" class="mylink" style="color: white;">Click here to input price</a>
-      </div>
-      </div>
     </div>
-  </div>
 </body>
 </html>
