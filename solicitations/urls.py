@@ -20,6 +20,8 @@ urlpatterns = [
     path('replied-rfq-detail/<rfq>/', views.replied_rfq_detail, name='replied-rfq-detail'),
     path('delete-replied-rfq/<rfq>/', views.delete_replied_rfq, name='delete-replied-rfq'),
     path('all-oems/', views.all_oems, name='all-oems'),
+    path('disabled-oems/', views.disabled_oems, name='disabled-oems'),
+    path('disabled-oems-detail/<oem>', views.disabled_oems_detail, name='disabled-oems-detail'),
     path('oem-detail/<oem>', views.oem_detail, name = 'oem-detail'), 
     path('search-oem/',views.search_oem, name='search-oem'),
 

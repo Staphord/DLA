@@ -12,7 +12,6 @@
   <meta content="" name="keywords">
   <link rel="shortcut icon" href="#" type="image/x-icon">
 
-
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Jost:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
 
@@ -24,74 +23,147 @@
   <!-- Template Main CSS File -->
   <link href="{% static 'solicitations/assets/css/style.css' %}" rel="stylesheet">
 </head>
+
 <body>
     <!-- ======= Top Bar ======= -->
-  <div id="topbar" class="d-flex align-items-center header-top fixed-top py-2">
-    <div class="container d-flex justify-content-between">
-      <div class="contact-info align-items-center">
-        <a class="text-white" href="#">Welcome to RFQ Automated Program</a>
-      </div>
-      <div class="d-none d-lg-flex gap-3 social-links align-items-center">
-        <a href="mailto:support@rfqsys.com" class="text-white">Support: support@rfqsys.com</a>
-      </div>
+    <div id="topbar" class="d-flex align-items-center header-top fixed-top py-2">
+        <div class="container d-flex justify-content-between">
+            <div class="contact-info align-items-center">
+                <a class="text-white" href="#">Welcome to RFQ Automated Program</a>
+            </div>
+            <div class="d-none d-lg-flex gap-3 social-links align-items-center">
+                <a href="mailto:support@rfqsys.com" class="text-white">Support: support@rfqsys.com</a>
+            </div>
+        </div>
     </div>
-  </div>
+
     <!-- ======= Header ======= -->
-    <header id="header" class="header-top fixed-top py-3  mt-4 pt-4 bg-white mb-3">
+    <header id="header" class="header-top fixed-top py-3 mt-4 pt-4 bg-white mb-3">
         <div class="container d-flex align-items-center">
-    
-          <h6 class="me-auto py-2"><a class='fs-3 bold logo' href="#">LOGO</a>
-          </h6>
-    
-          <nav id="navbar" class="navbar">
-            <ul>
-            <i class="bi bi-list mobile-nav-toggle text-warning"></i>
-          </nav><!-- .navbar -->
+            <h6 class="me-auto py-2"><a class='fs-3 bold logo' href="#">LOGO</a></h6>
+            <nav id="navbar" class="navbar">
+                <ul>
+                    <i class="bi bi-list mobile-nav-toggle text-warning"></i>
+                </ul>
+            </nav><!-- .navbar -->
         </div>
-      </header><!-- End Header -->
+    </header><!-- End Header -->
 
+    <section class="mt-5 pt-5 mb-4 pb-4">
+        <div class="container bg-light mt-3 rounded-2 p-3">
 
-  <section class="mt-5 pt-5 mb-4 pb-4">
-    <div class="container bg-light mt-3 rounded-2 p-3">
-      <div class="">
-        <div class="row">
-          <div class="col-md-6">
-            <div class="fs-6">
-              Product Detail
+            <!-- Success Message -->
+            <div class="mt-3" id="success-message" style="display: none;">
+                <div class="d-flex mar car justify-content-center ms-1 me-1 mt-0 alert alert-success alert-dismissible fade show" role="alert">
+                    Reply submitted successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
             </div>
-            <hr>
-            <p><strong>Item Name:</strong> {{ rfq.solicitation.item_name }}</p>
-            <p><strong>Quantity:</strong> {{ rfq.solicitation.quantity }}</p>
-            <p><strong>Part Number:</strong> {{ rfq.solicitation.part_number }}</p>
-            <p><strong>NSN:</strong> {{ rfq.solicitation.NSN }}</p>
-          </div>
-          <div class="col-md-6">
-            <div class="card">
-              <div class="card-body">
-                <div class="text-center text-muted fs-6">Fill out this form and if the cost is competitive we will be back to you as soon as possible</div>
-                <form method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    {{ form.as_p }}
-                    <button type="submit" class="btn mybg text-white w-100">Submit Reply</button>
-                </form>
-              </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="fs-6">
+                        Product Detail
+                    </div>
+                    <hr>
+                    <p><strong>Item Name:</strong> {{ rfq.solicitation.item_name }}</p>
+                    <p><strong>Quantity:</strong> {{ rfq.solicitation.quantity }}</p>
+                    <p><strong>Part Number:</strong> {{ rfq.solicitation.part_number }}</p>
+                    <p><strong>NSN:</strong> {{ rfq.solicitation.NSN }}</p>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="text-center text-muted fs-6">Fill out this form and if the cost is competitive we will be back to you as soon as possible</div>
+                            <form method="post" id="form-id" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <div class="my-1">
+                                  <label for="id_price">Price:</label>
+                                  <input type="number" name="price" class="form-control" step="0.01" required="" id="id_price">
+                                </div>
+                                <div class="my-1">
+                                  <label for="id_delivery_mode">Delivery mode:</label>
+                                  <select name="delivery_mode" class="form-select" id="id_delivery_mode">
+                                    <option value="Free" selected="">Free</option>
+                                    <option value="Paid">Paid</option>
+                                  </select>
+                                </div>
+                                <div class="my-1">
+                                  <label for="id_short_note">Short note:</label>
+                                  <textarea 
+                                    name="short_note" cols="40" rows="3" class="form-control" placeholder="Add an optional note" maxlength="1000" id="id_short_note">
+                                  </textarea>
+                                </div>
+                                <div class="my-1">
+                                  <label for="id_document">Document:</label>
+                                  <input type="file" name="document" class="form-control" id="id_document">
+                                </div>
+                                <button type="submit" class="btn mybg myhover text-white w-100">Submit Reply</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
-      </div>
-    </div>
-  </section>
+    </section>
 
     <footer id="footer" class="footer">
         <div class="copyright">
-          &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+            &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
         </div>
         <div class="credits">
-          Designed by <a href="#">Gil Tech</a>
+            Designed by <a href="#">Gil Tech</a>
         </div>
     </footer><!-- End Footer -->
     
     <!-- Vendor JS Files -->
     <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+
+    <!-- JavaScript to Handle Form Submission and Tab Close -->
+    <script>
+        document.getElementById('form-id').addEventListener('submit', function (event) {
+            event.preventDefault(); // Prevent default submission behavior
+
+            const formData = new FormData(this);
+
+            fetch(this.action, {
+                method: this.method,
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    const successMessage = document.getElementById('success-message');
+                    successMessage.style.display = 'block';
+
+                    // Hide the form
+                    this.style.display = 'none';
+
+                    // Wait 4 seconds, then close the tab
+                    setTimeout(() => {
+                        window.close(); // Close the tab
+                    }, 3000);
+                } else {
+                    alert('Error: ' + JSON.stringify(data.errors));
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+
+{% if already_replied %}
+<script>
+
+  // Close the tab after 3 seconds
+  setTimeout(() => {
+    window.close();  // Close the tab
+  }, 100);
+</script>
+{% endif %}
 </body>
+
 </html>

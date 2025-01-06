@@ -74,7 +74,10 @@
                         <form action="" method="post" class="d-flex justify-content-between align-items-center my-4">
                             {% csrf_token %}
                             <div>
-                                <input type="checkbox" name="" class="form-check-input fs-2" id="">
+                                <input type="checkbox" name="is_disabled" class="form-check-input fs-3" id="">
+                            </div>
+                            <div class="my-2">
+                                <textarea name="" id=""></textarea>
                             </div>
                             <div>
                                 <button type="submit" class="btn mybg myhover text-white mt-2">Save Changes</button>

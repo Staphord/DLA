@@ -17,9 +17,10 @@
     <div class="my-4">
         <div class="card">
             <div class="card-body">
-                <table class="table table-sm table-hover">
+                <table class="table table-sm table-hover my-3">
                     <thead class="table-light">
                         <tr>
+                            <th><input type="checkbox" id="selectAll"></th>
                             <th class="text-secondary">Cage Code</th>
                             <th class="text-secondary">Item Name</th>
                             <th class="text-secondary">Quantity</th>
@@ -31,6 +32,7 @@
                     <tbody>
                         {% for solicitation in solicitations %}
                         <tr>
+                            <td><input type="checkbox" class="rowCheckbox" data-id="{{ solicitation.id }}"></td>
                             <td>{{ solicitation.cage }}</td>
                             <td>{{ solicitation.item_name|title }}</td>
                             <td>{{ solicitation.quantity }}</td>
@@ -69,8 +71,31 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
     $(document).ready(function () {
+        // Select/Deselect all checkboxes
+        $('#selectAll').click(function () {
+            $('.rowCheckbox').prop('checked', this.checked);
+        });
+
+        // Handle individual row selection
+        $('.rowCheckbox').click(function () {
+            if (!this.checked) {
+                $('#selectAll').prop('checked', false);
+            }
+        });
+
         $('#sendRfqsButton').click(function (e) {
             e.preventDefault(); // Prevent default action
+
+            // Gather selected rows
+            let selectedIds = [];
+            $('.rowCheckbox:checked').each(function () {
+                selectedIds.push($(this).data('id'));
+            });
+
+            if (selectedIds.length === 0) {
+                alert('Please select at least one solicitation.');
+                return;
+            }
 
             // Show the modal
             $('#progressModal').modal('show');
@@ -94,6 +119,7 @@
                 url: "{% url 'solicitations:send_rfqs' %}",
                 type: "POST",
                 headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                data: { selected_ids: selectedIds },
                 success: function () {
                     // Complete progress and show success
                     $('#progressBar').width('100%').text('100%');

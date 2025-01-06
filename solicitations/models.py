@@ -31,6 +31,7 @@ class OEMUser(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     oem = models.ForeignKey(OEM, on_delete=models.CASCADE)
     is_disabled = models.BooleanField(default=False)
+    reason = models.CharField(max_length=200, blank=True, null=True)
 
     class Meta:
         unique_together = ('user', 'oem')
@@ -53,8 +54,7 @@ class RFQReply(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)  # Price quoted
     delivery_mode = models.CharField(
         max_length=5,
-        choices=[('Free', 'Free'), ('Paid', 'Paid')],
-        default='Free'
+        choices=[('Free', 'Free'), ('Paid', 'Paid')]
     )
     created_at = models.DateField(auto_now_add=True)
     short_note = models.TextField(max_length=1000, blank=True, null=True)

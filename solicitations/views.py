@@ -1,9 +1,9 @@
 import json
 import os
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponseNotFound, JsonResponse
+from django.http import Http404, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, RFQReply, Solicitation,OEM
+from . models import RFQ, OEMUser, RFQReply, Solicitation,OEM
 from django.contrib import messages
 import subprocess
 from . forms import UserRegistrationForm,RFQReplyForm
@@ -84,18 +84,13 @@ def sent_rfq(request):
     # fetch all rfqs if user is admin
     if request.user.user_type == 'admin':
         sent_rfqs = RFQ.objects.all()
-        print("Fetching all RFQs")
     else:
         sent_rfqs = RFQ.objects.filter(created_by=request.user)
-        print(f"Fetching RFQs for user: {request.user}")
-        print(sent_rfqs)
     # count all rfqs
     if request.user.user_type == 'admin':
         total_sent_rfqs = sent_rfqs.count()
-        print(total_sent_rfqs)
     else:
         total_sent_rfqs = sent_rfqs.filter(created_by=request.user).count()
-        print(total_sent_rfqs)
     if request.user.user_type == 'admin':
         p = Paginator(RFQ.objects.order_by('-id'),10)
     else:
@@ -182,26 +177,36 @@ def delete_rfq(request,rfq):
 
 ## this is for displaying form for reply
 def rfq_reply_view(request):
-    user=request.user
+    user = request.user
     print(user.username)
+
     rfq_unique_id = request.GET.get('rfq_unique_id')  # Get the unique_id from query params
     rfq = get_object_or_404(RFQ, unique_id=rfq_unique_id)  # Fetch RFQ by unique_id
-
     solicitation = rfq.solicitation
+
+    # Initialize the form variable
+    form = RFQReplyForm()
+
+    # Check if there's already a reply for this RFQ by this user
+    if RFQReply.objects.filter(rfq=rfq, rfq_creator=user).exists():
+        # Add a message to show to the user
+        messages.error(request, "You have already submitted a reply for this RFQ.")
+        return render(request, 'solicitations/procurements/rfq_reply.html', {
+            'form': form, 'rfq': rfq, 'solicitation': solicitation, 'already_replied': True
+        })
 
     if request.method == 'POST':
         form = RFQReplyForm(request.POST, request.FILES)
         if form.is_valid():
             rfq_reply = form.save(commit=False)
-            rfq_reply.rfq = rfq  # Get the unsaved House instance
-            rfq_reply.rfq_creator = request.user # Associate the reply with the RFQ
+            rfq_reply.rfq = rfq  # Get the unsaved RFQ instance
+            rfq_reply.rfq_creator = user  # Associate the reply with the RFQ
             rfq_reply.save()
-            messages.success(request, "Reply submitted successfully!")
-            return redirect('accounts:login-user')
-    else:
-        form = RFQReplyForm()
+            return JsonResponse({"success": True})
 
-    return render(request, 'solicitations/procurements/rfq_reply.html', {'form': form, 'rfq': rfq,'solicitatio':solicitation})
+    return render(request, 'solicitations/procurements/rfq_reply.html', {
+        'form': form, 'rfq': rfq, 'solicitation': solicitation, 'already_replied': False
+    })
 
 
 def replied_rfq(request):
@@ -303,15 +308,42 @@ def delete_replied_rfq(request,rfq):
 ## view to show all oems
 def all_oems(request):
     oems = OEM.objects.all()
+    disabled_oems = OEMUser.objects.filter(Q(user = request.user) & Q(is_disabled = True))
     total_oems = oems.count()
-    context = {'oems':oems,'total_oems':total_oems}
+    context = {'oems':oems,'total_oems':total_oems,'disabled_oems':disabled_oems}
     return render(request,'solicitations/oems/all_oems.html',context)
 
 ## view to show eom detail page
-def oem_detail(request,oem):
-    oem = OEM.objects.get(pk = oem)
-    context = {'oem':oem}
-    return render(request,'solicitations/oems/oem_detail.html',context)
+def oem_detail(request, oem):
+    # Get the specific OEM object
+    oem = get_object_or_404(OEM, pk=oem)
+
+    # Get the OEMUser object for the current user and OEM
+    try:
+        oem_user = OEMUser.objects.get(user=request.user, oem=oem)
+    except OEMUser.DoesNotExist:
+        # If no association exists, create a new one with is_disabled set to False
+        oem_user = OEMUser.objects.create(user=request.user, oem=oem, is_disabled=False)
+    
+    # Check if the form was submitted
+    if request.method == 'POST':
+        # Toggle the value of is_disabled based on the checkbox state
+        is_disabled = 'is_disabled' in request.POST  # Checkbox sends value only when checked
+        oem_user.is_disabled = is_disabled
+
+        # Save the reason if provided
+        reason = request.POST.get('reason')  # Get the reason from the form
+        oem_user.reason = reason  # Save it in the model
+
+        oem_user.save()  # Save the updated OEMUser instance
+
+        # Redirect back to the detail page to avoid duplicate form submissions
+        return redirect('solicitations:oem-detail', oem=oem.id)
+
+
+    # Pass both the OEM and OEMUser objects to the template
+    context = {'oem': oem, 'oem_user': oem_user}
+    return render(request, 'solicitations/oems/oem_detail.html', context)
 
 ## view to search for OEM
 def search_oem(request):
@@ -322,6 +354,34 @@ def search_oem(request):
         return render(request,'solicitations/oems/searched_oem.html',context)
     else:
         return render(request,'solicitations/oems/all_oems.html')
+    
+## view to show disabled oems
+def disabled_oems(request):
+    oems = OEM.objects.all()
+    disabled_oems = OEMUser.objects.filter(Q(user = request.user) & Q(is_disabled = True))
+    context = {'disabled_oems':disabled_oems,'oems':oems}
+    return render(request,'solicitations/oems/disabled_oems.html',context)
+
+## view to show disabled oem detail
+def disabled_oems_detail(request,oem):
+    oem = OEMUser.objects.get(pk = oem)
+
+    # Check if the form was submitted
+    if request.method == 'POST':
+        # Toggle the value of is_disabled based on the checkbox state
+        is_disabled = 'is_disabled' in request.POST  # Checkbox sends value only when checked
+        oem.is_disabled = is_disabled
+
+        # Save the reason if provided
+        reason = request.POST.get('reason')  # Get the reason from the form
+        oem.reason = reason  # Save it in the model
+
+        oem.save()  # Save the updated OEMUser instance
+
+        # Redirect back to the detail page to avoid duplicate form submissions
+        return redirect('solicitations:disabled-oems-detail', oem=oem.id)
+    context = {'oem':oem}
+    return render(request,'solicitations/oems/disabled_oems_detail.html',context)
 
 
 def send_rfqs(request):
@@ -345,10 +405,21 @@ def send_rfqs(request):
                 "logo": logged_in_user.logo.url if logged_in_user.logo else None,
             }
 
-            # Serialize user data to a JSON string
-            serialized_data = json.dumps(user_data)
+            # Get selected IDs from the POST request
+            selected_ids = request.POST.getlist('selected_ids[]')  # Get the checkbox values
+            if not selected_ids:
+                return JsonResponse({"error": "No solicitations selected"}, status=400)
 
-            print(f"Serialized user_data: {serialized_data}")  # Debugging
+            # Combine user data and selected IDs
+            payload = {
+                "user_data": user_data,
+                "selected_ids": selected_ids
+            }
+
+            # Serialize payload to a JSON string
+            serialized_data = json.dumps(payload)
+
+            print(f"Serialized payload: {serialized_data}")  # Debugging
 
             # Run the script asynchronously using subprocess
             result = subprocess.Popen(

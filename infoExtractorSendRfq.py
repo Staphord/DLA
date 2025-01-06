@@ -25,7 +25,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
 django.setup()
 
 from django.conf import settings
-from solicitations.models import Solicitation,OEM,RFQ
+from solicitations.models import Solicitation,OEM,RFQ,OEMUser
 from accounts.models import CustomUser
 from django.utils.timezone import now
 from django.db import IntegrityError
@@ -37,7 +37,6 @@ DB_PASSWORD = settings.DB_PASSWORD
 DB_NAME = settings.DB_NAME
 EMAIL_ADDRESS = settings.EMAIL_ADDRESS
 EMAIL_PASSWORD = settings.EMAIL_PASSWORD
-
 
 ## Setup Chrome options
 chrome_options = Options()
@@ -65,11 +64,9 @@ driver.implicitly_wait(120)
 driver.get(website)
 driver.maximize_window()
 
-
 print('--------------------------------------------------------------------------')
 print("WELCOME TO RFQ AUTOMATED PROGRAM")
 print('--------------------------------------------------------------------------')
-
 
 # Check if an argument is passed to the script
 if len(sys.argv) > 1:
@@ -77,9 +74,15 @@ if len(sys.argv) > 1:
     print(f"Raw argument received: {raw_arg}")  # Debugging: Check full raw input
     try:
         # Parse the JSON argument
-        user_data = json.loads(raw_arg)
-        print(f"Decoded JSON: {user_data}")
-        print(f"user_data type: {type(user_data)}")
+        payload = json.loads(raw_arg)
+        print(f"Decoded JSON: {payload}")
+
+        # Extract user data and selected IDs
+        user_data = payload.get("user_data", {})
+        selected_ids = payload.get("selected_ids", [])
+
+        print(f"user_data: {user_data}")
+        print(f"selected_ids: {selected_ids}")
 
         # Extract the username from user_data
         username = user_data.get("username")  
@@ -92,6 +95,10 @@ if len(sys.argv) > 1:
         except CustomUser.DoesNotExist:
             print(f"Error: No CustomUser found with username '{username}'")
             sys.exit(1)  # Exit the script with an error code
+
+        # Process selected IDs
+        for solicitation_id in selected_ids:
+            print(f"Processing solicitation ID: {solicitation_id}")
 
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON argument: {e}")
@@ -121,41 +128,65 @@ def generate_unique_id(oem):
     unique_id = f"{oem_prefix}-{current_month}-{cage_code}-{sequence_number}"
     return unique_id
 
-
 ## Connect to the MySQL database
 def fetch_cage_codes():
     connection = None
     try:
-        ## Establish connection to MySQL using mysqlclient (MySQLdb)
+        # Establish connection to MySQL
         connection = MySQLdb.connect(
             host=DB_HOST,
             user=DB_USER,
             password=DB_PASSWORD,
             db=DB_NAME,
-            cursorclass=DictCursor  # Use DictCursor directly from MySQLdb.cursors
+            cursorclass=DictCursor
         )
-
         cursor = connection.cursor()
-        ## Query the table 'solicitations_solicitation'
-        query = "SELECT cage, item_name, quantity,part_number,NSN FROM solicitations_solicitation"
-        cursor.execute(query)
 
-        ## Fetch all the rows as dictionaries
+        # Assume user_data contains the logged-in user's data
+        username = user_data['username']
+
+        # Step 1: Retrieve enabled OEMs for the logged-in user
+        oem_query = """
+        SELECT o.cage
+        FROM solicitations_oemuser ou
+        JOIN solicitations_oem o ON ou.oem_id = o.id
+        JOIN accounts_customuser u ON ou.user_id = u.id
+        WHERE u.username = %s AND ou.is_disabled = FALSE
+        """
+        cursor.execute(oem_query, (username,))
+        cages = [row['cage'] for row in cursor.fetchall()]
+
+        if not cages:
+            # No enabled OEMs, return empty list
+            return []
+
+        # Step 2: Fetch solicitations for the enabled CAGE codes
+        format_strings = ', '.join(['%s'] * len(cages))
+        solicitation_query = f"""
+        SELECT cage, item_name, quantity, part_number, NSN
+        FROM solicitations_solicitation
+        WHERE cage IN ({format_strings})
+        """
+        cursor.execute(solicitation_query, cages)
+
+        # Fetch all the rows
         cage_data = cursor.fetchall()
-
+        countcage = len(cage_data)
+        print(f'Total solicitations to receive RFQ Email {countcage}')
         return cage_data
 
     except MySQLdb.MySQLError as err:
         print(f"Error: {err}")
         return []
-    
+
     finally:
         if connection:
             cursor.close()
             connection.close()
 
-# Store returned data in variable cage_data
+# Fetch the solicitations
 cage_data = fetch_cage_codes()
+print(cage_data)
 
 def create_rfq(solicitation, oem, created_by):
     """
@@ -188,8 +219,6 @@ def create_rfq(solicitation, oem, created_by):
         print(f"Failed to create RFQ due to an integrity error: {e}")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-
-
 
 ## Function to save data to OEM Model
 def save_oem_data(cage_code, organization_name, street_name, city_name, postal_code, phone, fax, email):
@@ -226,8 +255,6 @@ def save_oem_data(cage_code, organization_name, street_name, city_name, postal_c
     except Exception as e:
         print(f"Error saving data for CAGE Code {cage_code}: {e}")
 
-
-
 # Function to send an email
 def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_id,sent_at):
     from_email = EMAIL_ADDRESS
@@ -248,13 +275,13 @@ def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_
         formatted_sent_at = sent_at.strftime('%d-%m-%y')
         email_content = email_content.replace("{sent_at}", formatted_sent_at)
         
-
         # Replace placeholders for user data
         email_content = email_content.replace("{username}", user_data['username'])
         email_content = email_content.replace("{email}", user_data['email'])
         email_content = email_content.replace("{phone}", user_data['phone'])
         email_content = email_content.replace("{address}", user_data['address'])
         email_content = email_content.replace("{companyName}", user_data['companyName'])
+        
         # Generate a complete URL for the logo
         base_url = "http://localhost:8000"  # Replace with your server's base URL
         #logo_url = f"{base_url}{user_data['logo']}"
@@ -323,13 +350,10 @@ for record in cage_data:
 
         # Locate all elements with the selector
         read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
-
         
         ## I USED THIS TODEBUG FOR THE INDEX OF ORGANIZATION NAME BECAUSE OF MULTIPLE RESULTS
         #for index, elem in enumerate(read_only_elements):
            # print(f"Element with read only {index}: {elem.text.strip()}")
-
-        
 
         # Extract the organization name (assuming it's always the second element)
         organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
@@ -366,7 +390,6 @@ for record in cage_data:
         # Extract the fax text
         fax_content = fax_container.text.strip()
         print(f"Extracted Fax: {fax_content}")
-
 
         # Locate the email element
         email_element = WebDriverWait(driver, 60).until(
@@ -406,7 +429,6 @@ for record in cage_data:
 
         # Call the create_rfq function after sending the email
         rfq = create_rfq(solicitation, oem,created_by=created_by_user)
-
         ##############
         print("Preparing to send email...")
         
@@ -414,10 +436,7 @@ for record in cage_data:
             send_email("williambundala54@gmail.com",item_name,quantity,part_number,nsn,user_data,rfq.unique_id,rfq.sent_at)
         except Exception as e:
             print(f"Failed to send email: {e}")
-
         ###########
-
-        
 
         # Refresh the page for the next record
         driver.get(website)
@@ -425,7 +444,5 @@ for record in cage_data:
     except Exception as e:
         print(f"Error processing CAGE Code {cage_code}: {e}")
         time.sleep(5)
-
-
 
 driver.quit()

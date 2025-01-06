@@ -16,9 +16,16 @@
                 {% csrf_token %}
                 <div class="d-flex gap-2">
                     <input type="text" name="search-oem" class="form-control" placeholder="Search by Cage Code...">
-                    <button type="submit" class="btn mybg myhover"><i class="bi bi-search text-white"></i></button>
+                    <button type="submit" class="btn bg-warning"><i class="bi bi-search text-white"></i></button>
                 </div>
             </form>
+
+            <a href="{% url 'solicitations:disabled-oems' %}" class="btn mybg hoverbg text-white position-relative">Disabled Oems
+                <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
+                    {{disabled_oems.count}}+
+                    <span class="visually-hidden">Disabled Oems</span>
+                </span>
+            </a>
         </div>
     </div>
 
