@@ -71,34 +71,38 @@ print('-------------------------------------------------------------------------
 # Check if an argument is passed to the script
 if len(sys.argv) > 1:
     raw_arg = sys.argv[1]
+    print('--------------------------------------------------------------------------')
     print(f"Raw argument received: {raw_arg}")  # Debugging: Check full raw input
+
     try:
         # Parse the JSON argument
-        payload = json.loads(raw_arg)
-        print(f"Decoded JSON: {payload}")
+        data = json.loads(raw_arg)
+        print('--------------------------------------------------------------------------')
+        print(f"Decoded JSON: {data}")
 
-        # Extract user data and selected IDs
-        user_data = payload.get("user_data", {})
-        selected_ids = payload.get("selected_ids", [])
-
-        print(f"user_data: {user_data}")
-        print(f"selected_ids: {selected_ids}")
+        # Extract user_data and solicitations
+        user_data = data.get("user_data", {})
+        solicitations = data.get("solicitations", [])
 
         # Extract the username from user_data
-        username = user_data.get("username")  
+        username = user_data.get("username")
+        print('--------------------------------------------------------------------------')
         print(f"Extracted username: {username}")
 
         # Retrieve the CustomUser instance from the database
         try:
             created_by_user = CustomUser.objects.get(username=username)
+            print('--------------------------------------------------------------------------')
             print(f"Retrieved CustomUser instance: {created_by_user}")
+
+            # Example: Iterate over solicitations
+            for solicitation in solicitations:
+                print('--------------------------------------------------------------------------')
+                print(f"Solicitation Data: {solicitation}")
+
         except CustomUser.DoesNotExist:
             print(f"Error: No CustomUser found with username '{username}'")
             sys.exit(1)  # Exit the script with an error code
-
-        # Process selected IDs
-        for solicitation_id in selected_ids:
-            print(f"Processing solicitation ID: {solicitation_id}")
 
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON argument: {e}")
@@ -129,7 +133,7 @@ def generate_unique_id(oem):
     return unique_id
 
 ## Connect to the MySQL database
-def fetch_cage_codes():
+def fetch_cage_codes(user_data, solicitations):
     connection = None
     try:
         # Establish connection to MySQL
@@ -142,8 +146,11 @@ def fetch_cage_codes():
         )
         cursor = connection.cursor()
 
-        # Assume user_data contains the logged-in user's data
-        username = user_data['username']
+        # Extract username from user_data
+        username = user_data.get("username")
+        if not username:
+            print("Error: Username is missing in user_data.")
+            return []
 
         # Step 1: Retrieve enabled OEMs for the logged-in user
         oem_query = """
@@ -154,29 +161,37 @@ def fetch_cage_codes():
         WHERE u.username = %s AND ou.is_disabled = FALSE
         """
         cursor.execute(oem_query, (username,))
-        cages = [row['cage'] for row in cursor.fetchall()]
+        enabled_cages = [row['cage'] for row in cursor.fetchall()]
 
-        if not cages:
-            # No enabled OEMs, return empty list
+        if not enabled_cages:
+            print("No enabled OEMs found for the user.")
             return []
 
-        # Step 2: Fetch solicitations for the enabled CAGE codes
-        format_strings = ', '.join(['%s'] * len(cages))
+        # Step 2: Fetch solicitations for the enabled CAGE codes and selected_ids
+        selected_ids = [solicitation.get("id") for solicitation in solicitations]
+        if not selected_ids:
+            print("No selected IDs provided.")
+            return []
+
+        format_strings_cages = ', '.join(['%s'] * len(enabled_cages))
+        format_strings_ids = ', '.join(['%s'] * len(selected_ids))
         solicitation_query = f"""
         SELECT cage, item_name, quantity, part_number, NSN
         FROM solicitations_solicitation
-        WHERE cage IN ({format_strings})
+        WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
         """
-        cursor.execute(solicitation_query, cages)
+        cursor.execute(solicitation_query, enabled_cages + selected_ids)
 
         # Fetch all the rows
         cage_data = cursor.fetchall()
-        countcage = len(cage_data)
-        print(f'Total solicitations to receive RFQ Email {countcage}')
+        count_cage = len(cage_data)
+        print('--------------------------------------------------------------------------')
+        print('--------------------------------------------------------------------------')
+        print(f"Total solicitations to receive RFQ Email: {count_cage}")
         return cage_data
 
     except MySQLdb.MySQLError as err:
-        print(f"Error: {err}")
+        print(f"Database Error: {err}")
         return []
 
     finally:
@@ -184,9 +199,27 @@ def fetch_cage_codes():
             cursor.close()
             connection.close()
 
-# Fetch the solicitations
-cage_data = fetch_cage_codes()
-print(cage_data)
+if len(sys.argv) > 1:
+    raw_arg = sys.argv[1]
+    print(f"Raw argument received: {raw_arg}")  # Debugging: Check full raw input
+
+    try:
+        # Parse the JSON argument
+        data = json.loads(raw_arg)
+        print(f"Decoded JSON: {data}")
+
+        # Extract user_data and solicitations
+        user_data = data.get("user_data", {})
+        solicitations = data.get("solicitations", [])
+
+        # Retrieve the solicitations
+        cage_data = fetch_cage_codes(user_data, solicitations)
+        print("Fetched Cage Data:", cage_data)
+
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON argument: {e}")
+else:
+    print("No arguments provided to the script.")
 
 def create_rfq(solicitation, oem, created_by):
     """

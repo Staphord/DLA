@@ -8,7 +8,7 @@
     <div class="d-flex justify-content-between">
         <div class="">
             <div class="mt-3">
-                Total Disbled OEMS <span class="badge bg-light text-dark">##</span>
+                Total Disbled OEMS <span class="badge bg-light text-dark">{{disabled_oems.count}}</span>
             </div>
         </div>
         <div class="d-flex gap-3">
@@ -20,10 +20,10 @@
                 </div>
             </form>
 
-            <a href="{% url 'solicitations:all-oems' %}" class="btn mybg hoverbg text-white position-relative">All Oems
+            <a href="{% url 'solicitations:active-oems' %}" class="btn mybg hoverbg text-white position-relative">Active Oems
                 <span class="position-absolute top-0 start-90 translate-middle badge rounded-pill bg-warning">
                     {{oems.count}}+
-                    <span class="visually-hidden">All Oems</span>
+                    <span class="visually-hidden">Active Oems</span>
                 </span>
             </a>
         </div>
@@ -38,7 +38,7 @@
                       <th class="text-secondary">Name</th>
                       <th class="text-secondary">City</th>
                       <th class="text-secondary">Phone</th>
-                      <th class="text-secondary">Operation</th>
+                      <th class="text-secondary text-center">Actions</th>
                     </thead>
                     <tbody>
                         {% for oem in disabled_oems %}
@@ -47,8 +47,41 @@
                             <td>{{oem.oem.name|title}}</td>
                             <td>{{oem.oem.city|title}}</td>
                             <td>{{oem.oem.phone}}</td>
-                            <td><a href="{% url 'solicitations:disabled-oems-detail' oem.id %}" class="btn mybg hoverbg text-white">View More</a></td>
+                            <td>
+                                <div class="dropdown text-center">
+                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-caret-down-fill"></i>
+                                </a>
+                              
+                                <ul class="dropdown-menu">
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:oem-detail' oem.oem.id %}">View More</a></li>
+                                  <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#enableOem-{{oem.id}}">Enable</a></li>
+                                </ul>
+                              </div>
+                            </td>
                           </tr>
+
+                          <!--Enable OEM Modal -->
+                          <div class="modal fade" id="enableOem-{{oem.id}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                            <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                <p>Are you sure you want to enable this OEM?</p>
+                                <form id="disable-oem-form" method="POST" action="{% url 'solicitations:enable-oem' oem.id %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="oem" id="oem-id-{{oem.id}}" value="{{oem.id}}">
+                                    <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                                    <button type="submit" class="btn mybg myhover text-white">Yes, Enable</button>
+                                    </div>
+                                </form>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
                         {% endfor %}
                     </tbody>
                   </table>

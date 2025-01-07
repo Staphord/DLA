@@ -1,7 +1,7 @@
 import json
 import os
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import Http404, HttpResponseNotFound, JsonResponse
+from django.http import Http404, HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
 from . models import RFQ, OEMUser, RFQReply, Solicitation,OEM
 from django.contrib import messages
@@ -305,44 +305,38 @@ def delete_replied_rfq(request,rfq):
     delete_replied_rfq.delete()
     return redirect('solicitations:replied-rfq')
 
-## view to show all oems
-def all_oems(request):
-    oems = OEM.objects.all()
-    disabled_oems = OEMUser.objects.filter(Q(user = request.user) & Q(is_disabled = True))
-    total_oems = oems.count()
-    context = {'oems':oems,'total_oems':total_oems,'disabled_oems':disabled_oems}
-    return render(request,'solicitations/oems/all_oems.html',context)
+##########################  OEM RELATED VIEWS  ###############################
 
-## view to show eom detail page
+## view to show all active oems
+def active_oems(request):
+    # Filter OEMs related to the user and are not disabled
+    oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=False)
+
+    # Filter OEMs related to the user and are disabled
+    disabled_oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=True)
+
+    # Count total OEMs for the user that are not disabled
+    total_oems = oems.count()
+
+    # Context to pass to the template
+    context = {
+        'oems': oems,
+        'total_oems': total_oems,
+        'disabled_oems': disabled_oems,
+    }
+    return render(request, 'solicitations/oems/active_oems.html', context)
+
+
+## view to show oem detail page
 def oem_detail(request, oem):
-    # Get the specific OEM object
+    # Fetch the specific OEM object using the primary key
     oem = get_object_or_404(OEM, pk=oem)
 
-    # Get the OEMUser object for the current user and OEM
-    try:
-        oem_user = OEMUser.objects.get(user=request.user, oem=oem)
-    except OEMUser.DoesNotExist:
-        # If no association exists, create a new one with is_disabled set to False
-        oem_user = OEMUser.objects.create(user=request.user, oem=oem, is_disabled=False)
-    
-    # Check if the form was submitted
-    if request.method == 'POST':
-        # Toggle the value of is_disabled based on the checkbox state
-        is_disabled = 'is_disabled' in request.POST  # Checkbox sends value only when checked
-        oem_user.is_disabled = is_disabled
+    # Get all OEMUser associations for this OEM
+    oem_users = OEMUser.objects.filter(oem=oem)
 
-        # Save the reason if provided
-        reason = request.POST.get('reason')  # Get the reason from the form
-        oem_user.reason = reason  # Save it in the model
-
-        oem_user.save()  # Save the updated OEMUser instance
-
-        # Redirect back to the detail page to avoid duplicate form submissions
-        return redirect('solicitations:oem-detail', oem=oem.id)
-
-
-    # Pass both the OEM and OEMUser objects to the template
-    context = {'oem': oem, 'oem_user': oem_user}
+    # Pass the data to the template
+    context = {'oem': oem, 'oem_users': oem_users}
     return render(request, 'solicitations/oems/oem_detail.html', context)
 
 ## view to search for OEM
@@ -355,97 +349,129 @@ def search_oem(request):
     else:
         return render(request,'solicitations/oems/all_oems.html')
     
-## view to show disabled oems
+## view to show all disabled oems
 def disabled_oems(request):
-    oems = OEM.objects.all()
+    oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=False)
     disabled_oems = OEMUser.objects.filter(Q(user = request.user) & Q(is_disabled = True))
     context = {'disabled_oems':disabled_oems,'oems':oems}
     return render(request,'solicitations/oems/disabled_oems.html',context)
 
-## view to show disabled oem detail
-def disabled_oems_detail(request,oem):
-    oem = OEMUser.objects.get(pk = oem)
-
-    # Check if the form was submitted
+## view to disable a particular oem
+def disable_oem(request):
     if request.method == 'POST':
-        # Toggle the value of is_disabled based on the checkbox state
-        is_disabled = 'is_disabled' in request.POST  # Checkbox sends value only when checked
-        oem.is_disabled = is_disabled
+        oem = request.POST.get('oem')
+        reason = request.POST.get('reason')
 
-        # Save the reason if provided
-        reason = request.POST.get('reason')  # Get the reason from the form
-        oem.reason = reason  # Save it in the model
+        oem_user = get_object_or_404(OEMUser, oem=oem, user=request.user)
+        oem_user.is_disabled = True
+        oem_user.reason = reason
+        oem_user.save()
 
-        oem.save()  # Save the updated OEMUser instance
+        messages.success(request, f"OEM {oem_user.oem.name} has been disabled.")
+        return redirect('solicitations:active-oems')
 
-        # Redirect back to the detail page to avoid duplicate form submissions
-        return redirect('solicitations:disabled-oems-detail', oem=oem.id)
-    context = {'oem':oem}
-    return render(request,'solicitations/oems/disabled_oems_detail.html',context)
+    return HttpResponseForbidden("Invalid request")
+
+## view to enable a particular oem
+def enable_oem(request, oem_id):
+    if request.method == "POST":
+        # Fetch the DisabledOEM object
+        enable_oem = get_object_or_404(OEMUser, id=oem_id)
+
+        # Enable the OEM
+        enable_oem.is_disabled = False 
+        enable_oem.save()
+
+        # Clear the reason
+        enable_oem.reason = ""
+        enable_oem.save()
+
+        # Add a success message
+        messages.success(request, f"OEM has been successfully enabled.")
+
+        # Redirect to the same page 
+        return redirect('solicitations:disabled-oems')  
+    else:
+        # Handle non-POST requests (optional)
+        return redirect('solicitations:disabled-oems') 
 
 
 def send_rfqs(request):
-    if request.method == "POST":
-        try:
-            # Path to Python executable
-            python_exec = r"D:\projects\GilTech\RFQ\gilenv\Scripts\python.exe"
-            # Path to the script
-            script_path = os.path.join(os.getcwd(), "infoExtractorSendRfq.py")
-            
-            # Get the logged-in user
-            logged_in_user = CustomUser.objects.get(username=request.user.username)
-            
-            # Serialize the user data to JSON
-            user_data = {
-                "username": logged_in_user.username,
-                "email": logged_in_user.email,
-                "phone": logged_in_user.phone,
-                "address": logged_in_user.address,
-                "companyName": logged_in_user.companyName,
-                "logo": logged_in_user.logo.url if logged_in_user.logo else None,
+    try:
+        # Parse JSON data from the request body
+        data = json.loads(request.body)
+        selected_ids = data.get("selected_ids", [])  # Retrieve selected IDs from the request
+
+        if not selected_ids:
+            return JsonResponse({"error": "No solicitations selected"}, status=400)
+
+        # Query the database for the selected IDs
+        solicitations = Solicitation.objects.filter(id__in=selected_ids)
+
+        if not solicitations.exists():
+            return JsonResponse({"error": "No matching solicitations found"}, status=404)
+
+        # Serialize the data
+        solicitation_data = [
+            {
+                "id": sol.id,
+                "cage": sol.cage,
+                "item_name": sol.item_name,
+                "quantity": sol.quantity,
+                "part_number": sol.part_number,
+                "NSN": sol.NSN,
             }
+            for sol in solicitations
+        ]
 
-            # Get selected IDs from the POST request
-            selected_ids = request.POST.getlist('selected_ids[]')  # Get the checkbox values
-            if not selected_ids:
-                return JsonResponse({"error": "No solicitations selected"}, status=400)
+        # Debugging: Print the serialized data
+        print(f"Solicitation data: {solicitation_data}")
 
-            # Combine user data and selected IDs
-            payload = {
-                "user_data": user_data,
-                "selected_ids": selected_ids
-            }
+        # Get the logged-in user
+        logged_in_user = request.user  # Assuming CustomUser model for logged-in user
 
-            # Serialize payload to a JSON string
-            serialized_data = json.dumps(payload)
+        user_data = {
+            "username": logged_in_user.username,
+            "email": logged_in_user.email,
+            "phone": getattr(logged_in_user, "phone", None),
+            "address": getattr(logged_in_user, "address", None),
+            "companyName": getattr(logged_in_user, "companyName", None),
+            "logo": logged_in_user.logo.url if hasattr(logged_in_user, "logo") and logged_in_user.logo else None,
+        }
 
-            print(f"Serialized payload: {serialized_data}")  # Debugging
+        # Serialize combined user and solicitation data
+        combined_data = {
+            "user_data": user_data,
+            "solicitations": solicitation_data,
+        }
 
-            # Run the script asynchronously using subprocess
-            result = subprocess.Popen(
-                [python_exec, script_path, serialized_data],  # Pass JSON string as argument
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+        # Debugging: Print combined data
+        print(f"Combined data: {json.dumps(combined_data, indent=2)}")
 
-            # Check the output from the script
-            stdout, stderr = result.communicate()
+        # Run the external script with the serialized data
+        python_exec = r"D:\projects\GilTech\RFQ\gilenv\Scripts\python.exe"
+        script_path = os.path.join(os.getcwd(), "infoExtractorSendRfq.py")
 
-            if result.returncode != 0:
-                error_message = f"Subprocess failed with error: {stderr}"
-                print(error_message)  # Log the error for debugging
-                return JsonResponse({"error": error_message}, status=500)
+        result = subprocess.Popen(
+            [python_exec, script_path, json.dumps(combined_data)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
-            print(f"Subprocess output: {stdout}")  # Log the output for debugging
+        stdout, stderr = result.communicate()
 
-            # Send output to frontend
-            return JsonResponse({"message": stdout}, status=200)
-            
-        except Exception as e:
-            error_message = f"Unexpected error: {str(e)}"
-            print(error_message)  # Log unexpected errors
+        if result.returncode != 0:
+            error_message = f"Subprocess failed with error: {stderr}"
+            print(error_message)  # Log the error for debugging
             return JsonResponse({"error": error_message}, status=500)
 
-    return JsonResponse({"error": "Invalid request method"}, status=405)
+        print(f"Subprocess output: {stdout}")  # Log subprocess output
+
+        return JsonResponse({"message": stdout, "data": solicitation_data}, status=200)
+
+    except Exception as e:
+        error_message = f"Unexpected error: {str(e)}"
+        print(error_message)  # Log unexpected errors
+        return JsonResponse({"error": error_message}, status=500)
 
