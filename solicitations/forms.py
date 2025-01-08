@@ -37,3 +37,11 @@ class RFQReplyForm(forms.ModelForm):
             }),
             'document': forms.ClearableFileInput(attrs={'class': 'form-control'}),
         }
+
+class LogoUpdateForm(forms.ModelForm):
+    class Meta:
+        model = CustomUser
+        fields = ['logo']
+        widgets = {
+            'logo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
+        }

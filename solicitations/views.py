@@ -1,12 +1,13 @@
 import json
 import os
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import Http404, HttpResponseForbidden, HttpResponseNotFound, JsonResponse
+from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
 from . models import RFQ, OEMUser, RFQReply, Solicitation,OEM
+from django.contrib.auth.hashers import check_password
 from django.contrib import messages
 import subprocess
-from . forms import UserRegistrationForm,RFQReplyForm
+from . forms import LogoUpdateForm, UserRegistrationForm,RFQReplyForm
 from django.core.paginator import Paginator
 from django.db.models import Q
 
@@ -75,9 +76,42 @@ def add_client(request):
 
 # view to show client detail
 def client_details(request, client):
-    client = CustomUser.objects.get(pk = client)
-    context = {'client':client}
-    return render(request,'solicitations/clients/details.html',context)
+    client = get_object_or_404(CustomUser, pk=client)
+
+    if request.method == "POST":
+        # Handle logo update form
+        if 'logo_update' in request.POST:
+            form = LogoUpdateForm(request.POST, request.FILES, instance=client)
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Logo updated successfully!")
+                return redirect('solicitations:client-details', client=client.pk)
+        
+        # Handle password change form
+        elif 'password_change' in request.POST:
+            current_password = request.POST.get('password')
+            new_password = request.POST.get('newpassword')
+            renew_password = request.POST.get('renewpassword')
+
+            # Validate current password
+            if not check_password(current_password, client.password):
+                messages.error(request, "Current password is incorrect.")
+            # Validate new password confirmation
+            elif new_password != renew_password:
+                messages.error(request, "New passwords do not match.")
+            else:
+                # Update password in the database
+                client.set_password(new_password)
+                client.save()
+                messages.success(request, "Password updated successfully!")
+                return redirect('solicitations:client-details', client=client.pk)
+
+    form = LogoUpdateForm(instance=client)
+    context = {
+        'client': client,
+        'form': form,
+    }
+    return render(request, 'solicitations/clients/details.html', context)
 
 ## view to show all sent rfqs
 def sent_rfq(request):
