@@ -45,9 +45,10 @@
                 <ul>
                     <i class="bi bi-list mobile-nav-toggle text-warning"></i>
                 </ul>
-            </nav><!-- .navbar -->
+            </nav>
         </div>
-    </header><!-- End Header -->
+    </header>
+        
 
     <section class="mt-5 pt-5 mb-4 pb-4">
         <div class="container bg-light mt-3 rounded-2 p-3">
@@ -59,6 +60,15 @@
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             </div>
+
+            {% if already_replied == True %}
+            <div class="mt-3" id="success-message">
+                <div class="d-flex mar car justify-content-center ms-1 me-1 mt-0 alert alert-success alert-dismissible fade show" role="alert">
+                    You have already submitted a reply for this RFQ!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            </div>
+            {% endif %}
 
             <div class="row">
                 <div class="col-md-6">
@@ -98,7 +108,11 @@
                                   <label for="id_document">Document:</label>
                                   <input type="file" name="document" class="form-control" id="id_document">
                                 </div>
-                                <button type="submit" class="btn mybg myhover text-white w-100">Submit Reply</button>
+                                {% if already_replied %}
+                                    <button type="button" class="btn mybg myhover text-white w-100">Submit Reply</button>
+                                {% else %}
+                                    <button type="submit" class="btn mybg myhover text-white w-100">Submit Reply</button>
+                                {% endif %}
                             </form>
                         </div>
                     </div>
@@ -114,7 +128,7 @@
         <div class="credits">
             Designed by <a href="#">Gil Tech</a>
         </div>
-    </footer><!-- End Footer -->
+    </footer>
     
     <!-- Vendor JS Files -->
     <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
@@ -136,16 +150,11 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Show success message
                     const successMessage = document.getElementById('success-message');
                     successMessage.style.display = 'block';
-
-                    // Hide the form
                     this.style.display = 'none';
-
-                    // Wait 4 seconds, then close the tab
                     setTimeout(() => {
-                        window.close(); // Close the tab
+                        window.close();
                     }, 3000);
                 } else {
                     alert('Error: ' + JSON.stringify(data.errors));
@@ -157,11 +166,9 @@
 
 {% if already_replied %}
 <script>
-
-  // Close the tab after 3 seconds
   setTimeout(() => {
-    window.close();  // Close the tab
-  }, 100);
+    window.close();
+  }, 5000);
 </script>
 {% endif %}
 </body>

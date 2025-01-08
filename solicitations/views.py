@@ -59,6 +59,8 @@ def clients(request):
     context = {"clients":clients,'total_clients':total_clients}
     return render(request,'solicitations/clients/clients.html',context)
 
+#######################  CLIENT RELATED VIEWS  #########################
+
 ## view add clients
 def add_client(request):
     if request.method == 'POST':
@@ -113,6 +115,8 @@ def client_details(request, client):
     }
     return render(request, 'solicitations/clients/details.html', context)
 
+
+####################### RFQS RELATED VIEWS  ############################
 ## view to show all sent rfqs
 def sent_rfq(request):
     # fetch all rfqs if user is admin
@@ -212,7 +216,6 @@ def delete_rfq(request,rfq):
 ## this is for displaying form for reply
 def rfq_reply_view(request):
     user = request.user
-    print(user.username)
 
     rfq_unique_id = request.GET.get('rfq_unique_id')  # Get the unique_id from query params
     rfq = get_object_or_404(RFQ, unique_id=rfq_unique_id)  # Fetch RFQ by unique_id
@@ -242,7 +245,7 @@ def rfq_reply_view(request):
         'form': form, 'rfq': rfq, 'solicitation': solicitation, 'already_replied': False
     })
 
-
+## view to show all replied views
 def replied_rfq(request):
     # Fetch all RFQ replies, ordered by the latest first
     if request.user.user_type == 'admin':
@@ -339,6 +342,86 @@ def delete_replied_rfq(request,rfq):
     delete_replied_rfq.delete()
     return redirect('solicitations:replied-rfq')
 
+## view to send RFQS
+def send_rfqs(request):
+    try:
+        # Parse JSON data from the request body
+        data = json.loads(request.body)
+        selected_ids = data.get("selected_ids", [])  # Retrieve selected IDs from the request
+
+        if not selected_ids:
+            return JsonResponse({"error": "No solicitations selected"}, status=400)
+
+        # Query the database for the selected IDs
+        solicitations = Solicitation.objects.filter(id__in=selected_ids)
+
+        if not solicitations.exists():
+            return JsonResponse({"error": "No matching solicitations found"}, status=404)
+
+        # Serialize the data
+        solicitation_data = [
+            {
+                "id": sol.id,
+                "cage": sol.cage,
+                "item_name": sol.item_name,
+                "quantity": sol.quantity,
+                "part_number": sol.part_number,
+                "NSN": sol.NSN,
+            }
+            for sol in solicitations
+        ]
+
+        # Debugging: Print the serialized data
+        print(f"Solicitation data: {solicitation_data}")
+
+        # Get the logged-in user
+        logged_in_user = request.user  # Assuming CustomUser model for logged-in user
+
+        user_data = {
+            "username": logged_in_user.username,
+            "email": logged_in_user.email,
+            "phone": getattr(logged_in_user, "phone", None),
+            "address": getattr(logged_in_user, "address", None),
+            "companyName": getattr(logged_in_user, "companyName", None),
+            "logo": logged_in_user.logo.url if hasattr(logged_in_user, "logo") and logged_in_user.logo else None,
+        }
+
+        # Serialize combined user and solicitation data
+        combined_data = {
+            "user_data": user_data,
+            "solicitations": solicitation_data,
+        }
+
+        # Debugging: Print combined data
+        print(f"Combined data: {json.dumps(combined_data, indent=2)}")
+
+        # Run the external script with the serialized data
+        python_exec = r"D:\projects\GilTech\RFQ\gilenv\Scripts\python.exe"
+        script_path = os.path.join(os.getcwd(), "infoExtractorSendRfq.py")
+
+        result = subprocess.Popen(
+            [python_exec, script_path, json.dumps(combined_data)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        stdout, stderr = result.communicate()
+
+        if result.returncode != 0:
+            error_message = f"Subprocess failed with error: {stderr}"
+            print(error_message)  # Log the error for debugging
+            return JsonResponse({"error": error_message}, status=500)
+
+        print(f"Subprocess output: {stdout}")  # Log subprocess output
+
+        return JsonResponse({"message": stdout, "data": solicitation_data}, status=200)
+
+    except Exception as e:
+        error_message = f"Unexpected error: {str(e)}"
+        print(error_message)  # Log unexpected errors
+        return JsonResponse({"error": error_message}, status=500)
+
 ##########################  OEM RELATED VIEWS  ###############################
 
 ## view to show all active oems
@@ -430,82 +513,5 @@ def enable_oem(request, oem_id):
         return redirect('solicitations:disabled-oems') 
 
 
-def send_rfqs(request):
-    try:
-        # Parse JSON data from the request body
-        data = json.loads(request.body)
-        selected_ids = data.get("selected_ids", [])  # Retrieve selected IDs from the request
 
-        if not selected_ids:
-            return JsonResponse({"error": "No solicitations selected"}, status=400)
-
-        # Query the database for the selected IDs
-        solicitations = Solicitation.objects.filter(id__in=selected_ids)
-
-        if not solicitations.exists():
-            return JsonResponse({"error": "No matching solicitations found"}, status=404)
-
-        # Serialize the data
-        solicitation_data = [
-            {
-                "id": sol.id,
-                "cage": sol.cage,
-                "item_name": sol.item_name,
-                "quantity": sol.quantity,
-                "part_number": sol.part_number,
-                "NSN": sol.NSN,
-            }
-            for sol in solicitations
-        ]
-
-        # Debugging: Print the serialized data
-        print(f"Solicitation data: {solicitation_data}")
-
-        # Get the logged-in user
-        logged_in_user = request.user  # Assuming CustomUser model for logged-in user
-
-        user_data = {
-            "username": logged_in_user.username,
-            "email": logged_in_user.email,
-            "phone": getattr(logged_in_user, "phone", None),
-            "address": getattr(logged_in_user, "address", None),
-            "companyName": getattr(logged_in_user, "companyName", None),
-            "logo": logged_in_user.logo.url if hasattr(logged_in_user, "logo") and logged_in_user.logo else None,
-        }
-
-        # Serialize combined user and solicitation data
-        combined_data = {
-            "user_data": user_data,
-            "solicitations": solicitation_data,
-        }
-
-        # Debugging: Print combined data
-        print(f"Combined data: {json.dumps(combined_data, indent=2)}")
-
-        # Run the external script with the serialized data
-        python_exec = r"D:\projects\GilTech\RFQ\gilenv\Scripts\python.exe"
-        script_path = os.path.join(os.getcwd(), "infoExtractorSendRfq.py")
-
-        result = subprocess.Popen(
-            [python_exec, script_path, json.dumps(combined_data)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        stdout, stderr = result.communicate()
-
-        if result.returncode != 0:
-            error_message = f"Subprocess failed with error: {stderr}"
-            print(error_message)  # Log the error for debugging
-            return JsonResponse({"error": error_message}, status=500)
-
-        print(f"Subprocess output: {stdout}")  # Log subprocess output
-
-        return JsonResponse({"message": stdout, "data": solicitation_data}, status=200)
-
-    except Exception as e:
-        error_message = f"Unexpected error: {str(e)}"
-        print(error_message)  # Log unexpected errors
-        return JsonResponse({"error": error_message}, status=500)
 
