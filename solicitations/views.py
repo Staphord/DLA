@@ -443,6 +443,28 @@ def fetch_mail_preview(request):
     }
 
     return JsonResponse(data)
+
+def update_mail_preview(request):
+    if request.method == 'POST':
+        try:
+            user = request.user
+            print("User:", user)
+            data = json.loads(request.body)
+            print("Data received:", data)
+
+            mail_template, created = MailTemplate.objects.get_or_create(userMail=user)
+            print("MailTemplate created?", created)
+
+            mail_template.heading = data.get('heading', mail_template.heading)
+            mail_template.salutation = data.get('salutation', mail_template.salutation)
+            mail_template.body = data.get('body', mail_template.body)
+            mail_template.save()
+
+            return JsonResponse({"message": "Mail template updated successfully!"}, status=200)
+        except Exception as e:
+            print("Error:", e)
+            return JsonResponse({"error": str(e)}, status=400)
+    return JsonResponse({"error": "Invalid request method"}, status=405)
 ##########################  OEM RELATED VIEWS  ###############################
 
 ## view to show all active oems

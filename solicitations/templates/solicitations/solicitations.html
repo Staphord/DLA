@@ -9,7 +9,6 @@
             Total Solicitations <span class="badge bg-light text-dark">{{ total_solicitations }}</span>
         </div>
         <div>
-            <a href="#" class="btn btn-secondary text-white" data-bs-toggle="modal" data-bs-target="#previewMail">Preview Sample Mail</a>
             <a href="#" class="btn mybg hoverbg text-white" id="sendRfqsButton">Send RFQs</a>
         </div>
     </div>
@@ -113,7 +112,7 @@
     </div>
 </div>
 
-<!-- Preview Mail Modal -->
+<!-- Email preview Modal -->
 <div class="modal fade" id="previewMail" tabindex="-1" aria-labelledby="previewMailLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -139,15 +138,15 @@
 
                         <!-- Header for Request for Quotation -->
                         <div class="text-start mb-2">
-                            <div class="text-dark" id="previewHeading"></div>
+                            <div class="text-dark" id="previewHeading" contenteditable="true"></div>
                         </div>
 
                         <!-- Reference ID -->
                         <p><strong>Reference #:</strong> xx-xx-xxxxx-x</p>
 
                         <!-- Introductory Message -->
-                        <p id="previewSalutation"></p>
-                        <p id="previewBody">.</p>
+                        <p id="previewSalutation" contenteditable="true"></p>
+                        <p id="previewBody" class="p-2 bg-light rounded-2" contenteditable="true">.</p>
 
                         <!-- Table for Item Details -->
                         <div class="table-responsive mb-4">
@@ -180,11 +179,19 @@
                         </div>
                     </div>
                 </div>
-
+                <div class="modal-footer">
+                    <!-- Edit and Save Buttons -->
+                    <button id="editButton" class="btn btn-primary">Edit</button>
+                    <button id="saveButton" class="btn btn-success" style="display: none;">Save</button>
+                    <!-- Existing Buttons -->
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button id="confirmSendButton" class="btn mybg myhover text-white">Confirm and Send</button>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
 
 <!-- jQuery and AJAX Script -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -202,16 +209,48 @@
             }
         });
 
-        // Get CSRF token from the template
+        // CSRF token for AJAX requests
         const csrftoken = "{{ csrf_token }}";
 
-        // Function to show toast notification
-        function showToast() {
-            const toastElement = $('#selectToast')[0];
-            const toast = new bootstrap.Toast(toastElement);
-            toast.show();
-        }
+        // Initially hide the Save button
+        $("#saveButton").hide();
 
+        // Toggle editing mode for preview content
+        $("#editButton").click(function () {
+            // Enable editing for specified elements
+            $("#previewHeading, #previewSalutation, #previewBody")
+                .attr("contenteditable", "true")
+                .addClass("border border-primary");
+
+            // Toggle buttons visibility
+            $("#editButton").hide();
+            $("#saveButton").show();
+        });
+
+        // Show toast notification
+        function showToast(message, type = "success") {
+    // Set the toast message
+    $('#selectToast .toast-body').text(message);
+
+    // Update the background color class based on the type
+    const toastElement = $('#selectToast');
+    toastElement.removeClass('text-bg-danger text-bg-success text-bg-warning'); // Remove any previous styles
+
+    if (type === "success") {
+        toastElement.addClass('text-bg-success'); // Green background for success
+    } else if (type === "danger") {
+        toastElement.addClass('text-bg-danger'); // Red background for danger
+    } else if (type === "warning") {
+        toastElement.addClass('text-bg-warning'); // Yellow background for warning
+    }
+
+    // Show the toast
+    const toast = new bootstrap.Toast(toastElement[0]);
+    toast.show();
+}
+
+
+        // Preview mail modal trigger
         $('#sendRfqsButton').click(function (e) {
             e.preventDefault(); // Prevent default action
 
@@ -222,14 +261,83 @@
             });
 
             if (selectedIds.length === 0) {
-                showToast(); // Show toast
+                showToast(); // Show toast if no rows selected
                 return;
             }
 
-            // Show the modal
-            $('#progressModal').modal('show');
+            // Fetch mail preview data via AJAX
+            $.ajax({
+                url: "{% url 'solicitations:fetch_mail_preview' %}",
+                type: "POST",
+                headers: { "X-CSRFToken": csrftoken },
+                data: JSON.stringify({ selected_ids: selectedIds }),
+                contentType: "application/json",
+                success: function (data) {
+                    // Populate the preview modal fields
+                    $('#previewSalutation').text(data.salutation);
+                    $('#previewHeading').text(data.heading);
+                    $('#previewBody').html(data.body);
+                    $('#previewCompany').text(data.company);
+                    $('#previewAddress').text(data.address);
+                    $('#previewPhone').text(data.phone);
 
-            // Initialize progress bar
+                    if (data.logo) {
+                        $('#previewLogo').attr('src', data.logo).show();
+                    } else {
+                        $('#previewLogo').hide();
+                    }
+
+                    // Store selected IDs for confirmation
+                    $('#confirmSendButton').data('selected-ids', selectedIds);
+
+                    // Show the preview modal
+                    $('#previewMail').modal('show');
+                },
+                error: function () {
+                    showToast("Failed to load email preview. Please try again.");
+                }
+            });
+        });
+
+        // Save edited mail content
+        $('#saveButton').click(function () {
+            const updatedHeading = $('#previewHeading').text();
+            const updatedSalutation = $('#previewSalutation').text();
+            const updatedBody = $('#previewBody').html();
+
+            // Debugging output for updated data
+            console.log("Saving Edits:", { heading: updatedHeading, salutation: updatedSalutation, body: updatedBody });
+
+            $.ajax({
+                url: "{% url 'solicitations:update_mail_preview' %}",
+                type: "POST",
+                headers: { "X-CSRFToken": csrftoken },
+                data: JSON.stringify({
+                    heading: updatedHeading,
+                    salutation: updatedSalutation,
+                    body: updatedBody
+                }),
+                contentType: "application/json",
+                success: function () {
+                    console.log("Changes saved successfully!");
+                    showToast("Changes saved successfully!");
+                },
+                error: function (xhr) {
+                    console.error("Failed to save changes:", xhr.responseText);
+                    showToast("Failed to save changes. Please try again.");
+                }
+            });
+        });
+
+        // Confirm and send RFQs
+        $('#confirmSendButton').click(function () {
+            const selectedIds = $(this).data('selected-ids');
+
+            // Close the preview modal
+            $('#previewMail').modal('hide');
+
+            // Show the progress modal
+            $('#progressModal').modal('show');
             $('#progressBar').width('0%').text('0%');
             $('#status').text('Sending RFQs, please wait...');
 
@@ -241,66 +349,33 @@
                 } else {
                     clearInterval(interval);
                 }
-            }, 1000);
+            }, 500); // Faster progress bar for better UX
 
-            // Send AJAX request
+            // Send RFQs via AJAX
             $.ajax({
                 url: "{% url 'solicitations:send_rfqs' %}",
                 type: "POST",
                 headers: { "X-CSRFToken": csrftoken },
-                data: JSON.stringify({ selected_ids: selectedIds }),  // Convert the array to a JSON string
-                contentType: "application/json",  // Set content-type to JSON
+                data: JSON.stringify({ selected_ids: selectedIds }),
+                contentType: "application/json",
                 success: function () {
-                    // Complete progress and show success
                     $('#progressBar').width('100%').text('100%');
                     $('#status').text('RFQs sent successfully!');
                 },
                 error: function () {
-                    // Show error message
-                    $('#status').text('Failed to send RFQs');
+                    $('#status').text('Failed to send RFQs. Please try again later.');
                 },
                 complete: function () {
                     clearInterval(interval);
-                    // Hide modal after delay
                     setTimeout(function () {
                         $('#progressModal').modal('hide');
-
-                        // Reset the checkboxes
                         $('.rowCheckbox').prop('checked', false);
                         $('#selectAll').prop('checked', false);
                     }, 2000);
                 }
             });
         });
-
-        $('#previewMail').on('show.bs.modal', function () {
-    // Fetch mail preview data via AJAX
-    $.ajax({
-        url: "{% url 'solicitations:fetch_mail_preview' %}",  // Update with your view's URL name
-        method: "GET",
-        success: function (data) {
-            // Populate the modal fields
-            $('#previewSalutation').text(data.salutation);
-            $('#previewHeading').text(data.heading);
-            $('#previewBody').html(data.body);  // Use .html() for content that may include HTML tags
-            $('#previewCompany').text(data.company);
-            $('#previewAddress').text(data.address);
-            $('#previewPhone').text(data.phone);
-
-            // Set the logo
-            if (data.logo) {
-                $('#previewLogo').attr('src', data.logo).show(); // Display the logo
-            } else {
-                $('#previewLogo').hide(); // Hide the logo if no URL exists
-            }
-        },
-        error: function () {
-            // Show an error message if data retrieval fails
-            $('#previewBody').html('<p class="text-danger">Failed to load mail preview. Please try again later.</p>');
-        }
     });
-});
-});
-
 </script>
+
 {% endblock content %}
