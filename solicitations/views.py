@@ -1,9 +1,9 @@
 import json
 import os
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, OEMUser, RFQReply, Solicitation,OEM
+from . models import RFQ, MailTemplate, OEMUser, RFQReply, Solicitation,OEM
 from django.contrib.auth.hashers import check_password
 from django.contrib import messages
 import subprocess
@@ -12,7 +12,6 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 
 # Create your views here.
-
 def home(request):
     user=request.user
     ## fetch all normal users
@@ -375,7 +374,7 @@ def send_rfqs(request):
         print(f"Solicitation data: {solicitation_data}")
 
         # Get the logged-in user
-        logged_in_user = request.user  # Assuming CustomUser model for logged-in user
+        logged_in_user = request.user  
 
         user_data = {
             "username": logged_in_user.username,
@@ -421,16 +420,40 @@ def send_rfqs(request):
         error_message = f"Unexpected error: {str(e)}"
         print(error_message)  # Log unexpected errors
         return JsonResponse({"error": error_message}, status=500)
+    
+def fetch_mail_preview(request):
+    user = request.user  # Assuming the user is authenticated
+    mail_template = MailTemplate.objects.filter(userMail=user).first()
 
+    # Safeguard for optional fields in CustomUser
+    company_name = getattr(user, 'companyName', "Your Company Name")
+    address = getattr(user, 'address', "Your Address")
+    logo_url = user.logo.url if hasattr(user, 'logo') and user.logo else None
+    phone = getattr(user, 'phone', "Not Provided")
+
+    # Prepare the response data
+    data = {
+        "salutation": mail_template.salutation if mail_template else "Dear Mr/Ms",
+        "heading": mail_template.heading if mail_template else "REQUEST FOR QUOTATION",
+        "body": mail_template.body if mail_template else "I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.",
+        'company': company_name,
+        'address': address,
+        'logo': logo_url,  # URL or None if no logo exists
+        "phone": phone,
+    }
+
+    return JsonResponse(data)
 ##########################  OEM RELATED VIEWS  ###############################
 
 ## view to show all active oems
 def active_oems(request):
-    # Filter OEMs related to the user and are not disabled
+    # Filter OEMs related to the user and are not disabled for that user
     oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=False)
+    print(oems)
 
-    # Filter OEMs related to the user and are disabled
+    # Filter OEMs related to the user and are disabled for that user
     disabled_oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=True)
+    print(disabled_oems)
 
     # Count total OEMs for the user that are not disabled
     total_oems = oems.count()
@@ -476,10 +499,13 @@ def disabled_oems(request):
 ## view to disable a particular oem
 def disable_oem(request):
     if request.method == 'POST':
-        oem = request.POST.get('oem')
+        oem_id = request.POST.get('oem')
         reason = request.POST.get('reason')
 
-        oem_user = get_object_or_404(OEMUser, oem=oem, user=request.user)
+        # Get the OEMUser object specific to the logged-in user
+        oem_user = get_object_or_404(OEMUser, oem_id=oem_id, user=request.user)
+
+        # Disable the OEM for this user and provide a reason
         oem_user.is_disabled = True
         oem_user.reason = reason
         oem_user.save()
@@ -492,25 +518,23 @@ def disable_oem(request):
 ## view to enable a particular oem
 def enable_oem(request, oem_id):
     if request.method == "POST":
-        # Fetch the DisabledOEM object
-        enable_oem = get_object_or_404(OEMUser, id=oem_id)
+        # Fetch the OEMUser object for the logged-in user
+        enable_oem = get_object_or_404(OEMUser, id=oem_id, user=request.user)
 
-        # Enable the OEM
+        # Enable the OEM for this user
         enable_oem.is_disabled = False 
         enable_oem.save()
 
-        # Clear the reason
+        # Clear the reason for disabling
         enable_oem.reason = ""
         enable_oem.save()
 
-        # Add a success message
+        # Success message
         messages.success(request, f"OEM has been successfully enabled.")
 
-        # Redirect to the same page 
-        return redirect('solicitations:disabled-oems')  
+        return redirect('solicitations:disabled-oems')
     else:
-        # Handle non-POST requests (optional)
-        return redirect('solicitations:disabled-oems') 
+        return redirect('solicitations:disabled-oems')
 
 
 

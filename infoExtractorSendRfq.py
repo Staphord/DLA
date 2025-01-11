@@ -152,23 +152,81 @@ def fetch_cage_codes(user_data, solicitations):
             print("Error: Username is missing in user_data.")
             return []
 
-        # Step 1: Retrieve enabled OEMs for the logged-in user
-        oem_query = """
+        # Fetch user ID from the CustomUser table
+        user_query = "SELECT id FROM accounts_customuser WHERE username = %s"
+        cursor.execute(user_query, (username,))
+        user_row = cursor.fetchone()
+        if not user_row:
+            print(f"Error: User '{username}' not found.")
+            return []
+        user_id = user_row["id"]
+
+        # Step 1: Check and update or insert OEMUser entries
+        for solicitation in solicitations:
+            cage_code = solicitation.get("cage")
+            if not cage_code:
+                print("Skipping solicitation: Missing cage code.")
+                continue
+
+            # Check if OEM exists in the OEM table
+            oem_query = "SELECT id FROM solicitations_oem WHERE cage = %s"
+            cursor.execute(oem_query, (cage_code,))
+            oem_row = cursor.fetchone()
+
+            if not oem_row:
+                # Insert new OEM if not found
+                insert_oem_query = "INSERT INTO solicitations_oem (cage) VALUES (%s)"
+                try:
+                    cursor.execute(insert_oem_query, (cage_code,))
+                    connection.commit()
+                    print(f"OEM with cage code '{cage_code}' added.")
+                except MySQLdb.MySQLError as e:
+                    print(f"Failed to insert OEM '{cage_code}': {e}")
+                    continue
+
+                # Fetch the newly inserted OEM ID
+                cursor.execute(oem_query, (cage_code,))
+                oem_row = cursor.fetchone()
+
+            oem_id = oem_row["id"]
+
+            # Check if the user is linked to the OEM
+            oem_user_query = """
+            SELECT is_disabled FROM solicitations_oemuser
+            WHERE user_id = %s AND oem_id = %s
+            """
+            cursor.execute(oem_user_query, (user_id, oem_id))
+            oem_user_row = cursor.fetchone()
+
+            if not oem_user_row:
+                # Add a new link if not present
+                insert_oem_user_query = """
+                INSERT INTO solicitations_oemuser (user_id, oem_id, is_disabled)
+                VALUES (%s, %s, FALSE)
+                """
+                try:
+                    cursor.execute(insert_oem_user_query, (user_id, oem_id))
+                    connection.commit()
+                    print(f"Linked user ID '{user_id}' to OEM ID '{oem_id}'.")
+                except MySQLdb.MySQLError as e:
+                    print(f"Error linking user ID '{user_id}' to OEM ID '{oem_id}': {e}")
+
+        # Step 2: Retrieve enabled OEMs for the logged-in user
+        enabled_oems_query = """
         SELECT o.cage
         FROM solicitations_oemuser ou
         JOIN solicitations_oem o ON ou.oem_id = o.id
-        JOIN accounts_customuser u ON ou.user_id = u.id
-        WHERE u.username = %s AND ou.is_disabled = FALSE
+        WHERE ou.user_id = %s AND ou.is_disabled = FALSE
         """
-        cursor.execute(oem_query, (username,))
-        enabled_cages = [row['cage'] for row in cursor.fetchall()]
+        cursor.execute(enabled_oems_query, (user_id,))
+        enabled_cages = [row["cage"] for row in cursor.fetchall()]
 
         if not enabled_cages:
             print("No enabled OEMs found for the user.")
             return []
 
-        # Step 2: Fetch solicitations for the enabled CAGE codes and selected_ids
-        selected_ids = [solicitation.get("id") for solicitation in solicitations]
+        # Step 3: Fetch solicitations for the enabled CAGE codes and selected IDs
+        selected_ids = [solicitation.get("id") for solicitation in solicitations if "id" in solicitation]
         if not selected_ids:
             print("No selected IDs provided.")
             return []
@@ -182,10 +240,9 @@ def fetch_cage_codes(user_data, solicitations):
         """
         cursor.execute(solicitation_query, enabled_cages + selected_ids)
 
-        # Fetch all the rows
+        # Fetch all rows
         cage_data = cursor.fetchall()
         count_cage = len(cage_data)
-        print('--------------------------------------------------------------------------')
         print('--------------------------------------------------------------------------')
         print(f"Total solicitations to receive RFQ Email: {count_cage}")
         return cage_data

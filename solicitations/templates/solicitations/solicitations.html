@@ -9,6 +9,7 @@
             Total Solicitations <span class="badge bg-light text-dark">{{ total_solicitations }}</span>
         </div>
         <div>
+            <a href="#" class="btn btn-secondary text-white" data-bs-toggle="modal" data-bs-target="#previewMail">Preview Sample Mail</a>
             <a href="#" class="btn mybg hoverbg text-white" id="sendRfqsButton">Send RFQs</a>
         </div>
     </div>
@@ -17,65 +18,67 @@
     <div class="my-4">
         <div class="card">
             <div class="card-body">
-                <table class="table table-sm table-hover my-3">
-                    <thead class="table-light">
-                        <tr>
-                            <th><input type="checkbox" class="form-check-input fs-5" id="selectAll"></th>
-                            <th class="text-secondary">Cage Code</th>
-                            <th class="text-secondary">Item Name</th>
-                            <th class="text-secondary">Quantity</th>
-                            <th class="text-secondary">NSN</th>
-                            <th class="text-secondary">Part Number</th>
-                            <th class="text-secondary text-center">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for solicitation in solicitations %}
-                        <tr>
-                            <td><input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}"></td>
-                            <td>{{ solicitation.cage }}</td>
-                            <td>{{ solicitation.item_name|title }}</td>
-                            <td>{{ solicitation.quantity }}</td>
-                            <td>{{ solicitation.NSN }}</td>
-                            <td>{{ solicitation.part_number }}</td>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover my-3">
+                        <thead class="table-light">
+                            <tr>
+                                <th><input type="checkbox" class="form-check-input fs-5" id="selectAll"></th>
+                                <th class="text-secondary">Cage Code</th>
+                                <th class="text-secondary">Item Name</th>
+                                <th class="text-secondary">Quantity</th>
+                                <th class="text-secondary">NSN</th>
+                                <th class="text-secondary">Part Number</th>
+                                <th class="text-secondary text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for solicitation in solicitations %}
+                            <tr>
+                                <td><input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}"></td>
+                                <td>{{ solicitation.cage }}</td>
+                                <td>{{ solicitation.item_name|title }}</td>
+                                <td>{{ solicitation.quantity }}</td>
+                                <td>{{ solicitation.NSN }}</td>
+                                <td>{{ solicitation.part_number }}</td>
 
-                            <td>
-                                <div class="dropdown text-center">
-                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="bi bi-caret-down-fill"></i>
-                                </a>
-                              
-                                <ul class="dropdown-menu">
-                                  <li><a class="dropdown-item" href="#">View More</a></li>
-                                  <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{solicitation.id}}">Delete</a></li>
-                                </ul>
-                              </div>
-                            </td>
-                        </tr>
+                                <td>
+                                    <div class="dropdown text-center">
+                                        <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="bi bi-caret-down-fill"></i>
+                                        </a>
 
-                        <!--Disable OEM Modal -->
-                        <div class="modal fade" id="deleteSent-{{solicitation.id}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-                            <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                <p>Are you sure you want to delete this Solicitation?</p>
-                                <form method="POST" action="#">
-                                    {% csrf_token %}
-                                    <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
-                                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                                        <ul class="dropdown-menu">
+                                            <li><a class="dropdown-item" href="#">View More</a></li>
+                                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{solicitation.id}}">Delete</a></li>
+                                        </ul>
                                     </div>
-                                </form>
+                                </td>
+                            </tr>
+
+                            <!-- Delete Solicitation Modal -->
+                            <div class="modal fade" id="deleteSent-{{solicitation.id}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p>Are you sure you want to delete this Solicitation?</p>
+                                            <form method="POST" action="#">
+                                                {% csrf_token %}
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                                                    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -106,6 +109,79 @@
                 Please select at least one solicitation.
             </div>
             <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Mail Modal -->
+<div class="modal fade" id="previewMail" tabindex="-1" aria-labelledby="previewMailLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-center" id="previewMailLabel">Mail Sample that will be delivered to OEM</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="container my-4">
+                    <div class="shadow-box">
+                        <!-- Grid container for Logo and Company Information -->
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <img id="previewLogo" class="rounded-circle shadow-lg" src="" alt="Company Logo" style="max-width: 100px; display: none;">
+                            </div>
+                            <div class="text-start">
+                                <div class="mb-1 text-dark" id="previewCompany"></div>
+                                <div class="mb-1 fs-6" id="previewPhone"></div>
+                                <div class="mb-1 fs-6" id="previewAddress"></div>
+                                <div>Date: xx xx xxxx</div>
+                            </div>
+                        </div>
+
+                        <!-- Header for Request for Quotation -->
+                        <div class="text-start mb-2">
+                            <div class="text-dark" id="previewHeading"></div>
+                        </div>
+
+                        <!-- Reference ID -->
+                        <p><strong>Reference #:</strong> xx-xx-xxxxx-x</p>
+
+                        <!-- Introductory Message -->
+                        <p id="previewSalutation"></p>
+                        <p id="previewBody">.</p>
+
+                        <!-- Table for Item Details -->
+                        <div class="table-responsive mb-4">
+                            <table class="table table-striped table-bordered">
+                                <thead class="table-secondary">
+                                    <tr>
+                                        <th>Item Name</th>
+                                        <th>Quantity</th>
+                                        <th>Part Number</th>
+                                        <th>NSN</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>xxx</td>
+                                        <td>xxx</td>
+                                        <td>xxx</td>
+                                        <td>xxx</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Closing Message -->
+                        <p>You can reply to this email by clicking the link below or you can reply as normal.</p>
+
+                        <!-- Call-to-Action Button -->
+                        <div class="text-start">
+                            <a href="#" class="btn btn-secondary px-4 py-2">Click here to input price</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 </div>
@@ -196,8 +272,35 @@
                 }
             });
         });
+
+        $('#previewMail').on('show.bs.modal', function () {
+    // Fetch mail preview data via AJAX
+    $.ajax({
+        url: "{% url 'solicitations:fetch_mail_preview' %}",  // Update with your view's URL name
+        method: "GET",
+        success: function (data) {
+            // Populate the modal fields
+            $('#previewSalutation').text(data.salutation);
+            $('#previewHeading').text(data.heading);
+            $('#previewBody').html(data.body);  // Use .html() for content that may include HTML tags
+            $('#previewCompany').text(data.company);
+            $('#previewAddress').text(data.address);
+            $('#previewPhone').text(data.phone);
+
+            // Set the logo
+            if (data.logo) {
+                $('#previewLogo').attr('src', data.logo).show(); // Display the logo
+            } else {
+                $('#previewLogo').hide(); // Hide the logo if no URL exists
+            }
+        },
+        error: function () {
+            // Show an error message if data retrieval fails
+            $('#previewBody').html('<p class="text-danger">Failed to load mail preview. Please try again later.</p>');
+        }
     });
+});
+});
+
 </script>
-
-
 {% endblock content %}

@@ -26,6 +26,7 @@ urlpatterns = [
     path('replied-rfqs/', views.replied_rfq, name='replied-rfq'),
     path('replied-rfq-detail/<rfq>/', views.replied_rfq_detail, name='replied-rfq-detail'),
     path('delete-replied-rfq/<rfq>/', views.delete_replied_rfq, name='delete-replied-rfq'),
+    path('fetch-mail-preview/', views.fetch_mail_preview, name='fetch_mail_preview'),
 
     ####################  OEM URLS  ##########################
     path('active-oems/', views.active_oems, name='active-oems'),

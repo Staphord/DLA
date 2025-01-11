@@ -1,6 +1,8 @@
 from django.db import models
 from django.conf import settings
 
+from accounts.models import CustomUser
+
 class Solicitation(models.Model):
     cage = models.CharField(max_length=5)
     item_name = models.CharField(max_length=50)
@@ -74,3 +76,10 @@ class RFQReply(models.Model):
 
     def __str__(self):
         return f"Reply for RFQ-{self.rfq.unique_id} (Sent by {self.rfq_creator.username})"
+    
+class MailTemplate(models.Model):
+    body = models.TextField(default="I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.")
+    salutation = models.CharField(max_length=20, default='Dear Mr/Ms')
+    heading = models.CharField(max_length=50,default="REQUEST FOR QUOTATION")
+    userMail = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
