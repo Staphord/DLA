@@ -4,13 +4,25 @@
 {% block content %}
 <section>
     <!-- Header Section -->
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            Total Solicitations <span class="badge bg-light text-dark">{{ total_solicitations }}</span>
+    <div class="d-flex justify-content-between align-items-center mt-5">
+        <div class="col-md-6">
+            <form action="{% url 'solicitations:searched-solicitations' %}" method="post" class="d-flex mx-auto gap-2 w-100">
+                {% csrf_token %}
+                  <input type="text" class="form-control" placeholder="Search by cage code and nsn" name="mysearch">
+                  <button type="submit" class="btn btn-warning text-white"><i class="bi bi-search"></i></button>
+                  <button type="button" class="btn btn-info text-white" data-bs-toggle="offcanvas" data-bs-target="#offcanvasWithBothOptions" aria-controls="offcanvasWithBothOptions"><i class="bi bi-funnel"></i></button>
+              </form>
         </div>
-        <div>
+        <div class="d-flex gap-2">
+            {% if user.user_type == "admin" %}
+            <a href="#" data-bs-toggle="modal" data-bs-target="#clearModal-{{ solicitation.id }}" class="btn btn-danger">Clear all solicitations</a>
+            {% endif %}
             <a href="#" class="btn mybg hoverbg text-white" id="sendRfqsButton">Send RFQs</a>
         </div>
+    </div>
+
+    <div class="mt-4">
+        Total Solicitations <span class="badge bg-light text-dark">{{ total_solicitations }}</span>
     </div>
 
     <!-- Solicitations Table -->
@@ -23,39 +35,43 @@
                             <tr>
                                 <th><input type="checkbox" class="form-check-input fs-5" id="selectAll"></th>
                                 <th class="text-secondary">Cage Code</th>
-                                <th class="text-secondary">Item Name</th>
+                                <th class="text-secondary">Nomenclature</th>
                                 <th class="text-secondary">Quantity</th>
                                 <th class="text-secondary">NSN</th>
-                                <th class="text-secondary">Part Number</th>
+                                <th class="text-secondary">Date Issued</th>
+                                <th class="text-secondary">Return By</th>
                                 <th class="text-secondary text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for solicitation in solicitations %}
-                            <tr>
-                                <td><input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}"></td>
+                            <tr style="cursor: pointer;" onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';">
+                                <td><input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();"></td>
                                 <td>{{ solicitation.cage }}</td>
-                                <td>{{ solicitation.item_name|title }}</td>
+                                <td>{{ solicitation.nomenclature|title }}</td>
                                 <td>{{ solicitation.quantity }}</td>
                                 <td>{{ solicitation.NSN }}</td>
-                                <td>{{ solicitation.part_number }}</td>
+                                <td>{{ solicitation.issued_date }}</td>
+                                <td>{{ solicitation.return_by_date }}</td>
 
                                 <td>
                                     <div class="dropdown text-center">
-                                        <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
                                             <i class="bi bi-caret-down-fill"></i>
                                         </a>
 
                                         <ul class="dropdown-menu">
-                                            <li><a class="dropdown-item" href="#">View More</a></li>
-                                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{solicitation.id}}">Delete</a></li>
+                                            
+                                            {% if user.user_type == 'admin' %}
+                                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{solicitation.id}}" onclick="event.stopPropagation();">Delete</a></li>
+                                            {% endif %}
                                         </ul>
                                     </div>
                                 </td>
                             </tr>
 
                             <!-- Delete Solicitation Modal -->
-                            <div class="modal fade" id="deleteSent-{{solicitation.id}}" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                            <div class="modal fade" id="deleteSent-{{solicitation.id}}" tabindex="-1" data-bs-backdrop="static" aria-labelledby="exampleModalLabel" aria-hidden="true">
                                 <div class="modal-dialog">
                                     <div class="modal-content">
                                         <div class="modal-header">
@@ -63,7 +79,7 @@
                                         </div>
                                         <div class="modal-body">
                                             <p>Are you sure you want to delete this Solicitation?</p>
-                                            <form method="POST" action="#">
+                                            <form method="POST" action="{% url 'solicitations:delete-solicitation' solicitation.id %}">
                                                 {% csrf_token %}
                                                 <div class="modal-footer">
                                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
@@ -84,11 +100,11 @@
 </section>
 
 <!-- Progress Modal -->
-<div class="modal fade" id="progressModal" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+<div class="modal fade" id="progressModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="location.reload();"></button>
             </div>
             <div class="modal-body text-center">
                 <div class="progress" id="progressBarContainer">
@@ -102,7 +118,7 @@
 
 <!-- Toast Notification -->
 <div class="toast-container position-fixed top-0 end-0 p-3">
-    <div id="selectToast" class="toast align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div id="selectToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
             <div class="toast-body">
                 Please select at least one solicitation.
@@ -146,17 +162,17 @@
 
                         <!-- Introductory Message -->
                         <p id="previewSalutation" contenteditable="true"></p>
-                        <p id="previewBody" class="p-2 bg-light rounded-2" contenteditable="true">.</p>
+                        <p id="previewBody" class="p-2 bg-light rounded-2" contenteditable="true"></p>
 
                         <!-- Table for Item Details -->
                         <div class="table-responsive mb-4">
                             <table class="table table-striped table-bordered">
                                 <thead class="table-secondary">
                                     <tr>
-                                        <th>Item Name</th>
+                                        <th>Nomenclature</th>
                                         <th>Quantity</th>
-                                        <th>Part Number</th>
                                         <th>NSN</th>
+                                        <th>Return By</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -181,16 +197,37 @@
                 </div>
                 <div class="modal-footer">
                     <!-- Edit and Save Buttons -->
-                    <button id="editButton" class="btn btn-primary">Edit</button>
-                    <button id="saveButton" class="btn btn-success" style="display: none;">Save</button>
-                    <!-- Existing Buttons -->
-                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Cancel</button>
+                    <button id="editButton" class="btn btn-dark">Edit</button>
+                    <button id="saveButton" class="btn btn-secondary" style="display: none;">Save</button>
                     <button id="confirmSendButton" class="btn mybg myhover text-white">Confirm and Send</button>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Clear Solicitations Modal -->
+<div class="modal fade" id="clearModal-{{ solicitation.id }}" tabindex="-1" data-bs-backdrop="static" aria-labelledby="clearModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to clear these solicitations? Be reminded that this task cannot be reversed.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn mybg myhover text-white" data-bs-dismiss="modal">No, Cancel</button>
+                <!-- Form for POST request -->
+                <form method="POST" action="{% url 'solicitations:clear_solicitations' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger text-white">Yes, Clear</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 
 <!-- jQuery and AJAX Script -->
@@ -228,21 +265,19 @@
         });
 
         // Show toast notification
-        function showToast(message, type = "success") {
+        function showToast(message, type = "error") {
     // Set the toast message
     $('#selectToast .toast-body').text(message);
 
     // Update the background color class based on the type
     const toastElement = $('#selectToast');
-    toastElement.removeClass('text-bg-danger text-bg-success text-bg-warning'); // Remove any previous styles
+    toastElement.removeClass('bg-success bg-danger'); // Remove any previous styles
 
     if (type === "success") {
         toastElement.addClass('text-bg-success'); // Green background for success
-    } else if (type === "danger") {
+    } else if (type === "error") {
         toastElement.addClass('text-bg-danger'); // Red background for danger
-    } else if (type === "warning") {
-        toastElement.addClass('text-bg-warning'); // Yellow background for warning
-    }
+    } 
 
     // Show the toast
     const toast = new bootstrap.Toast(toastElement[0]);
@@ -320,11 +355,11 @@
                 contentType: "application/json",
                 success: function () {
                     console.log("Changes saved successfully!");
-                    showToast("Changes saved successfully!");
+                    showToast("Changes saved successfully!", "success");
                 },
                 error: function (xhr) {
                     console.error("Failed to save changes:", xhr.responseText);
-                    showToast("Failed to save changes. Please try again.");
+                    showToast("Failed to save changes. Please try again.", "error");
                 }
             });
         });
@@ -358,12 +393,15 @@
                 headers: { "X-CSRFToken": csrftoken },
                 data: JSON.stringify({ selected_ids: selectedIds }),
                 contentType: "application/json",
+                
                 success: function () {
                     $('#progressBar').width('100%').text('100%');
                     $('#status').text('RFQs sent successfully!');
+                    console.log(selectedIds);
                 },
-                error: function () {
-                    $('#status').text('Failed to send RFQs. Please try again later.');
+                error: function (xhr, status, error) {
+                const response = xhr.responseJSON ? xhr.responseJSON.message : "Unknown error";
+                $('#status').text(`Failed to send RFQs: ${response}`);
                 },
                 complete: function () {
                     clearInterval(interval);

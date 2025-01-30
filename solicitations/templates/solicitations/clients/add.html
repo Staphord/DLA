@@ -23,10 +23,22 @@
                         <div class="col-md-6">
                             <label for="">First Name:</label>
                             {{form.first_name}}
+                            
+                            {% if form.first_name.errors %}
+                                <div class="text-danger">
+                                    {{ form.first_name.errors }}
+                                </div>
+                             {% endif %}
                         </div>
                         <div class="col-md-6">
                             <label for="">Last Name:</label>
                             {{form.last_name}}
+                            
+                            {% if form.address.errors %}
+                                <div class="text-danger">
+                                    {{ form.address.errors }}
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -34,10 +46,22 @@
                         <div class="col-md-4">
                             <label for="">Email:</label>
                             {{form.email}}
+                            
+                            {% if form.email.errors %}
+                                <div class="text-danger">
+                                    {{ form.email.errors }}
+                                </div>
+                            {% endif %}
                         </div>
                         <div class="col-md-4">
                             <label for="">Phone:</label>
                             {{form.phone}}
+                            
+                            {% if form.phone.errors %}
+                                <div class="text-danger">
+                                    {{ form.phone.errors }}
+                                </div>
+                                {% endif %}
                         </div>
                         <div class="col-md-4">
                             <label for="">Company Name:</label>
@@ -64,14 +88,30 @@
                         <div class="col-md-4">
                             <label for="">User Name:</label>
                             {{form.username}}
+
+                            {% if form.username.errors %}
+                                <div class="text-danger">
+                                    {{ form.username.errors }}
+                                </div>
+                            {% endif %}
                         </div>
                         <div class="col-md-4">
                             <label for="">Password:</label>
-                            <input type="password" name="password1" class="form-control">
+                            <input type="password" name="password1" class="form-control" value="{{ form.password1.value|default_if_none:'' }}">
+                            {% if form.password1.errors %}
+                                <div class="text-danger">
+                                    {{ form.password1.errors }}
+                                </div>
+                            {% endif %}
                         </div>
                         <div class="col-md-4">
                             <label for="">Confirm Password:</label>
-                            <input type="password" name="password2" class="form-control">
+                            <input type="password" name="password2" class="form-control" value="{{ form.password2.value|default_if_none:'' }}">
+                            {% if form.password2.errors %}
+                                <div class="text-danger">
+                                    {{ form.password2.errors }}
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -83,10 +123,6 @@
             </div>
         </div>
     </div>
-
-    
-
-    
 </section>
 
 {% endblock content %}

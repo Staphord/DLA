@@ -35,8 +35,8 @@ DB_HOST = settings.DB_HOST
 DB_USER = settings.DB_USER
 DB_PASSWORD = settings.DB_PASSWORD
 DB_NAME = settings.DB_NAME
-EMAIL_ADDRESS = settings.EMAIL_ADDRESS
-EMAIL_PASSWORD = settings.EMAIL_PASSWORD
+EMAIL_ADDRESS = settings.DEFAULT_FROM_EMAIL
+EMAIL_PASSWORD = settings.EMAIL_HOST_PASSWORD
 
 ## Setup Chrome options
 chrome_options = Options()
@@ -80,9 +80,12 @@ if len(sys.argv) > 1:
         print('--------------------------------------------------------------------------')
         print(f"Decoded JSON: {data}")
 
-        # Extract user_data and solicitations
+        # Extract user_data, mail_data and solicitations
         user_data = data.get("user_data", {})
         solicitations = data.get("solicitations", [])
+        mail_data = data.get("mail_data", [])
+
+        print(f'mail data are: {mail_data}')
 
         # Extract the username from user_data
         username = user_data.get("username")
@@ -94,11 +97,6 @@ if len(sys.argv) > 1:
             created_by_user = CustomUser.objects.get(username=username)
             print('--------------------------------------------------------------------------')
             print(f"Retrieved CustomUser instance: {created_by_user}")
-
-            # Example: Iterate over solicitations
-            for solicitation in solicitations:
-                print('--------------------------------------------------------------------------')
-                print(f"Solicitation Data: {solicitation}")
 
         except CustomUser.DoesNotExist:
             print(f"Error: No CustomUser found with username '{username}'")
@@ -164,6 +162,7 @@ def fetch_cage_codes(user_data, solicitations):
         # Step 1: Check and update or insert OEMUser entries
         for solicitation in solicitations:
             cage_code = solicitation.get("cage")
+            print(f'CAGE CODE FETCHED {cage_code}')
             if not cage_code:
                 print("Skipping solicitation: Missing cage code.")
                 continue
@@ -234,7 +233,7 @@ def fetch_cage_codes(user_data, solicitations):
         format_strings_cages = ', '.join(['%s'] * len(enabled_cages))
         format_strings_ids = ', '.join(['%s'] * len(selected_ids))
         solicitation_query = f"""
-        SELECT cage, item_name, quantity, part_number, NSN
+        SELECT id, cage, nomenclature, quantity, return_by_date, NSN
         FROM solicitations_solicitation
         WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
         """
@@ -245,7 +244,9 @@ def fetch_cage_codes(user_data, solicitations):
         count_cage = len(cage_data)
         print('--------------------------------------------------------------------------')
         print(f"Total solicitations to receive RFQ Email: {count_cage}")
+        print(f'MY CAGE DATA ARE {cage_data}')
         return cage_data
+    
 
     except MySQLdb.MySQLError as err:
         print(f"Database Error: {err}")
@@ -313,40 +314,39 @@ def create_rfq(solicitation, oem, created_by):
 ## Function to save data to OEM Model
 def save_oem_data(cage_code, organization_name, street_name, city_name, postal_code, phone, fax, email):
     try:
-        # Use `get_or_create` to find an existing record or create a new one
-        oem, created = OEM.objects.get_or_create(
-            cage=cage_code,  # Match the record by the `cage` field
-            defaults={
-                'name': organization_name,
-                'street': street_name,
-                'city': city_name,
-                'postal_code': postal_code,
-                'phone': phone,
-                'fax': fax,
-                'email': email,
-            }
-        )
+        # Use `filter` to fetch all matching records and take the first one
+        oem_record = OEM.objects.filter(cage=cage_code).first()
 
-        if not created:  # If the record already exists, update the fields
-            oem.name = organization_name
-            oem.street = street_name
-            oem.city = city_name
-            oem.postal_code = postal_code
-            oem.phone = phone
-            oem.fax = fax
-            oem.email = email
-            oem.save()
-
-        if created:
-            print(f"OEM record created for CAGE Code {cage_code}.")
-        else:
+        if oem_record:
+            # Update the existing record
+            oem_record.name = organization_name
+            oem_record.street = street_name
+            oem_record.city = city_name
+            oem_record.postal_code = postal_code
+            oem_record.phone = phone
+            oem_record.fax = fax
+            oem_record.email = email
+            oem_record.save()
             print(f"OEM record updated for CAGE Code {cage_code}.")
-
+        else:
+            # Create a new record if none exists
+            OEM.objects.create(
+                cage=cage_code,
+                name=organization_name,
+                street=street_name,
+                city=city_name,
+                postal_code=postal_code,
+                phone=phone,
+                fax=fax,
+                email=email,
+            )
+            print(f"OEM record created for CAGE Code {cage_code}.")
     except Exception as e:
         print(f"Error saving data for CAGE Code {cage_code}: {e}")
 
+
 # Function to send an email
-def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_id,sent_at):
+def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_unique_id,sent_at):
     from_email = EMAIL_ADDRESS
     password = EMAIL_PASSWORD
 
@@ -355,9 +355,9 @@ def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_
             email_content = file.read()
 
         ## Prepare dynamic data to be rendered on email
-        email_content = email_content.replace("{item_name}", item_name)
+        email_content = email_content.replace("{nomenclature}", nomenclature)
         email_content = email_content.replace("{quantity}", str(quantity))
-        email_content = email_content.replace("{part_number}", str(part_number))
+        email_content = email_content.replace("{return_by_date}", str(return_by_date))
         email_content = email_content.replace("{NSN}", str(nsn))
         email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
 
@@ -382,6 +382,10 @@ def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_
         form_link = f"http://localhost:8000/solicitations/myform?rfq_unique_id={rfq_unique_id}"
         email_content = email_content.replace("{form_link}", form_link)
 
+        email_content = email_content.replace("{heading}", mail_data['heading'])
+        email_content = email_content.replace("{body}", mail_data['body'])
+        email_content = email_content.replace("{salutation}", mail_data['salutation'])
+
     except FileNotFoundError:
         print("Error: 'email.html' file not found.")
         return
@@ -394,7 +398,7 @@ def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_
     msg.attach(MIMEText(email_content, 'html'))
 
     try:
-        server = smtplib.SMTP("klmestate.com", 587)
+        server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(from_email, password)
         server.sendmail(from_email, to_email, msg.as_string())
@@ -406,16 +410,18 @@ def send_email(to_email,item_name,quantity,part_number,nsn,user_data,rfq_unique_
     finally:
         server.quit()
 
-## Process each record
+# Process each record
 for record in cage_data:
     cage_code = record['cage']
-    item_name = record['item_name']
+    nomenclature = record['nomenclature']
     quantity = record['quantity']
-    part_number = record['part_number']
+    return_by_date = record['return_by_date']
     nsn = record['NSN']
+    record_id = record['id']  # Use the record's unique ID for email tracking
+
     try:
         print('--------------------------------------------------------------------------')
-        print(f"Processing CAGE Code: {cage_code}")
+        print(f"Processing CAGE Code: {cage_code} | Record ID: {record_id}")
 
         # Locate the input for the CAGE code
         findCageCodeInput = WebDriverWait(driver, 60).until(
@@ -440,44 +446,32 @@ for record in cage_data:
 
         # Locate all elements with the selector
         read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
-        
-        ## I USED THIS TODEBUG FOR THE INDEX OF ORGANIZATION NAME BECAUSE OF MULTIPLE RESULTS
-        #for index, elem in enumerate(read_only_elements):
-           # print(f"Element with read only {index}: {elem.text.strip()}")
 
         # Extract the organization name (assuming it's always the second element)
         organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
-        print(f"Extracted Organization Name: {organization_name}")  
+        print(f"Extracted Organization Name: {organization_name}")
 
         # Locate the street
-        street_name =read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
-        print(f"Extracted Street Name: {street_name}") 
+        street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
+        print(f"Extracted Street Name: {street_name}")
 
-        #City
+        # City
         city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
-        print(f"Extracted City Name: {city}") 
-        
-        #Postal code
+        print(f"Extracted City Name: {city}")
+
+        # Postal code
         postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
-        print(f"Extracted Postal Code: {postal_code}") 
+        print(f"Extracted Postal Code: {postal_code}")
 
-        # Locate all elements with the selector
-        phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span") 
-
-        ## I USED THIS TODEBUG FOR THE INDEX OF PHONE BECAUSE OF MULTIPLE RESULTS
-        #for index, elem in enumerate(phone_fax):
-            #print(f"Element with span {index}: {elem.text.strip()}")
-
-        #Phone
+        # Locate phone and fax information
+        phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
         phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
-        print(f"Extracted Phone: {phone}") 
+        print(f"Extracted Phone: {phone}")
 
         # Locate the fax container using the label
         fax_container = WebDriverWait(driver, 60).until(
             EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
         )
-
-        # Extract the fax text
         fax_content = fax_container.text.strip()
         print(f"Extracted Fax: {fax_content}")
 
@@ -487,8 +481,6 @@ for record in cage_data:
         )
         email_href = email_element.get_attribute("href")
         email = email_href.replace("mailto:", "").strip()
-
-        # Print the extracted details
         print(f"Extracted Email: {email}")
 
         # Save data to the database
@@ -506,27 +498,35 @@ for record in cage_data:
         # Retrieve or create the OEM object
         oem = OEM.objects.get(cage=cage_code)
 
-        # Retrieve or create the Solicitation object
+        # Retrieve or create the Solicitation object using the unique record ID
         solicitation, created = Solicitation.objects.get_or_create(
-            item_name=item_name,
-            defaults={'quantity': quantity}  # Add other default fields if required
+            id=record_id,  # Use the unique ID to differentiate records
+            defaults={'nomenclature': nomenclature, 'quantity': quantity}
         )
 
         if created:
-            print(f"Solicitation created for item: {item_name}")
+            print(f"Solicitation created for item: {nomenclature}")
         else:
-            print(f"Solicitation retrieved for item: {item_name}")
+            print(f"Solicitation retrieved for item: {nomenclature}")
 
         # Call the create_rfq function after sending the email
-        rfq = create_rfq(solicitation, oem,created_by=created_by_user)
-        ##############
+        rfq = create_rfq(solicitation, oem, created_by=created_by_user)
+
         print("Preparing to send email...")
-        
+
         try:
-            send_email("williambundala54@gmail.com",item_name,quantity,part_number,nsn,user_data,rfq.unique_id,rfq.sent_at)
+            send_email(
+                "williamdemo01@gmail.com",
+                nomenclature,
+                quantity,
+                return_by_date,
+                nsn,
+                user_data,
+                rfq.unique_id,
+                rfq.sent_at
+            )
         except Exception as e:
             print(f"Failed to send email: {e}")
-        ###########
 
         # Refresh the page for the next record
         driver.get(website)

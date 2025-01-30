@@ -5,15 +5,23 @@ app_name = 'solicitations'
 
 urlpatterns = [
     ################## HOMEPAGE URLS  ######################
+    path('base/', views.base, name='base'),
     path('',views.home, name = 'home'),
 
     ###################  SOLICITATIONS URLS  ###############
     path('home/',views.solicitations, name = 'solicitations'),
+    path('scrap-solicitations/',views.scrap_solicitations, name = 'scrap-solicitations'),
+    path('solicitation-detail/<solicitation>/', views.solicitation_detail, name='solicitation-detail'),
+    path('solicitations/clear/', views.clear_solicitations, name='clear_solicitations'),
+    path('delete-solicitation/<solicitation>', views.delete_solicitation, name='delete-solicitation'),
+    path('searched-solicitations/',views.searched_solicitations, name='searched-solicitations'),
+    path('flitered-solicitations/', views.filtered_solicitations, name='filtered-solicitations'),
 
     ###################  CLIENTS URLS  #####################
     path('clients/',views.clients, name = 'clients'),
     path('client-detail/<client>/', views.client_details, name='client-details'),
     path('new-client/', views.add_client, name='add-client'),
+    path('delete-client/<client>/', views.delete_client, name='delete-client'),
 
     ###################  RFQ URLS  #########################
     path('sent-rfqs/', views.sent_rfq, name='sent-rfq'),
@@ -28,6 +36,8 @@ urlpatterns = [
     path('delete-replied-rfq/<rfq>/', views.delete_replied_rfq, name='delete-replied-rfq'),
     path('fetch-mail-preview/', views.fetch_mail_preview, name='fetch_mail_preview'),
     path('update_mail_preview/', views.update_mail_preview, name='update_mail_preview'),
+    path('get-chart-data/', views.get_chart_data, name='get_chart_data'),
+    path('get-oem-status-data/', views.get_oem_status_data, name='get_oem_status_data'),
 
     ####################  OEM URLS  ##########################
     path('active-oems/', views.active_oems, name='active-oems'),

@@ -5,13 +5,21 @@ from accounts.models import CustomUser
 
 class Solicitation(models.Model):
     cage = models.CharField(max_length=5)
-    item_name = models.CharField(max_length=50)
+    nomenclature = models.CharField(max_length=50)
     quantity = models.CharField(max_length=20)
-    part_number = models.CharField(max_length=20,default='2')
     NSN = models.CharField(max_length=20,default='1')
+    issued_date = models.CharField(max_length=20)
+    return_by_date = models.CharField(max_length=20)
+    organization_name = models.CharField(max_length=20,blank=True)
+    street_name = models.CharField(max_length=20,blank=True)
+    city = models.CharField(max_length=20,blank=True)
+    fax = models.CharField(max_length=20,blank=True)
+    phone = models.CharField(max_length=20,blank=True)
+    postal_code = models.CharField(max_length=20,blank=True)
+    email = models.EmailField(blank=True)
 
     def __str__(self):
-        return f"Solicitation-{self.cage} ({self.item_name})"
+        return f"Solicitation-{self.cage} ({self.nomenclature})"
 
 class OEM(models.Model):
     name = models.CharField(max_length=50)
@@ -42,14 +50,14 @@ class OEMUser(models.Model):
         return f"{self.user.username} - {self.oem.name} (Disabled: {self.is_disabled})"
 
 class RFQ(models.Model):
-    solicitation = models.ForeignKey(Solicitation, on_delete=models.CASCADE, related_name='rfqs')
+    solicitation = models.ForeignKey(Solicitation, on_delete=models.SET_NULL,null=True,blank=True, related_name='rfqs')
     oem = models.ForeignKey(OEM, on_delete=models.CASCADE, related_name='rfqs')
     unique_id = models.CharField(max_length=5, unique=True, editable=False)  # Unique 5-character ID
     sent_at = models.DateField(auto_now_add=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='created_rfqs')
 
     def __str__(self):
-        return f"RFQ-{self.unique_id} for {self.solicitation.item_name}"
+        return f"RFQ-{self.unique_id} for {self.solicitation.nomenclature}"
 
 class RFQReply(models.Model):
     rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='replies')
@@ -67,6 +75,8 @@ class RFQReply(models.Model):
         related_name='rfq_replies',
         editable=False
     )  # Tracks the user who created the RFQ
+
+    is_viewed = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         # Automatically associate the reply with the RFQ creator

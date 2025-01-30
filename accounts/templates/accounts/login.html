@@ -1,3 +1,4 @@
+{% extends 'accounts/base.html' %}
 {% load static %}
 
 <!DOCTYPE html>
@@ -27,113 +28,94 @@
 
 <body>
 
-  <!-- ======= Top Bar ======= -->
-  <div id="topbar" class="d-flex align-items-center header-top fixed-top py-2">
-    <div class="container d-flex justify-content-between">
-      <div class="contact-info align-items-center">
-        <a class="text-white" href="#">Welcome to RFQ Automated Program</a>
+{% block content %}
+<section class="bg-light py-5">
+  <div class="container mt-5 pt-5">
+    
+    {% if messages %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      {% for message in messages %}
+        {{ message }} 
+      {% endfor %}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+   
+    <div class="row">
+      <!-- Left Column -->
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <form method="post">
+              {% csrf_token %}
+              <div class="bg-light p-2 mb-2 form-text rounded-2">Login to RFQ Automated Portal</div>
+              <div class="mb-3">
+                <label for="exampleInputEmail1" class="form-label">Username</label>
+                <input type="text" class="form-control" name="username">
+              </div>
+              <div class="mb-3">
+                <label for="exampleInputPassword1" class="form-label">Password</label>
+                <input type="password" class="form-control" name="password">
+              </div>
+              <button type="submit" class="btn mybg hoverbg text-white w-100 mt-1">Login</button>
+              <div class="mt-2">
+                <a href="{% url 'accounts:password_reset' %}" class="float-start text-warning">Forgot password?</a>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
-      <div class="d-none d-lg-flex gap-3 social-links align-items-center">
-        <a href="mailto:support@rfqsys.com" class="text-white">Support: support@rfqsys.com</a>
+      <!-- Right Column -->
+      <div class="col-md-6 py-1">
+        <!-- First Row -->
+        <div class="row gap-2 mb-3 mx-1">
+          <div class="col-12 col-sm myhover my-border text-center my-text d-flex justify-content-center align-items-center">
+            <div class="d-block">
+              <div class="">What is RFQSYS?</div>
+              <div><i class="ri-questionnaire-line fs-3"></i></div>
+            </div>
+          </div>
+          <div class="col-12 col-sm myhover my-border my-text text-center d-flex justify-content-center align-items-center">
+            <div class="d-block text-center">
+              <div class="">How to Use</div>
+              <div><i class="ri-macbook-line fs-3"></i></div>
+            </div>
+          </div>
+        </div>
+        <!-- Second Row -->
+        <div class="row gap-2 mx-1">
+          <div class="col-12 myhover col-sm my-border text-center my-text d-flex justify-content-center align-items-center">
+            <div class="d-block">
+              <div class="">Advantages of Using RFQSYS</div>
+              <div><i class="ri-team-line fs-3"></i></div>
+            </div>
+          </div>
+          <div class="col-12 col-sm myhover my-border my-text text-center d-flex justify-content-center align-items-center">
+            <div class="d-block">
+              <div class="">Pricing</div>
+              <div><i class="ri-money-dollar-circle-line fs-3"></i></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <!-- ======= Header ======= -->
-  <header id="header" class="header-top fixed-top py-3  mt-4 pt-4 bg-white mb-3">
-    <div class="container d-flex align-items-center">
+</section>
+{% endblock content %}
 
-      <h6 class="me-auto py-2"><a class='fs-3 bold logo' href="#">LOGO</a>
-      </h6>
+<footer id="footer" class="footer">
+  <div class="copyright">
+    &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+  </div>
+  <div class="credits">
+    Designed by <a href="#">Gil Tech</a>
+  </div>
+</footer><!-- End Footer -->
 
-      <nav id="navbar" class="navbar">
-        <ul>
-        <i class="bi bi-list mobile-nav-toggle text-warning"></i>
-      </nav><!-- .navbar -->
-    </div>
-  </header><!-- End Header -->
-
-  <section class="bg-light py-5">
-    <div class="container mt-5 pt-5">
-      
-      {% if messages %}
-      <div class="alert alert-success alert-dismissible fade show" role="alert">
-        {% for message in messages %}
-          {{ message }} 
-        {% endfor %}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-      </div>
-      {% endif %}
-     
-      <div class="row">
-        <!-- Left Column -->
-        <div class="col-md-6">
-          <div class="card">
-            <div class="card-body">
-              <form method="post">
-                {% csrf_token %}
-                <div class="bg-light p-2 mb-2 form-text rounded-2">Login to RFQ Automated Portal</div>
-                <div class="mb-3">
-                  <label for="exampleInputEmail1" class="form-label">Username</label>
-                  <input type="text" class="form-control" name="username">
-                </div>
-                <div class="mb-3">
-                  <label for="exampleInputPassword1" class="form-label">Password</label>
-                  <input type="password" class="form-control" name="password">
-                </div>
-                <button type="submit" class="btn mybg hoverbg text-white w-100">Login</button>
-              </form>
-            </div>
-          </div>
-        </div>
-        <!-- Right Column -->
-        <div class="col-md-6 py-1">
-          <!-- First Row -->
-          <div class="row gap-2 mb-3 mx-1">
-            <div class="col-12 col-sm myhover my-border text-center my-text d-flex justify-content-center align-items-center">
-              <div class="d-block">
-                <div class="">What is RFQSYS?</div>
-                <div><i class="ri-questionnaire-line fs-3"></i></div>
-              </div>
-            </div>
-            <div class="col-12 col-sm myhover my-border my-text text-center d-flex justify-content-center align-items-center">
-              <div class="d-block text-center">
-                <div class="">How to Use</div>
-                <div><i class="ri-macbook-line fs-3"></i></div>
-              </div>
-            </div>
-          </div>
-          <!-- Second Row -->
-          <div class="row gap-2 mx-1">
-            <div class="col-12 myhover col-sm my-border text-center my-text d-flex justify-content-center align-items-center">
-              <div class="d-block">
-                <div class="">Advantages of Using RFQSYS</div>
-                <div><i class="ri-team-line fs-3"></i></div>
-              </div>
-            </div>
-            <div class="col-12 col-sm myhover my-border my-text text-center d-flex justify-content-center align-items-center">
-              <div class="d-block">
-                <div class="">Pricing</div>
-                <div><i class="ri-money-dollar-circle-line fs-3"></i></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>  
-
-  <footer id="footer" class="footer">
-    <div class="copyright">
-      &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
-    </div>
-    <div class="credits">
-      Designed by <a href="#">Gil Tech</a>
-    </div>
-  </footer><!-- End Footer -->
-
-
-  <!-- Vendor JS Files -->
-  <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
-    
-  </body>
+<!-- Vendor JS Files -->
+<script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  
+</body>
 </html>
+  
+  

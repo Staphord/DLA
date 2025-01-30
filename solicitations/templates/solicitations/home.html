@@ -17,9 +17,11 @@
         </ol>
       </nav>
     </div>
+    {% if user.user_type == "admin" %}
     <div class="">
-      <a href="##" class="btn btn-secondary">Scrape Solicitations</a>
+      <a href="#" class="btn mybg myhover text-white" data-bs-toggle="modal" data-bs-target="#exampleModalToggle">Scrape Solicitations</a>
     </div>
+    {% endif %}
   </div>
 </div><!-- End Page Title -->
 
@@ -39,7 +41,6 @@
                   </div>
                   <div class="ps-3">
                     <h6 class="">{{total_solicitations}}</h6>
-                    <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
                   </div>
                 </div>
               </div>
@@ -59,7 +60,6 @@
               </div>
               <div class="ps-3">
                 <h6 class="">{{total_sent_rfqs}}</h6>
-                <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
               </div>
             </div>
           </div>
@@ -81,7 +81,6 @@
               </div>
               <div class="ps-3">
                 <h6 class="">{{total_clients}}</h6>
-                <span class="text-primary small pt-1 fw-bold">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
               </div>
             </div>
           </div>
@@ -92,7 +91,7 @@
   {% else %}
   <div class="row">
     <!-- Solicitation Card -->
-    <div class="col-xxl-4 col-md-6">
+    <div class="col-md-6">
       <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
           <div class="card info-card revenue-card myhover">
               <div class="card-body rounded-3">
@@ -103,7 +102,6 @@
                   </div>
                   <div class="ps-3">
                     <h6 class="">{{total_solicitations}}</h6>
-                    <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
                   </div>
                 </div>
               </div>
@@ -112,7 +110,7 @@
     </div><!-- End Solicitation Card -->
 
     <!-- Procurement Card -->
-      <div class="col-xxl-4 col-md-6">
+      <div class="col-md-6">
         <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
         <div class="card info-card revenue-card myhover">
           <div class="card-body rounded-3">
@@ -123,7 +121,6 @@
               </div>
               <div class="ps-3">
                 <h6 class="">{{total_sent_rfqs}}</h6>
-                <span class="small pt-1 fw-bold text-primary">8%</span> <span class="text-muted small pt-2 ps-1">increase</span>
               </div>
             </div>
           </div>
@@ -138,79 +135,273 @@
 
   <div class="row">
 
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">OEMs Status Chart</h5>
+    
+          <!-- Line Chart -->
+          <canvas id="lineChart" style="max-height: 400px;"></canvas>
+          <script>
+            document.addEventListener("DOMContentLoaded", () => {
+              // Fetch dynamic data from the Django backend
+              fetch('http://localhost:8000/solicitations/get-oem-status-data/')
+                .then(response => response.json())
+                .then(data => {
+                  // Extract dynamic data
+                  const dynamicData = [data.active, data.disabled];
+    
+                  // Create the chart using the dynamic data
+                  new Chart(document.querySelector('#lineChart'), {
+                    type: 'bar',  
+                    data: {
+                      labels: ['Active', 'Disabled'],
+                      datasets: [{
+                        label: 'Number',
+                        data: dynamicData,  // Use the dynamic data
+                        fill: false,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: [
+                            'rgb(54, 162, 235)',  // Accepted color
+                            'rgb(104, 99, 200)'   // Sent color
+                          ],
+                        tension: 0.1
+                      }]
+                    },
+                    options: {
+                      scales: {
+                        y: {
+                          beginAtZero: true
+                        }
+                      }
+                    }
+                  });
+                })
+                .catch(error => {
+                  console.error('Error fetching dynamic data:', error);
+                });
+            });
+          </script>
+          <!-- End Line Chart -->
+        </div>
+      </div>
+    </div>
+    
       <div class="col-lg-6">
         <div class="card">
           <div class="card-body">
-            <h5 class="card-title">Solicitations Chart</h5>
-
-            <!-- Line Chart -->
-            <canvas id="lineChart" style="max-height: 400px;"></canvas>
+            <h5 class="card-title">RFQ Status Info</h5>
+      
+            <!-- Doughnut Chart -->
+            <canvas id="doughnutChart" style="max-height: 260px;"></canvas>
             <script>
               document.addEventListener("DOMContentLoaded", () => {
-                new Chart(document.querySelector('#lineChart'), {
-                  type: 'line',
-                  data: {
-                    labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
-                    datasets: [{
-                      label: 'Amount',
-                      data: [65, 59, 80, 81, 56, 55, 40],
-                      fill: false,
-                      borderColor: 'rgb(75, 192, 192)',
-                      tension: 0.1
-                    }]
-                  },
-                  options: {
-                    scales: {
-                      y: {
-                        beginAtZero: true
+                // Fetch dynamic data from Django view
+                fetch('http://localhost:8000/solicitations/get-chart-data/')
+                  .then(response => response.json())
+                  .then(data => {
+                    // Extract dynamic data
+                    const dynamicData = [data.solicitations, data.replied, data.sent];
+      
+                    // Create the chart using the dynamic data
+                    new Chart(document.querySelector('#doughnutChart'), {
+                      type: 'doughnut',
+                      data: {
+                        labels: ['Scraped solicitations', 'Replied', 'Sent'],
+                        datasets: [{
+                          label: 'Procurement',
+                          data: dynamicData,  // Use the dynamic data
+                          backgroundColor: [
+                            'rgb(255, 99, 132)',  // Accepted color
+                            'rgb(54, 162, 235)',  // Replied color
+                            'rgb(104, 99, 200)'   // Sent color
+                          ],
+                          hoverOffset: 4
+                        }]
                       }
-                    }
-                  }
-                });
+                    });
+                  })
+                  .catch(error => {
+                    console.error('Error fetching dynamic data:', error);
+                  });
               });
             </script>
-            <!-- End Line CHart -->
-
+            <!-- End Doughnut Chart -->
           </div>
         </div>
       </div>
-
-      <div class="col-lg-6">
-          <div class="card">
-            <div class="card-body">
-              <h5 class="card-title">Procurement Status Info</h5>
-
-              <!-- Doughnut Chart -->
-              <canvas id="doughnutChart" style="max-height: 200px;"></canvas>
-              <script>
-                document.addEventListener("DOMContentLoaded", () => {
-                  new Chart(document.querySelector('#doughnutChart'), {
-                    type: 'doughnut',
-                    data: {
-                      labels: [
-                        'Completed',
-                        'Pending',
-                      ],
-                      datasets: [{
-                        label: 'Procurement',
-                        data: [300, 50],
-                        backgroundColor: [
-                          'rgb(255, 99, 132)',
-                          'rgb(54, 162, 235)'
-                        ],
-                        hoverOffset: 4
-                      }]
-                    }
-                  });
-                });
-              </script>
-              <!-- End Doughnut CHart -->
-
-            </div>
-          </div>
-        </div>
+      
     </div>
 </section>
+
+<!-- Progress Modal -->
+<div class="modal fade" id="progressModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="progressModalLabel">Processing...</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="location.reload();"></button>
+          </div>
+          <div class="modal-body text-center">
+              <div class="progress" id="progressBarContainer">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                       role="progressbar" 
+                       id="progressBar" 
+                       style="width: 0%;">0%</div>
+              </div>
+              <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
+          </div>
+      </div>
+  </div>
+</div>
+
+
+<!--MODAL SCRAP -->
+<div class="modal fade" id="exampleModalToggle" aria-hidden="true" data-bs-backdrop="static" aria-labelledby="exampleModalToggleLabel" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to scrape the latest solicitations?.
+      </div>
+      <div class="modal-footer">
+        <button class="btn mybg hoverbg text-white" data-bs-target="#exampleModalToggle2" data-bs-toggle="modal">Enter date to scrape</button>
+        <button type="submit" class="btn btn-secondary" onclick="handleScrape()">Yes scrape now</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="exampleModalToggle2" aria-hidden="true" aria-labelledby="exampleModalToggleLabel2" data-bs-backdrop="static" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="scrapeForm" method="post">
+          {% csrf_token %}
+          <label for="scrapeDate"> Enter date to scrape solicitations:</label>
+          <input type="date" name="date" class="form-control" id="scrapeDate" placeholder="mm-dd-yyyy" required>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn mybg hoverbg text-white" data-bs-target="#exampleModalToggle" data-bs-toggle="modal">Back to first</button>
+        <button type="button" class="btn btn-secondary" onclick="handleScrape2()">Scrape now</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+function handleScrape() {
+  // Close the current modal
+  const scrapeModal = document.getElementById('exampleModalToggle');
+  const modalInstance = bootstrap.Modal.getInstance(scrapeModal);
+  modalInstance.hide(); // Close the modal
+
+  // Show the progress modal
+  const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+  progressModal.show();
+
+  // Start scraping
+  scrapeSolicitations();
+}
+
+function handleScrape2() {
+  // Close the current modal
+  const scrapeModal2 = document.getElementById('exampleModalToggle2');
+  const modalInstance2 = bootstrap.Modal.getInstance(scrapeModal2);
+  modalInstance2.hide(); // Close the modal
+
+  // Show the progress modal
+  const progressModal2 = new bootstrap.Modal(document.getElementById('progressModal'));
+  progressModal2.show();
+
+  // Start scraping
+  scrapeSolicitations();
+}
+
+function scrapeSolicitations() {
+  const progressBar = document.getElementById('progressBar');
+  const status = document.getElementById('status');
+  const dateInput = document.getElementById('scrapeDate'); // Date input from exampleModalToggle2
+
+  // Get the date value (if available)
+  const date = dateInput ? dateInput.value : null;
+
+  // Reset progress bar and status
+  progressBar.style.width = '0%';
+  progressBar.textContent = '0%';
+  status.textContent = 'Extracting solicitations, please wait...';
+
+  let progress = 0;
+
+  // Simulate progress to 90%
+  const interval = setInterval(() => {
+    if (progress < 90) {
+      progress += 1;
+      progressBar.style.width = `${progress}%`;
+      progressBar.textContent = `${progress}%`;
+    } else {
+      clearInterval(interval); // Stop progress at 90%
+    }
+  }, 3000);
+
+  // Start scraping process via AJAX
+  fetch("{% url 'solicitations:scrap-solicitations' %}", {
+    method: "POST", // Changed to POST to send the date
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+      "Content-Type": "application/json", // Specify JSON format
+      "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value, // CSRF token
+    },
+    body: date ? JSON.stringify({ date: date }) : null, // Send the date as part of the request
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      if (data.success) {
+        // On success, move progress to 100%
+        progressBar.style.width = '100%';
+        progressBar.textContent = '100%';
+        status.textContent = "Scraping completed successfully!";
+        location.reload();
+      } else {
+        // Handle failure
+        status.textContent = "Scraping failed.";
+        progressBar.style.width = '100%';
+        progressBar.classList.add("bg-danger"); // Change to red on failure
+      }
+    })
+    .catch(error => {
+      // Handle error
+      status.textContent = `An error occurred: ${error.message}`;
+      progressBar.style.width = '100%';
+      progressBar.classList.add("bg-danger"); // Change to red on error
+    })
+    .finally(() => {
+      // Close modal after a short delay
+      setTimeout(() => {
+        const progressModal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+        progressModal.hide();
+        progressBar.style.width = '0%'; // Reset progress bar for the next use
+        progressBar.textContent = '';
+        progressBar.classList.remove("bg-danger"); // Reset color in case of error
+        status.textContent = '';
+      }, 2000);
+    });
+}
+</script>
+
+
+
 {% else %}
 <div class="d-flex justify-content-center align-items-center vh-100">
   <div class="text-center">

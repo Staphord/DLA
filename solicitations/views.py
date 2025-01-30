@@ -1,17 +1,31 @@
 import json
 import os
+from django.core.mail import send_mail
+from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFound, JsonResponse
+from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
 from . models import RFQ, MailTemplate, OEMUser, RFQReply, Solicitation,OEM
-from django.contrib.auth.hashers import check_password
 from django.contrib import messages
 import subprocess
 from . forms import LogoUpdateForm, UserRegistrationForm,RFQReplyForm
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.template.loader import render_to_string
+from datetime import datetime
 
 # Create your views here.
+
+def base(request):
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+
+    ## pass data to the template
+    context = {
+        'replied_rfq':replied_rfq
+        }
+    return render(request,'solicitations/base.html',context)
+
 def home(request):
     user=request.user
     ## fetch all normal users
@@ -20,64 +34,212 @@ def home(request):
     total_clients = clients.count()
 
     ## fetch all solicitaions
-    
-    solicitations = Solicitation.objects.all()
+    solicitations = Solicitation.objects.all().exclude(cage = '-')
 
     ## count total number of solicitations
     total_solicitations = solicitations.count()
 
-    # fetch all rfqs
-    if user.is_superuser:
-        sent_rfqs = RFQ.objects.all()
-    else:
-        sent_rfqs = RFQ.objects.filter(created_by = request.user)
+    # fetch user rfqs
+    sent_rfqs = RFQ.objects.filter(created_by = request.user)
     # count all rfqs
     total_sent_rfqs = sent_rfqs.count()
 
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
     ## pass data to the template
     context = {
         'total_clients':total_clients,'total_solicitations':total_solicitations,
-        'sent_rfqs':sent_rfqs,'total_sent_rfqs':total_sent_rfqs
+        'sent_rfqs':sent_rfqs,'total_sent_rfqs':total_sent_rfqs,'replied_rfq':replied_rfq,
         }
     return render(request,'solicitations/home.html',context)
 
 ## view to show all solicitations
 def solicitations(request):
     ## fetch all solicitaions
-    solicitations = Solicitation.objects.all()
+    solicitations = Solicitation.objects.all().exclude(cage='-')
     ## count total number of solicitations
     total_solicitations = solicitations.count()
+
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
     ## pass data to the template
-    context = {'total_solicitations':total_solicitations,'solicitations':solicitations}
+    context = {'total_solicitations':total_solicitations,'solicitations':solicitations,'replied_rfq':replied_rfq}
     return render(request,'solicitations/solicitations.html',context)
+
+## view to show solicitation detail
+def solicitation_detail(request,solicitation):
+    solicitation_detail = Solicitation.objects.get(pk=solicitation)
+    oem = OEM.objects.filter(cage=solicitation_detail.cage).first()
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+    context = {"solicitation_detail":solicitation_detail,"oem":oem,'replied_rfq':replied_rfq}
+    return render(request,'solicitations/solicitation-detail.html',context)
+
+def clear_solicitations(request):
+    if request.method == "POST":  
+        mysolicitations = Solicitation.objects.all()
+        mysolicitations.delete()
+        messages.success(request, "All solicitations have been cleared successfully.")
+        return redirect('solicitations:solicitations')
+
+    messages.error(request, "Invalid request method.")
+    return redirect('solicitations:solicitations')
+
+def delete_solicitation(request,solicitation):
+    solicitation = Solicitation.objects.get(pk = solicitation)
+    solicitation.delete()
+    return redirect('solicitations:solicitations')
+
+
+def scrap_solicitations(request):
+    if request.method == "POST" and request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        try:
+            # Parse the JSON data from the request body, or use an empty dict if the body is empty
+            data = json.loads(request.body) if request.body else {}
+            scrape_date = data.get('date')  # Get the date from the request body
+            
+
+            # Use the provided scrape_date or a default value
+            if scrape_date:
+                formated_date = datetime.strptime(scrape_date, "%Y-%m-%d").strftime("%m-%d-%Y")
+                print(f"Scraping for date: {scrape_date}")
+            else:
+                formated_date = datetime.now().strftime("%m-%d-%Y")  # Default to the current date
+                print("No scrape date provided. Defaulting to current date.")
+
+            # Path to the Python executable and script
+            python_exec = r"C:\Users\Staphord Bengesi\Desktop\DLA\venv\Scripts\python.exe"
+            script_path = os.path.join(os.getcwd(), "extractSolicitations.py")
+
+            # Run the external Python script, passing the user ID and date as arguments
+            result = subprocess.Popen(
+                [python_exec, script_path, str(formated_date)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            # Log output line by line
+            for line in iter(result.stdout.readline, ''):
+                print(line.strip())
+
+            # Wait for the script to finish
+            stdout, stderr = result.communicate()
+
+            if result.returncode != 0:
+                error_message = f"Subprocess failed with error: {stderr}"
+                print(error_message)  # Log the error for debugging
+                return JsonResponse({"error": error_message}, status=500)
+
+            # Return success after script completes
+            return JsonResponse({"success": "Completed"})
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON in request body"}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    else:
+        return JsonResponse({"error": "Invalid request method or headers"}, status=400)
+
+def searched_solicitations(request):
+    if request.method == "POST":
+        mysearch = request.POST.get('mysearch', '')  
+        if mysearch:
+            data = Solicitation.objects.filter(
+                Q(cage__icontains=mysearch) | Q(NSN__icontains=mysearch)
+            )
+            print(f'YOOOOOOOOOOOOOOOOO {data}')  # Debugging print statement
+            context = {'mysearch': mysearch, 'data': data}
+            return render(request, 'solicitations/searched_solicitations.html', context)
+        else:
+            # Handle empty search term
+            context = {'mysearch': '', 'data': Solicitation.objects.none()}
+            return render(request, 'solicitations/searched_solicitations.html', context)
+    else:
+        # Handle GET request
+        context = {'mysearch': '', 'data': Solicitation.objects.none()}
+        return render(request, 'solicitations/searched_solicitations.html', context)
+    
+def filtered_solicitations(request):
+    solicitations = Solicitation.objects.all()  # Default queryset
+
+    # Get input dates from POST data
+    issued = request.POST.get('issued_date')
+    return_by = request.POST.get('return_by_date')
+
+    if issued:
+        # Convert yyyy-mm-dd to mm-dd-yyyy
+        issued_date_obj = datetime.strptime(issued, '%Y-%m-%d')
+        issued_date_str = issued_date_obj.strftime('%m-%d-%Y')
+        solicitations = solicitations.filter(issued_date__exact=issued_date_str)
+
+    if return_by:
+        # Convert yyyy-mm-dd to mm-dd-yyyy
+        return_by_date_obj = datetime.strptime(return_by, '%Y-%m-%d')
+        return_by_date_str = return_by_date_obj.strftime('%m-%d-%Y')
+        print(f'Return by date: {return_by_date_str}')
+        solicitations = solicitations.filter(return_by_date__exact=return_by_date_str)
+
+    # Render the filtered solicitations
+    return render(request, 'solicitations/filtered_solicitations.html', {'solicitations': solicitations})
+#######################  CLIENT RELATED VIEWS  #########################
 
 ## view to show all clients
 def clients(request):
     clients = CustomUser.objects.exclude(is_superuser=True).filter(user_type = 'client')
     total_clients = clients.count()
-    context = {"clients":clients,'total_clients':total_clients}
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+    context = {"clients":clients,'total_clients':total_clients,'replied_rfq':replied_rfq}
     return render(request,'solicitations/clients/clients.html',context)
-
-#######################  CLIENT RELATED VIEWS  #########################
 
 ## view add clients
 def add_client(request):
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST, request.FILES)
-
         if form.is_valid():
-            form.save()
-            return redirect('solicitations:clients')
+            try:
+                user = form.save(commit=False)
+                user.set_password(form.cleaned_data['password1'])
+                user.save()
 
+                # Prepare email template context
+                context = {
+                    'first_name': user.first_name,
+                    'username': user.username,
+                    'password': form.cleaned_data['password1'],
+                    'login_url': request.build_absolute_uri('/'),
+                    'current_year': datetime.now().year,
+                }
+
+                # Render email content
+                email_body = render_to_string('solicitations/invitation_email.html', context)
+
+                # Send email
+                send_mail(
+                    subject="Welcome to Our Platform",
+                    message="This is a fallback plain text version of the email.",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                    html_message=email_body,  
+                )
+                return redirect('solicitations:clients')
+            except Exception as e:
+                print(f"Error saving user: {e}")
+        else:
+            print(form.errors)
     else:
-        # If GET request, initialize the form
         form = UserRegistrationForm()
 
-    return render(request,'solicitations/clients/add.html',{'form': form})
+    return render(request, 'solicitations/clients/add.html', {'form': form})
+
 
 # view to show client detail
 def client_details(request, client):
     client = get_object_or_404(CustomUser, pk=client)
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
 
     if request.method == "POST":
         # Handle logo update form
@@ -88,67 +250,39 @@ def client_details(request, client):
                 messages.success(request, "Logo updated successfully!")
                 return redirect('solicitations:client-details', client=client.pk)
         
-        # Handle password change form
-        elif 'password_change' in request.POST:
-            current_password = request.POST.get('password')
-            new_password = request.POST.get('newpassword')
-            renew_password = request.POST.get('renewpassword')
-
-            # Validate current password
-            if not check_password(current_password, client.password):
-                messages.error(request, "Current password is incorrect.")
-            # Validate new password confirmation
-            elif new_password != renew_password:
-                messages.error(request, "New passwords do not match.")
-            else:
-                # Update password in the database
-                client.set_password(new_password)
-                client.save()
-                messages.success(request, "Password updated successfully!")
-                return redirect('solicitations:client-details', client=client.pk)
 
     form = LogoUpdateForm(instance=client)
     context = {
         'client': client,
-        'form': form,
+        'form': form,'replied_rfq':replied_rfq
     }
     return render(request, 'solicitations/clients/details.html', context)
 
+def delete_client(request,client):
+    clientToDelete = CustomUser.objects.get(pk=client)
+    clientToDelete.delete()
+    return redirect('solicitations:clients')
 
 ####################### RFQS RELATED VIEWS  ############################
 ## view to show all sent rfqs
 def sent_rfq(request):
-    # fetch all rfqs if user is admin
-    if request.user.user_type == 'admin':
-        sent_rfqs = RFQ.objects.all()
-    else:
-        sent_rfqs = RFQ.objects.filter(created_by=request.user)
+    sent_rfqs = RFQ.objects.filter(created_by=request.user)
     # count all rfqs
-    if request.user.user_type == 'admin':
-        total_sent_rfqs = sent_rfqs.count()
-    else:
-        total_sent_rfqs = sent_rfqs.filter(created_by=request.user).count()
-    if request.user.user_type == 'admin':
-        p = Paginator(RFQ.objects.order_by('-id'),10)
-    else:
-        p = Paginator(RFQ.objects.filter(created_by=request.user).order_by('-id'),10)
+    total_sent_rfqs = sent_rfqs.filter(created_by=request.user).count()
+    p = Paginator(RFQ.objects.filter(created_by=request.user).order_by('-id'),25)
     page = request.GET.get('page')
     rfq = p.get_page(page)
 
     # Fetch all RFQ replies, ordered by the latest first
-    replied_rfq_queryset = RFQReply.objects.all().order_by('-id')
-    if request.user.user_type == 'admin':
-        replied_rfq_queryse = RFQReply.objects.all().order_by('-id')
-    else:
-        replied_rfq_queryse = RFQReply.objects.filter(rfq__created_by=request.user).count()
+    replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
+    replied_rfq_queryse = RFQReply.objects.filter(rfq__created_by=request.user).count()
 
     # Count all RFQs (total number of replies)
-    if request.user.user_type == 'admin':
-        total_replied_rfq = replied_rfq_queryset.count()
-    else:
-        total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
-    # pass data to template
-    context = {'sent_rfqs':sent_rfqs,'total_sent_rfqs':total_sent_rfqs,'rfq':rfq,'total_replied_rfq':total_replied_rfq,'replied_rfq_queryse':replied_rfq_queryse}
+    total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+    context = {'sent_rfqs':sent_rfqs,'total_sent_rfqs':total_sent_rfqs,'rfq':rfq,'total_replied_rfq':total_replied_rfq,
+               'replied_rfq_queryse':replied_rfq_queryse,'replied_rfq':replied_rfq}
     return render(request,'solicitations/procurements/sent_rfq.html',context)
 
 
@@ -156,41 +290,19 @@ def sent_rfq(request):
 def search_sent_rfq(request):
     if request.method == "POST":
         searched = request.POST['search-sent']
-        
-        if request.user.user_type == 'admin':
-            rfqId = RFQ.objects.filter(unique_id__contains = searched)
-        else:
-            rfqId = RFQ.objects.filter(Q(unique_id__contains = searched) & Q(created_by = request.user))
 
-        # fetch all rfqs if user is admin
-        if request.user.user_type == 'admin':
-            sent_rfqs = RFQ.objects.all()
-            print("Fetching all RFQs")
-        else:
-            sent_rfqs = RFQ.objects.filter(created_by=request.user)
-            print(f"Fetching RFQs for user: {request.user}")
-            print(sent_rfqs)
+        rfqId = RFQ.objects.filter(Q(unique_id__contains = searched) & Q(created_by = request.user))
+
+        
+        sent_rfqs = RFQ.objects.filter(created_by=request.user)
         # count all rfqs
-        if request.user.user_type == 'admin':
-            total_sent_rfqs = sent_rfqs.count()
-            print(total_sent_rfqs)
-        else:
-            total_sent_rfqs = sent_rfqs.filter(created_by=request.user).count()
-            print(total_sent_rfqs)
+        total_sent_rfqs = sent_rfqs.filter(created_by=request.user).count()
 
         # Fetch all RFQ replies, ordered by the latest first
-        if request.user.user_type == 'admin':
-            replied_rfq_queryset = RFQReply.objects.all().order_by('-id')
-        else:
-            replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
+        replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
 
         # Count all RFQs (total number of replies)
-        if request.user.user_type == 'admin':
-            total_replied_rfq = replied_rfq_queryset.count()
-            print(f'total replied for user admin {total_replied_rfq}')
-        else:
-            total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
-            print(f'total replied for normal user {total_replied_rfq}')
+        total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
 
         context ={'searched':searched, 'rfqId':rfqId,'total_sent_rfqs':total_sent_rfqs,'total_replied_rfq':total_replied_rfq}
         return render(request,'solicitations/procurements/searched_sent.html',context)
@@ -203,7 +315,10 @@ def rfq_detail(request, rfq):
         rfq = RFQ.objects.get(pk=rfq)
     except RFQ.DoesNotExist:
         return HttpResponseNotFound("RFQ not found")
-    context = {'rfq': rfq}
+    
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+    context = {'rfq': rfq,'replied_rfq':replied_rfq}
     return render(request, 'solicitations/procurements/rfq_detail.html', context)
 
 ##view to delete RFQ
@@ -247,51 +362,51 @@ def rfq_reply_view(request):
 ## view to show all replied views
 def replied_rfq(request):
     # Fetch all RFQ replies, ordered by the latest first
-    if request.user.user_type == 'admin':
-        replied_rfq_queryset = RFQReply.objects.all().order_by('-id')
-    else:
-        replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
+    replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
 
     # Count all RFQs (total number of replies)
-    if request.user.user_type == 'admin':
-        total_replied_rfq = replied_rfq_queryset.count()
-        print(f'total replied for user admin {total_replied_rfq}')
-    else:
-        total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
-        print(f'total replied for normal user {total_replied_rfq}')
+    total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
 
-    # Set up the paginator, 10 replies per page
-    paginator = Paginator(replied_rfq_queryset, 10)
+    # Set up the paginator, 25 replies per page
+    paginator = Paginator(replied_rfq_queryset, 25)
     page = request.GET.get('page')
 
     # Get the current page of replies
     rfq = paginator.get_page(page)
 
     # Fetch all RFQs
-    if request.user.user_type == 'admin':
-        sent_rfqs = RFQ.objects.all()
-    else:
-        sent_rfqs = RFQ.objects.filter(created_by=request.user)
+    sent_rfqs = RFQ.objects.filter(created_by=request.user)
 
     # Count all RFQs
-    if request.user.user_type == 'admin':
-        total_sent_rfqs = sent_rfqs.count()
-    else:
-        total_sent_rfqs = sent_rfqs.filter(created_by = request.user).count()
+    total_sent_rfqs = sent_rfqs.filter(created_by = request.user).count()
+
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
 
     # Pass the paginated replies and total count to the template
     context = {
         'total_replied_rfq': total_replied_rfq,
         'rfq': rfq,
-        'total_sent_rfqs': total_sent_rfqs
+        'total_sent_rfqs': total_sent_rfqs,'replied_rfq':replied_rfq
     }
     return render(request, 'solicitations/procurements/replied_rfq.html', context)
 
 
 ## View to show Replied RFQ detail
 def replied_rfq_detail(request, rfq):
-    rfq = RFQReply.objects.get(pk=rfq)
-    context = {'rfq': rfq}
+    # Retrieve the RFQReply object or return a 404 error if it doesn't exist
+    rfq_instance = get_object_or_404(RFQReply, pk=rfq)
+
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+    
+    # Toggle the is_viewed field to True
+    if not rfq_instance.is_viewed:  # Update only if it's not already True
+        rfq_instance.is_viewed = True
+        rfq_instance.save()
+
+    # Pass the RFQReply object to the template
+    context = {'rfq': rfq_instance,'replied_rfq':replied_rfq}
     return render(request, 'solicitations/procurements/replied_rfq_detail.html', context)
 
 #view to search for Replied RFQS
@@ -299,37 +414,29 @@ def search_replied_rfq(request):
     if request.method == "POST":
         searched = request.POST['search-replied']
         
-        if request.user.user_type == 'admin':
-            # Access unique_id through the related RFQ
-            replied_rfq_queryset = RFQReply.objects.filter(rfq__unique_id__icontains=searched).order_by('-id')
-        else:
-            # Combine conditions for non-admin users
-            replied_rfq_queryset = RFQReply.objects.filter(
+        replied_rfq_queryset = RFQReply.objects.filter(
                 Q(rfq__unique_id__icontains=searched) & 
                 Q(rfq_creator=request.user)
             ).order_by('-id')
 
         # Count all Replied RFQs
-        if request.user.user_type == 'admin':
-            total_replied_rfq = RFQReply.objects.all().count()
-        else:
-            total_replied_rfq = RFQReply.objects.filter(rfq_creator=request.user).count()
+        total_replied_rfq = RFQReply.objects.filter(rfq_creator=request.user).count()
 
         # Fetch Sent RFQs
-        if request.user.user_type == 'admin':
-            sent_rfqs = RFQ.objects.all()
-        else:
-            sent_rfqs = RFQ.objects.filter(created_by=request.user)
+        sent_rfqs = RFQ.objects.filter(created_by=request.user)
 
         # Count all Sent RFQs
         total_sent_rfqs = sent_rfqs.count()
+        ## replied rfq
+        replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
 
         context = {
             'searched': searched, 
             'replied_rfq_queryset': replied_rfq_queryset,
             'total_replied_rfq': total_replied_rfq,
             'sent_rfqs': sent_rfqs,
-            'total_sent_rfqs': total_sent_rfqs
+            'total_sent_rfqs': total_sent_rfqs,
+            'replied_rfq':replied_rfq
         }
         return render(request, 'solicitations/procurements/searched_replied.html', context)
     else:
@@ -357,25 +464,35 @@ def send_rfqs(request):
         if not solicitations.exists():
             return JsonResponse({"error": "No matching solicitations found"}, status=404)
 
-        # Serialize the data
+        # Serialize the solicitation data
         solicitation_data = [
             {
                 "id": sol.id,
                 "cage": sol.cage,
-                "item_name": sol.item_name,
+                "nomenclature": sol.nomenclature,
                 "quantity": sol.quantity,
-                "part_number": sol.part_number,
+                "return_by_date": sol.return_by_date,
                 "NSN": sol.NSN,
             }
             for sol in solicitations
         ]
 
-        # Debugging: Print the serialized data
-        print(f"Solicitation data: {solicitation_data}")
-
         # Get the logged-in user
         logged_in_user = request.user  
 
+        # Retrieve the MailTemplate for the logged-in user
+        mail_template = MailTemplate.objects.filter(userMail=logged_in_user).first()
+        if not mail_template:
+            return JsonResponse({"error": "No mail template found for the user"}, status=404)
+
+        # Serialize the mail template data
+        mail_data = {
+            "salutation": mail_template.salutation,
+            "heading": mail_template.heading,
+            "body": mail_template.body,
+        }
+
+        # Serialize the user data
         user_data = {
             "username": logged_in_user.username,
             "email": logged_in_user.email,
@@ -385,9 +502,10 @@ def send_rfqs(request):
             "logo": logged_in_user.logo.url if hasattr(logged_in_user, "logo") and logged_in_user.logo else None,
         }
 
-        # Serialize combined user and solicitation data
+        # Combine all data
         combined_data = {
             "user_data": user_data,
+            "mail_data": mail_data,
             "solicitations": solicitation_data,
         }
 
@@ -395,7 +513,7 @@ def send_rfqs(request):
         print(f"Combined data: {json.dumps(combined_data, indent=2)}")
 
         # Run the external script with the serialized data
-        python_exec = r"D:\projects\GilTech\RFQ\gilenv\Scripts\python.exe"
+        python_exec = r"C:\Users\Staphord Bengesi\Desktop\DLA\venv\Scripts\python.exe"
         script_path = os.path.join(os.getcwd(), "infoExtractorSendRfq.py")
 
         result = subprocess.Popen(
@@ -420,7 +538,38 @@ def send_rfqs(request):
         error_message = f"Unexpected error: {str(e)}"
         print(error_message)  # Log unexpected errors
         return JsonResponse({"error": error_message}, status=500)
-    
+
+def get_chart_data(request):
+    # Dynamic calculation for solicitation
+    solicitations = Solicitation.objects.exclude(cage = '-').count() 
+
+    # Dynamic calculation for "Replied" - count of replies for all RFQs
+    replied = RFQReply.objects.filter(rfq_creator = request.user).count() 
+    print(f'rREPLIED RFQS {replied}')
+
+    # Dynamic calculation for "Sent" - count of all RFQs
+    sent = RFQ.objects.filter(created_by=request.user).count()
+
+    # Return the data as JSON
+    return JsonResponse({
+        'solicitations': solicitations,
+        'replied': replied,
+        'sent': sent
+    })
+
+
+def get_oem_status_data(request):
+    # Count the number of active and disabled OEM users
+    active_count = OEMUser.objects.filter(user=request.user, is_disabled=False).count()
+    disabled_count = OEMUser.objects.filter(user=request.user, is_disabled=True).count()
+
+    # Return the data as a JSON response
+    return JsonResponse({
+        'active': active_count,
+        'disabled': disabled_count
+    })
+
+
 def fetch_mail_preview(request):
     user = request.user  # Assuming the user is authenticated
     mail_template = MailTemplate.objects.filter(userMail=user).first()
@@ -465,6 +614,8 @@ def update_mail_preview(request):
             print("Error:", e)
             return JsonResponse({"error": str(e)}, status=400)
     return JsonResponse({"error": "Invalid request method"}, status=405)
+
+
 ##########################  OEM RELATED VIEWS  ###############################
 
 ## view to show all active oems
@@ -477,14 +628,22 @@ def active_oems(request):
     disabled_oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=True)
     print(disabled_oems)
 
+    p = Paginator(oems.order_by('-id'),25)
+    page = request.GET.get('page')
+    oem = p.get_page(page)
+
     # Count total OEMs for the user that are not disabled
     total_oems = oems.count()
+
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
 
     # Context to pass to the template
     context = {
         'oems': oems,
+        'oem':oem,
         'total_oems': total_oems,
-        'disabled_oems': disabled_oems,
+        'disabled_oems': disabled_oems,'replied_rfq':replied_rfq
     }
     return render(request, 'solicitations/oems/active_oems.html', context)
 
@@ -497,8 +656,11 @@ def oem_detail(request, oem):
     # Get all OEMUser associations for this OEM
     oem_users = OEMUser.objects.filter(oem=oem)
 
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+
     # Pass the data to the template
-    context = {'oem': oem, 'oem_users': oem_users}
+    context = {'oem': oem, 'oem_users': oem_users,'replied_rfq':replied_rfq}
     return render(request, 'solicitations/oems/oem_detail.html', context)
 
 ## view to search for OEM
@@ -506,7 +668,10 @@ def search_oem(request):
     if request.method == "POST":
         searched = request.POST['search-oem']
         oem = OEM.objects.filter(cage__icontains = searched).first()
-        context = {'searched': searched,'oem':oem}
+
+        ## replied rfq
+        replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+        context = {'searched': searched,'oem':oem,'replied_rfq':replied_rfq}
         return render(request,'solicitations/oems/searched_oem.html',context)
     else:
         return render(request,'solicitations/oems/all_oems.html')
@@ -515,7 +680,14 @@ def search_oem(request):
 def disabled_oems(request):
     oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=False)
     disabled_oems = OEMUser.objects.filter(Q(user = request.user) & Q(is_disabled = True))
-    context = {'disabled_oems':disabled_oems,'oems':oems}
+
+    ## replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+
+    p = Paginator(disabled_oems.order_by('-id'),25)
+    page = request.GET.get('page')
+    disabled = p.get_page(page)
+    context = {'disabled_oems':disabled_oems,'oems':oems,'disabled':disabled,'replied_rfq':replied_rfq}
     return render(request,'solicitations/oems/disabled_oems.html',context)
 
 ## view to disable a particular oem

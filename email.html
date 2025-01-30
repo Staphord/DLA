@@ -55,7 +55,7 @@
             width: 100%;
         }
         .myright{
-            padding-left: 180px;
+            padding-left: 200px;
             margin-left: 190px;
         }
     </style>
@@ -76,28 +76,29 @@
                 </div>
                 
                 <div style="display: flex; justify-content: center; margin-top: 10px; margin-bottom: 10px;">
-                    <h3>REQUEST FOR QUOTATION</h3>
+                    <h3>{heading}</h3>
                 </div>                
                 
                 <p>Reference #: {rfq_unique_id}</p>
                 
-                <p>Dear Mr/Ms, <br>
-                    I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.
+                <p>{salutation},</p><br>
+                <p>
+                   {body}
                 </p>
 
                 <div class="">
                     <table>
                         <tr>
-                            <th>Item Name</th>
+                            <th>Nomenclature</th>
                             <th>Quantity</th>
-                            <th>Part Number</th>
                             <th>NSN</th>
+                            <th>Return By</th>
                         </tr>
                         <tr>
-                            <td>{item_name}</td>
+                            <td>{nomenclature}</td>
                             <td>{quantity}</td>
-                            <td>{part_number}</td>
                             <td>{NSN}</td>
+                            <td>{return_by_date}</td>
                         </tr>
                     </table>
                 </div>

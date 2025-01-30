@@ -22,10 +22,11 @@
 <link href="{% static 'gil/vendor/quill/quill.snow.css' %}" rel="stylesheet">
 <link href="{% static 'gil/vendor/quill/quill.bubble.css' %}" rel="stylesheet">
 <link href="{% static 'gil/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
-<link href="{% static 'gil/vendor/simple-datatables/style.css' %}" rel="stylesheet">
 
   <!-- Template Main CSS File -->
 <link href="{% static 'gil/css/style.css' %}" rel="stylesheet">
+
+<meta name="csrf-token" content="{% csrf_token %}">
 </head>
 
 <body>
@@ -54,71 +55,34 @@
 
           <a class="nav-link nav-icon" href="#" data-bs-toggle="dropdown">
             <i class="bi bi-bell"></i>
-            <span class="badge mybg badge-number">4</span>
+            <span class="badge mybg badge-number">{{replied_rfq.count}}</span>
           </a><!-- End Notification Icon -->
 
           <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow notifications">
             <li class="dropdown-header">
-              You have 4 new notifications
-              <a href="#"><span class="badge rounded-pill bg-primary p-2 ms-2">View all</span></a>
+              You have {{replied_rfq.count}} new notifications
             </li>
             <li>
               <hr class="dropdown-divider">
             </li>
 
+            
+            {% for replied in replied_rfq %}
             <li class="notification-item">
-              <i class="bi bi-exclamation-circle text-warning"></i>
+              <i class="bi bi-check2-all text-muted"></i>
               <div>
-                <h4>Lorem Ipsum</h4>
-                <p>Quae dolorem earum veritatis oditseno</p>
-                <p>30 min. ago</p>
+                <h4>{{replied.rfq.unique_id}}</h4>
+                <p>{{replied.created_at}}</p>
               </div>
             </li>
 
             <li>
               <hr class="dropdown-divider">
             </li>
-
-            <li class="notification-item">
-              <i class="bi bi-x-circle text-danger"></i>
-              <div>
-                <h4>Atque rerum nesciunt</h4>
-                <p>Quae dolorem earum veritatis oditseno</p>
-                <p>1 hr. ago</p>
-              </div>
-            </li>
-
-            <li>
-              <hr class="dropdown-divider">
-            </li>
-
-            <li class="notification-item">
-              <i class="bi bi-check-circle text-success"></i>
-              <div>
-                <h4>Sit rerum fuga</h4>
-                <p>Quae dolorem earum veritatis oditseno</p>
-                <p>2 hrs. ago</p>
-              </div>
-            </li>
-
-            <li>
-              <hr class="dropdown-divider">
-            </li>
-
-            <li class="notification-item">
-              <i class="bi bi-info-circle text-primary"></i>
-              <div>
-                <h4>Dicta reprehenderit</h4>
-                <p>Quae dolorem earum veritatis oditseno</p>
-                <p>4 hrs. ago</p>
-              </div>
-            </li>
-
-            <li>
-              <hr class="dropdown-divider">
-            </li>
+            {% endfor %}
+              
             <li class="dropdown-footer">
-              <a href="#">Show all notifications</a>
+              <a href="{% url 'solicitations:replied-rfq' %}">Show all replies</a>
             </li>
 
           </ul><!-- End Notification Dropdown Items -->
@@ -232,6 +196,42 @@
     {% endblock %}
 </main>
 
+<!-- Offcanvas -->
+<div class="offcanvas offcanvas-end" data-bs-scroll="true" tabindex="-1" id="offcanvasWithBothOptions" aria-labelledby="offcanvasWithBothOptionsLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title text-center" id="offcanvasWithBothOptionsLabel">We Have Simplified, You Can Filter With What You Want.</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <hr class="">
+  <div class="offcanvas-body">
+    <div class="py-1">
+      <form action="{% url 'solicitations:filtered-solicitations' %}" method="POST">
+        {% csrf_token %}
+        <div class="my-2 p-3 rounded-3">
+          <fieldset class="bg-light p-2 rounded-3">
+            <legend class="text-dark mb-1">Period</legend>
+            <div class="text-start mt-5">
+              <!-- Issued Date Input -->
+              <div class="my-3">
+                <label for="issued_date">Issued:</label>
+                <input type="date" name="issued_date" class="form-control" id="issued_date">
+              </div>
+              <!-- Return by Date Input -->
+              <div class="my-3">
+                <label for="return_by_date">Return by:</label>
+                <input type="date" name="return_by_date" class="form-control" id="return_by_date">
+              </div>
+            </div>
+          </fieldset>
+          <!-- Submit Button -->
+          <div class="my-2">
+            <button type="submit" class="btn btn-info w-100 text-white">Filter</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
   <!-- ======= Footer ======= -->
   <footer id="footer" class="footer">
     <div class="copyright">

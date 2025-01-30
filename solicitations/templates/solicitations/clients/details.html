@@ -89,7 +89,7 @@
                         <form action="" method="post" enctype="multipart/form-data">
                             {% csrf_token %}
                             {{ form.as_p }}
-                            <button type="submit" class="btn mybg text-white myhover mt-2 w-100">Update Logo</button>
+                            <button type="submit" name="logo_update" class="btn mybg text-white myhover mt-2 w-100">Update Logo</button>
                         </form>
                     </div>
                 </div>
@@ -97,6 +97,10 @@
             
 
               <div class="tab-pane fade pt-3" id="profile-change-password">
+                <div class="row mx-2 mb-2">
+                  <div class="col-lg-3 col-md-4 label">User Name</div>
+                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.username}}</div>
+              </div>
                 <!-- Change Password Form -->
                 <form method="post">
                   {% csrf_token %}

@@ -125,12 +125,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
 #Email credentials
-EMAIL_ADDRESS='info@klmestate.com'
-EMAIL_PASSWORD='info@0213'
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'williamdemo01@gmail.com'  
+DEFAULT_FROM_EMAIL = 'williamdemo01@gmail.com'
+EMAIL_HOST_PASSWORD = 'trkpitibtavjpmpm'
 
 ### Database credentials
 DB_HOST='localhost'
 DB_USER='root'
 DB_PASSWORD=''
 DB_NAME='rfq'
+
+BASE_URL = 'localhost:8000'
 

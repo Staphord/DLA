@@ -10,7 +10,7 @@
             OEM Detail For <span class="badge bg-light text-dark">{{oem.name}}</span>
         </div>
         <div class="d-flex gap-3">
-            <a href="{% url 'solicitations:all-oems' %}" class="btn bg-secondary text-white"><i class="bi bi-arrow-left"></i> Back</a>
+            <a href="{% url 'solicitations:active-oems' %}" class="btn bg-secondary text-white"><i class="bi bi-arrow-left"></i> Back</a>
         </div>
     </div>
 
@@ -65,28 +65,7 @@
                 </div>
             </div>
 
-            <div class="">
-                <div class="mb-1">
-                    Disable Sending RFQs To This OEM
-                </div>
-                <div class="card">
-                    <div class="card-body">
-                        <form action="" method="post" class="d-flex justify-content-between align-items-center my-4">
-                            {% csrf_token %}
-                            <div>
-                                <input type="checkbox" name="is_disabled" class="form-check-input fs-3" id="">
-                            </div>
-                            <div class="my-2">
-                                <textarea name="" id=""></textarea>
-                            </div>
-                            <div>
-                                <button type="submit" class="btn mybg myhover text-white mt-2">Save Changes</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-                     
+                
         </div>
     </div>
 </section>
