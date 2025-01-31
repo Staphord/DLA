@@ -56,11 +56,13 @@ print('-------------------------------------------------------------------------
 print("WELCOME TO RFQ AUTOMATED PROGRAM")
 print('--------------------------------------------------------------------------')
 
+# Check if a scrape date is provided
 if len(sys.argv) > 1:
     formated_date = sys.argv[1]
-    print(f"Scraping for date {formated_date}")
+    print(f"Scraping for date: {formated_date}")
 else:
-    print("Missing arguments: user ID and scrape date")
+    formated_date = None  # No date provided
+    print("No scrape date provided. Will use the first available date.")
 
 # Initialize data storage lists
 row_data_list = []
@@ -76,44 +78,47 @@ def extract_quantity(raw_quantity):
         return None
 
 
+# Initialize WebDriver wait
+wait = WebDriverWait(driver, 10)
+
+# Accept terms and navigate to recent solicitations
 def click_element(wait, locator, by=By.ID):
     """Click on an element using WebDriverWait."""
     element = wait.until(EC.element_to_be_clickable((by, locator)))
     element.click()
 
-
-# Accept terms and navigate to recent solicitations
-wait = WebDriverWait(driver, 10)
 click_element(wait, "butAgree")
 click_element(wait, "ctl00_cph1_lnkRfqDatesRecent")
-
-# User date input
-user_input_date = formated_date
-print(f'USER DATE INPUT IS {user_input_date}')
 
 # Locate the table
 table_xpath = "//table[@title='RFQ Download Files' and @summary='Table contains links to RFQ files']"
 table = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
 
-# Determine "Post Date" column index
+# Find "Post Date" column index
 headers = table.find_elements(By.XPATH, ".//thead/tr/th")
 post_date_index = next(
     (idx + 1 for idx, header in enumerate(headers) if header.text.strip() == "Post Date"),
     None
 )
 
-# Click on the row with the user-specified date
 if post_date_index:
     date_links = table.find_elements(By.XPATH, f".//tbody/tr/td[{post_date_index}]//a")
-    for link in date_links:
-        if link.text.strip() == user_input_date:
-            link.click()
-            print(f"Processing data for the specified date: {user_input_date}")
-            break
-    else:
-        date_links[0].click()
-        print("Date not found. Using the first available date.")
 
+    if formated_date:
+        # Try to find the specified date
+        for link in date_links:
+            if link.text.strip() == formated_date:
+                link.click()
+                print(f"Processing data for the specified date: {formated_date}")
+                break
+        else:
+            # If date not found, use the first available date
+            date_links[0].click()
+            print(f"Date {formated_date} not found. Using the first available date: {date_links[0].text.strip()}")
+    else:
+        # If no date was provided, automatically use the first date
+        date_links[0].click()
+        print(f"No date provided. Using the first available date: {date_links[0].text.strip()}")
 
 # Data extraction functions
 def extract_data_from_page():
