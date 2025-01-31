@@ -1,5 +1,6 @@
 import json
 from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -39,7 +40,7 @@ chrome_options.add_argument('--pageLoadStrategy=normal')
 # Initialize WebDriver
 PATH = r'C:\Users\chromedriver.exe'
 service = Service(executable_path=PATH)
-driver = webdriver.Chrome(service=service, options=chrome_options)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),options=chrome_options)
 
 # Constants
 WEBSITE_URL = "https://www.dibbs.bsm.dla.mil/RFQ"

@@ -2,6 +2,7 @@ import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -52,7 +53,7 @@ chrome_options.add_argument('--pageLoadStrategy=normal')
 ## Initialize Chrome driver path
 PATH = r'C:\Users\chromedriver.exe'
 service = Service(executable_path=PATH)
-driver = webdriver.Chrome(service=service, options=chrome_options)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),options=chrome_options)
 
 ## Website URL
 website = "https://eportal.nspa.nato.int/Codification/CageTool/CageTool/"
