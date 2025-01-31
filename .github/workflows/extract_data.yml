@@ -31,4 +31,4 @@ jobs:
       - name: Run Data Extraction Script
         run: |
           source venv/bin/activate  # Ensure venv is active
-          python infoExtractorSendRfq.py  
+          python extractSolicitations.py  
