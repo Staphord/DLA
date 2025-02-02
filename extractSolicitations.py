@@ -1,4 +1,3 @@
-import json
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
@@ -8,8 +7,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 import MySQLdb
 from MySQLdb.cursors import DictCursor
-import requests
-import time
 import os
 import sys
 import django
@@ -25,6 +22,7 @@ DB_HOST = settings.DB_HOST
 DB_USER = settings.DB_USER
 DB_PASSWORD = settings.DB_PASSWORD
 DB_NAME = settings.DB_NAME
+DB_PORT = settings.DB_PORT
 
 # Configure Chrome options
 chrome_options = Options()
@@ -258,6 +256,7 @@ def process_row_data(row_data_list):
             nsn = row_data.get('nsn', 'N/A')
             nomenclature = row_data.get('nomenclature', 'N/A')
             solicitation = row_data.get('solicitation', 'N/A')
+            status = row_data.get('status', 'N/A')
             issued_date = row_data.get('issued_date', 'N/A')
             return_by_date = row_data.get('return_by_date', 'N/A')
 
@@ -276,6 +275,7 @@ def process_row_data(row_data_list):
                     'Nomenclature': nomenclature,
                     'Quantity': quantity,
                     'Solicitation': solicitation,
+                    'Status': status,
                     'Issued Date': issued_date,
                     'Return By Date': return_by_date,
                     'CAGE Code': cage if cage else 'N/A',  # Handle empty CAGE values
@@ -299,6 +299,7 @@ db_connection = MySQLdb.connect(
     user=DB_USER,
     passwd=DB_PASSWORD,
     db=DB_NAME,
+    port=DB_PORT,
     cursorclass=DictCursor
 )
 cursor = db_connection.cursor()
@@ -307,8 +308,8 @@ cursor = db_connection.cursor()
 def save_to_db(data_list):
     """Save extracted data to the database."""
     sql_query = """
-    INSERT INTO solicitations_solicitation (cage, nsn, nomenclature, quantity, issued_date, return_by_date)
-    VALUES (%s, %s, %s, %s, %s, %s)
+    INSERT INTO solicitations_solicitation (cage, nsn, nomenclature, status, quantity, issued_date, return_by_date)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
     """
 
     for data in data_list:
@@ -317,6 +318,7 @@ def save_to_db(data_list):
                 data.get('CAGE Code', 'N/A'),
                 data.get('NSN', 'N/A'),
                 data.get('Nomenclature', 'N/A'),
+                data.get('Status', 'N/A'),
                 data.get('Quantity', 0),
                 data.get('Issued Date', 'N/A'),
                 data.get('Return By Date', 'N/A')

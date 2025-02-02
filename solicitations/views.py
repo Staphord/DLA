@@ -143,12 +143,12 @@ def scrap_solicitations(request):
 
 def searched_solicitations(request):
     if request.method == "POST":
-        mysearch = request.POST.get('mysearch', '')  
+        mysearch = request.POST.get('mysearch', '') 
         if mysearch:
             data = Solicitation.objects.filter(
-                Q(cage__icontains=mysearch) | Q(NSN__icontains=mysearch)
+                Q(cage__icontains=mysearch) | Q(NSN__icontains=mysearch) | Q(quantity__icontains=mysearch) | Q(nomenclature__icontains=mysearch)
             )
-            print(f'YOOOOOOOOOOOOOOOOO {data}')  # Debugging print statement
+
             context = {'mysearch': mysearch, 'data': data}
             return render(request, 'solicitations/searched_solicitations.html', context)
         else:
@@ -163,22 +163,34 @@ def searched_solicitations(request):
 def filtered_solicitations(request):
     solicitations = Solicitation.objects.all()  # Default queryset
 
-    # Get input dates from POST data
-    issued = request.POST.get('issued_date')
-    return_by = request.POST.get('return_by_date')
+    if request.method == 'POST':
+        # Get input dates from POST data
+        issued_date_from = request.POST.get('issued_date_from')
+        issued_date_to = request.POST.get('issued_date_to')
+        return_by_date_from = request.POST.get('return_by_date_from')
+        return_by_date_to = request.POST.get('return_by_date_to')
 
-    if issued:
-        # Convert yyyy-mm-dd to mm-dd-yyyy
-        issued_date_obj = datetime.strptime(issued, '%Y-%m-%d')
-        issued_date_str = issued_date_obj.strftime('%m-%d-%Y')
-        solicitations = solicitations.filter(issued_date__exact=issued_date_str)
+        # Filter by issued date range
+        if issued_date_from and issued_date_to:
+            # Convert input dates (YYYY-MM-DD) to database format (MM-DD-YYYY)
+            issued_date_from_obj = datetime.strptime(issued_date_from, '%Y-%m-%d')
+            issued_date_from_str = issued_date_from_obj.strftime('%m-%d-%Y')
+            issued_date_to_obj = datetime.strptime(issued_date_to, '%Y-%m-%d')
+            issued_date_to_str = issued_date_to_obj.strftime('%m-%d-%Y')
 
-    if return_by:
-        # Convert yyyy-mm-dd to mm-dd-yyyy
-        return_by_date_obj = datetime.strptime(return_by, '%Y-%m-%d')
-        return_by_date_str = return_by_date_obj.strftime('%m-%d-%Y')
-        print(f'Return by date: {return_by_date_str}')
-        solicitations = solicitations.filter(return_by_date__exact=return_by_date_str)
+            # Filter using the formatted dates
+            solicitations = solicitations.filter(issued_date__range=(issued_date_from_str, issued_date_to_str))
+
+        # Filter by return by date range
+        if return_by_date_from and return_by_date_to:
+            # Convert input dates (YYYY-MM-DD) to database format (MM-DD-YYYY)
+            return_by_date_from_obj = datetime.strptime(return_by_date_from, '%Y-%m-%d')
+            return_by_date_from_str = return_by_date_from_obj.strftime('%m-%d-%Y')
+            return_by_date_to_obj = datetime.strptime(return_by_date_to, '%Y-%m-%d')
+            return_by_date_to_str = return_by_date_to_obj.strftime('%m-%d-%Y')
+
+            # Filter using the formatted dates
+            solicitations = solicitations.filter(return_by_date__range=(return_by_date_from_str, return_by_date_to_str))
 
     # Render the filtered solicitations
     return render(request, 'solicitations/filtered_solicitations.html', {'solicitations': solicitations})

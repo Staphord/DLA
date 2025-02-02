@@ -67,10 +67,10 @@ WSGI_APPLICATION = 'RFQ.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'RFQ',  # Replace with your database name
-        'USER': 'root',  # Replace with your database user
-        'PASSWORD': '',   # Replace with your database password
-        'HOST': 'localhost',           # Or the hostname of your MySQL server
+        'NAME': 'rfq',  # Replace with your database name
+        'USER': 'admin',  # Replace with your database user
+        'PASSWORD': 'william02134717',   # Replace with your database password
+        'HOST': 'rfq.cluster-cng8qayskbh5.us-east-2.rds.amazonaws.com',           # Or the hostname of your MySQL server
         'PORT': '3306',                # Default MySQL port
     }
 }
@@ -132,9 +132,10 @@ DEFAULT_FROM_EMAIL = 'williamdemo01@gmail.com'
 EMAIL_HOST_PASSWORD = 'trkpitibtavjpmpm'
 
 ### Database credentials
-DB_HOST='localhost'
-DB_USER='root'
-DB_PASSWORD=''
+DB_HOST='rfq.cluster-cng8qayskbh5.us-east-2.rds.amazonaws.com'
+DB_USER='admin'
+DB_PASSWORD='william02134717'
+DB_PORT = 3306
 DB_NAME='rfq'
 
 BASE_URL = 'localhost:8000'

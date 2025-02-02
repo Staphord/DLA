@@ -36,6 +36,7 @@ DB_HOST = settings.DB_HOST
 DB_USER = settings.DB_USER
 DB_PASSWORD = settings.DB_PASSWORD
 DB_NAME = settings.DB_NAME
+DB_PORT = settings.DB_PORT
 EMAIL_ADDRESS = settings.DEFAULT_FROM_EMAIL
 EMAIL_PASSWORD = settings.EMAIL_HOST_PASSWORD
 
@@ -141,6 +142,7 @@ def fetch_cage_codes(user_data, solicitations):
             user=DB_USER,
             password=DB_PASSWORD,
             db=DB_NAME,
+            port=DB_PORT,
             cursorclass=DictCursor
         )
         cursor = connection.cursor()

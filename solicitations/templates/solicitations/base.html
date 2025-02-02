@@ -208,19 +208,34 @@
       <form action="{% url 'solicitations:filtered-solicitations' %}" method="POST">
         {% csrf_token %}
         <div class="my-2 p-3 rounded-3">
-          <fieldset class="bg-light p-2 rounded-3">
-            <legend class="text-dark mb-1">Period</legend>
+          <fieldset class="bg-light p-2 rounded-3 mb-3">
+            <legend class="text-dark mb-1">Issued</legend>
             <div class="text-start mt-5">
               <!-- Issued Date Input -->
               <div class="my-3">
-                <label for="issued_date">Issued:</label>
-                <input type="date" name="issued_date" class="form-control" id="issued_date">
+                <label for="issued_date">From:</label>
+                <input type="date" name="issued_date_from" class="form-control" id="issued_date_from">
               </div>
-              <!-- Return by Date Input -->
               <div class="my-3">
-                <label for="return_by_date">Return by:</label>
-                <input type="date" name="return_by_date" class="form-control" id="return_by_date">
+                <label for="issued_date">From:</label>
+                <input type="date" name="issued_date_to" class="form-control" id="issued_date_to">
               </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="bg-light p-2 rounded-3">
+            <legend class="text-dark mb-1">Return Date</legend>
+            <div class="text-start mt-5">
+              <!-- Return by Date Input -->
+            <div class="my-3">
+              <label for="return_by_date">From:</label>
+              <input type="date" name="return_by_date_from" class="form-control" id="return_by_date_from">
+            </div>
+              <!-- Return by Date Input -->
+            <div class="my-3">
+              <label for="return_by_date">To:</label>
+              <input type="date" name="return_by_date_to" class="form-control" id="return_by_date_to">
+            </div>
             </div>
           </fieldset>
           <!-- Submit Button -->

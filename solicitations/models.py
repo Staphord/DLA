@@ -6,6 +6,7 @@ from accounts.models import CustomUser
 class Solicitation(models.Model):
     cage = models.CharField(max_length=5)
     nomenclature = models.CharField(max_length=50)
+    status = models.CharField(max_length=10, blank=True, null=True)
     quantity = models.CharField(max_length=20)
     NSN = models.CharField(max_length=20,default='1')
     issued_date = models.CharField(max_length=20)

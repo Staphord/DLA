@@ -8,7 +8,7 @@
         <div class="col-md-6">
             <form action="{% url 'solicitations:searched-solicitations' %}" method="post" class="d-flex mx-auto gap-2 w-100">
                 {% csrf_token %}
-                  <input type="text" class="form-control" placeholder="Search by cage code and nsn" name="mysearch">
+                  <input type="text" class="form-control" placeholder="Search by here..." name="mysearch">
                   <button type="submit" class="btn btn-warning text-white"><i class="bi bi-search"></i></button>
                   <button type="button" class="btn btn-info text-white" data-bs-toggle="offcanvas" data-bs-target="#offcanvasWithBothOptions" aria-controls="offcanvasWithBothOptions"><i class="bi bi-funnel"></i></button>
               </form>
@@ -38,6 +38,7 @@
                                 <th class="text-secondary">Nomenclature</th>
                                 <th class="text-secondary">Quantity</th>
                                 <th class="text-secondary">NSN</th>
+                                <th class="text-secondary">status</th>
                                 <th class="text-secondary">Date Issued</th>
                                 <th class="text-secondary">Return By</th>
                                 <th class="text-secondary text-center">Actions</th>
@@ -51,6 +52,7 @@
                                 <td>{{ solicitation.nomenclature|title }}</td>
                                 <td>{{ solicitation.quantity }}</td>
                                 <td>{{ solicitation.NSN }}</td>
+                                <td>{{ solicitation.status }}</td>
                                 <td>{{ solicitation.issued_date }}</td>
                                 <td>{{ solicitation.return_by_date }}</td>
 
