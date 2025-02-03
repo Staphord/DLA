@@ -59,31 +59,31 @@
                     <div class="card-body my-3">
                         <div class="row my-2">
                             <div class="col-md-4">
-                                Name: {{oem.name|title}}
+                                Name: {{solicitation_detail.organization_name|title}}
                             </div>
                             <div class="col-md-4">
-                                Phone: {{oem.phone}}
+                                Phone: {{solicitation_detail.phone}}
                             </div>
                             <div class="col-md-4">
-                                Email: {{oem.email|lower}}
-                            </div>
-                        </div>
-                        <hr>
-                        <div class="row my-2">
-                            <div class="col-md-4">
-                                Fax: {{oem.fax}}
-                            </div>
-                            <div class="col-md-4">
-                                Postal Code: {{oem.postal_code}}
-                            </div>
-                            <div class="col-md-4">
-                                City: {{oem.city|title}}
+                                Email: {{solicitation_detail.email|lower}}
                             </div>
                         </div>
                         <hr>
                         <div class="row my-2">
                             <div class="col-md-4">
-                                Street: {{oem.street|title}}
+                                Fax: {{solicitation_detail.fax}}
+                            </div>
+                            <div class="col-md-4">
+                                Postal Code: {{solicitation_detail.postal_code}}
+                            </div>
+                            <div class="col-md-4">
+                                City: {{solicitation_detail.city|title}}
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Street: {{solicitation_detail.street_name|title}}
                             </div>
                         </div>
                     </div>

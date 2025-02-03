@@ -41,13 +41,26 @@
                                 <th class="text-secondary">status</th>
                                 <th class="text-secondary">Date Issued</th>
                                 <th class="text-secondary">Return By</th>
+                                {% if user.user_type == 'admin' %}
                                 <th class="text-secondary text-center">Actions</th>
+                                {% endif %}
                             </tr>
                         </thead>
                         <tbody>
                             {% for solicitation in solicitations %}
-                            <tr style="cursor: pointer;" onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';">
-                                <td><input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();"></td>
+                            <tr style="cursor: pointer;" onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';"
+                                {% if solicitation.oem_disabled %}
+                                    class="table-danger"  
+                                {% else %}
+                                    class="table-light"  
+                                {% endif %}>
+                                <td>
+                                    {% if solicitation.oem_disabled %}
+                                        <input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();" disabled> 
+                                    {% else %}
+                                        <input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();">
+                                    {% endif %}
+                                </td>
                                 <td>{{ solicitation.cage }}</td>
                                 <td>{{ solicitation.nomenclature|title }}</td>
                                 <td>{{ solicitation.quantity }}</td>
@@ -55,23 +68,23 @@
                                 <td>{{ solicitation.status }}</td>
                                 <td>{{ solicitation.issued_date }}</td>
                                 <td>{{ solicitation.return_by_date }}</td>
-
+                                {% if user.user_type == 'admin' %}
                                 <td>
                                     <div class="dropdown text-center">
                                         <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
                                             <i class="bi bi-caret-down-fill"></i>
                                         </a>
-
+                    
                                         <ul class="dropdown-menu">
-                                            
                                             {% if user.user_type == 'admin' %}
                                             <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{solicitation.id}}" onclick="event.stopPropagation();">Delete</a></li>
                                             {% endif %}
                                         </ul>
                                     </div>
                                 </td>
+                                {% endif %}
                             </tr>
-
+                    
                             <!-- Delete Solicitation Modal -->
                             <div class="modal fade" id="deleteSent-{{solicitation.id}}" tabindex="-1" data-bs-backdrop="static" aria-labelledby="exampleModalLabel" aria-hidden="true">
                                 <div class="modal-dialog">
@@ -92,9 +105,36 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!--Disable OEM Modal -->
+                            <div class="modal fade" id="disableOem-{{oem.id}}" data-bs-backdrop="static" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                                <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                    <p>Are you sure you want to disable this OEM?</p>
+                                    <form id="disable-oem-form" method="POST" action="{% url 'solicitations:disable-oem' %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="oem" id="oem-id-{{oem.id}}" value="{{oem.id}}">
+                                        <div class="mb-3">
+                                        <label for="message-text" class="col-form-label">Reason:</label>
+                                        <textarea class="form-control" name="reason" id="message-text" required></textarea>
+                                        </div>
+                                        <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                                        <button type="submit" class="btn btn-danger">Yes, Disable</button>
+                                        </div>
+                                    </form>
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+
                             {% endfor %}
                         </tbody>
-                    </table>
+                    </table>                    
                 </div>
             </div>
         </div>

@@ -28,6 +28,8 @@ def base(request):
 
 def home(request):
     user=request.user
+
+    today = datetime.today().strftime("%m-%d-%Y")
     ## fetch all normal users
     clients = CustomUser.objects.exclude(is_superuser=True).filter(user_type = 'client')
     ## count all normal users
@@ -37,7 +39,7 @@ def home(request):
     solicitations = Solicitation.objects.all().exclude(cage = '-')
 
     ## count total number of solicitations
-    total_solicitations = solicitations.count()
+    total_solicitations = solicitations.filter(return_by_date__gte=today).count()
 
     # fetch user rfqs
     sent_rfqs = RFQ.objects.filter(created_by = request.user)
@@ -55,24 +57,33 @@ def home(request):
 
 ## view to show all solicitations
 def solicitations(request):
-    ## fetch all solicitaions
-    solicitations = Solicitation.objects.all().exclude(cage='-')
-    ## count total number of solicitations
+    today = datetime.today().strftime("%m-%d-%Y")  # Convert today to match database format (mm-dd-yyyy)
+
+    # Filter solicitations to exclude expired ones
+    solicitations = Solicitation.objects.exclude(cage='-').filter(return_by_date__gte=today)
+
+    # Count total valid solicitations
     total_solicitations = solicitations.count()
 
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-    ## pass data to the template
-    context = {'total_solicitations':total_solicitations,'solicitations':solicitations,'replied_rfq':replied_rfq}
-    return render(request,'solicitations/solicitations.html',context)
+    # Get replied RFQs
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+
+    # Attach `oem_disabled` attribute to each solicitation
+    for solicitation in solicitations:
+        oem = OEM.objects.filter(cage=solicitation.cage).first()
+        solicitation.oem_disabled = OEMUser.objects.filter(oem=oem, user=request.user, is_disabled=True).exists() if oem else False
+
+    # Pass filtered solicitations to the template
+    context = {'total_solicitations': total_solicitations, 'solicitations': solicitations, 'replied_rfq': replied_rfq}
+    return render(request, 'solicitations/solicitations.html', context)
+
 
 ## view to show solicitation detail
 def solicitation_detail(request,solicitation):
     solicitation_detail = Solicitation.objects.get(pk=solicitation)
-    oem = OEM.objects.filter(cage=solicitation_detail.cage).first()
     ## replied rfq
     replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-    context = {"solicitation_detail":solicitation_detail,"oem":oem,'replied_rfq':replied_rfq}
+    context = {"solicitation_detail":solicitation_detail,'replied_rfq':replied_rfq}
     return render(request,'solicitations/solicitation-detail.html',context)
 
 def clear_solicitations(request):

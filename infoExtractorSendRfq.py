@@ -376,7 +376,7 @@ def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_u
         email_content = email_content.replace("{companyName}", user_data['companyName'])
         
         # Generate a complete URL for the logo
-        base_url = "http://localhost:8000"  # Replace with your server's base URL
+        base_url = "http://localhost:8000" 
         #logo_url = f"{base_url}{user_data['logo']}"
         logo_url = 'https://cdn.pixabay.com/photo/2020/08/05/13/27/eco-5465459_1280.png'
         email_content = email_content.replace("{logo}", f'<img src="{logo_url}" alt="Company Logo" style="width: 150px;">')

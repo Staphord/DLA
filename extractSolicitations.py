@@ -65,6 +65,8 @@ else:
 # Initialize data storage lists
 row_data_list = []
 nsn_data_list = []
+extracted_data = []
+cage_details_list = []
 
 # Utility Functions
 def extract_quantity(raw_quantity):
@@ -199,10 +201,10 @@ def handle_pagination():
             print(f"Error on page {page_number}: {e}")
             break  # Exit the loop on error, or you can continue to handle the error
 
-
-
 def process_nsn_links():
     """Visit NSN links and extract CAGE data."""
+    cage_codes = []  # List to hold extracted CAGE codes
+
     for row_data in row_data_list:
         try:
             nsn_link = row_data['nsn_link']
@@ -215,27 +217,26 @@ def process_nsn_links():
                 # Wait for the table containing the CAGE information to be present
                 cage_table = WebDriverWait(driver, 3).until(
                     EC.presence_of_element_located((By.XPATH, "//table[@summary='Table conatins Approved Source Data']")))
-                
+
                 # Find all rows in the table body
                 cage_rows = cage_table.find_elements(By.XPATH, ".//tbody/tr")
                 cage_values = []
-                
+
                 # Loop through each row to extract the CAGE values
                 for cage_row in cage_rows:
                     try:
                         # Find the CAGE value in the corresponding cell
                         cage_value = cage_row.find_element(By.XPATH, "./td[@headers='h1']").text.strip()
                         cage_values.append(cage_value)
+                        cage_codes.append(cage_value)  # Append the CAGE code to the list
                     except Exception as inner_e:
                         print(f"Error extracting CAGE value from a row: {inner_e}")
                         continue
 
                 # Store the list of CAGE values as a string, joined by commas
                 row_data['cages'] = ", ".join(cage_values)
-                #print(f"NSN: {row_data['nsn']} - CAGE(s): {row_data['cages']}")
 
             except Exception as e:
-                #print(f"Error processing CAGE table for NSN {row_data['nsn']}: {e}")
                 row_data['cages'] = '-'
 
             finally:
@@ -245,6 +246,89 @@ def process_nsn_links():
         except Exception as e:
             print(f"Error processing NSN link for {row_data['nsn']}: {e}")
             continue
+
+    return cage_codes  # Return the list of CAGE codes
+
+def extract_cage_details(cage_codes):
+    extracted_data = []  # Initialize the list to hold extracted data
+
+    # Iterate through each CAGE code
+    for cage_code in cage_codes:
+        try:
+            # Navigate to the CageTool page
+            driver.get("https://eportal.nspa.nato.int/Codification/CageTool/CageTool/")
+
+            # Locate the input for the CAGE code
+            findCageCodeInput = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.ID, "inputCageCode"))
+            )
+
+            # Clear the input field and enter the CAGE code
+            findCageCodeInput.clear()
+            findCageCodeInput.send_keys(cage_code)
+
+            # Locate the search button and click it
+            search_button = WebDriverWait(driver, 60).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
+            )
+            driver.execute_script("arguments[0].click();", search_button)
+
+            # Wait for the expand button and click it
+            expand_button = WebDriverWait(driver, 60).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
+            )
+            expand_button.click()
+
+            # Locate all elements with the selector for read-only fields
+            read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
+
+            # Extract the information from the read-only fields
+            organization_name = read_only_elements[1].text.strip() if len(read_only_elements) > 1 else "N/A"
+            street_name = read_only_elements[10].text.strip() if len(read_only_elements) > 10 else "N/A"
+            city = read_only_elements[12].text.strip() if len(read_only_elements) > 12 else "N/A"
+            postal_code = read_only_elements[13].text.strip() if len(read_only_elements) > 13 else "N/A"
+
+            # Extract phone and fax details
+            phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
+            phone = phone_fax[0].text.strip() if len(phone_fax) > 0 else "N/A"
+
+            # Locate the fax container and extract fax information
+            fax_container = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
+            )
+            fax_content = fax_container.text.strip()
+
+            # Locate and extract the email element
+            email_element = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
+            )
+            email_href = email_element.get_attribute("href")
+            email = email_href.replace("mailto:", "").strip()
+
+            # Store the extracted data in a dictionary
+            cage_data = {
+                "CAGE Code": cage_code,
+                "Organization Name": organization_name,
+                "Street Name": street_name,
+                "City": city,
+                "Postal Code": postal_code,
+                "Phone": phone,
+                "Fax": fax_content,
+                "Email": email
+            }
+
+            # Append the data to the list
+            extracted_data.append(cage_data)
+
+            # Debug print to verify extracted data
+            print(f"Extracted data for CAGE code {cage_code}: {cage_data}")
+
+        except Exception as e:
+            print(f"Error extracting data for CAGE code {cage_code}: {e}")
+            continue
+
+    return extracted_data  # Return the extracted data
+                
 
 # Function to process collected row data into a structured dictionary
 def process_row_data(row_data_list):
@@ -305,15 +389,44 @@ db_connection = MySQLdb.connect(
 cursor = db_connection.cursor()
 
 
-def save_to_db(data_list):
+def save_to_db(data_list, cage_details_list):
     """Save extracted data to the database."""
     sql_query = """
-    INSERT INTO solicitations_solicitation (cage, nsn, nomenclature, status, quantity, issued_date, return_by_date)
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO solicitations_solicitation 
+    (cage, nsn, nomenclature, status, quantity, issued_date, return_by_date, 
+     organization_name, street_name, city, postal_code, phone, fax, email)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     for data in data_list:
         try:
+            # Find the corresponding CAGE details from cage_details_list
+            cage_code = data.get('CAGE Code', 'N/A')
+            cage_details = next((item for item in cage_details_list if item['CAGE Code'] == cage_code), None)
+
+            # Debug print to verify matching
+            print(f"Looking for CAGE Code: {cage_code}")
+            print(f"Found CAGE Details: {cage_details}")
+
+            # If CAGE details are found, use them; otherwise, use default values
+            if cage_details:
+                organization_name = cage_details.get('Organization Name', 'N/A')
+                street_name = cage_details.get('Street Name', 'N/A')
+                city = cage_details.get('City', 'N/A')
+                postal_code = cage_details.get('Postal Code', 'N/A')
+                phone = cage_details.get('Phone', 'N/A')
+                fax = cage_details.get('Fax', 'N/A')
+                email = cage_details.get('Email', 'N/A')
+            else:
+                organization_name = 'N/A'
+                street_name = 'N/A'
+                city = 'N/A'
+                postal_code = 'N/A'
+                phone = 'N/A'
+                fax = 'N/A'
+                email = 'N/A'
+
+            # Execute the SQL query with all the data
             cursor.execute(sql_query, (
                 data.get('CAGE Code', 'N/A'),
                 data.get('NSN', 'N/A'),
@@ -321,7 +434,14 @@ def save_to_db(data_list):
                 data.get('Status', 'N/A'),
                 data.get('Quantity', 0),
                 data.get('Issued Date', 'N/A'),
-                data.get('Return By Date', 'N/A')
+                data.get('Return By Date', 'N/A'),
+                organization_name,
+                street_name,
+                city,
+                postal_code,
+                phone,
+                fax,
+                email
             ))
             db_connection.commit()
         except MySQLdb.Error as e:
@@ -333,6 +453,10 @@ def save_to_db(data_list):
 extract_data_from_page()
 handle_pagination()
 process_nsn_links()
+cage_codes = process_nsn_links()  # Extract CAGE codes from NSN links
+print(f"CAGE CODES: {cage_codes}")  # Debug print to verify CAGE codes
+cage_details_list = extract_cage_details(cage_codes) 
+print(f"CAGE DETAILS LIST: {cage_details_list}")
 processed_data = process_row_data(row_data_list)
-save_to_db(processed_data)
+save_to_db(processed_data,cage_details_list)
 driver.quit()
