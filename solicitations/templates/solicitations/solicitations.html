@@ -48,11 +48,11 @@
                         </thead>
                         <tbody>
                             {% for solicitation in solicitations %}
-                            <tr style="cursor: pointer;" onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';"
+                            <tr style="cursor: pointer;" 
                                 {% if solicitation.oem_disabled %}
                                     class="table-danger"  
                                 {% else %}
-                                    class="table-light"  
+                                    class="table-light"  onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';"
                                 {% endif %}>
                                 <td>
                                     {% if solicitation.oem_disabled %}
