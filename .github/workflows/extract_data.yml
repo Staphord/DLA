@@ -2,7 +2,7 @@ name: Extract Data Every 10 Minutes
 
 on:
   schedule:
-    - cron: "*/10 * * * *"  # Runs every 10 minutes
+    - cron: "0 1 * * *"  # Run everyday at 01: 00 am
   workflow_dispatch:  # Allows manual execution
 
 jobs:
