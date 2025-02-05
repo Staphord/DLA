@@ -1,34 +1,33 @@
 name: Extract Data Every 10 Minutes
-
-on:
+true:
   schedule:
-    - cron: "0 1 * * *"  # Run everyday at 01: 00 am
-  workflow_dispatch:  # Allows manual execution
-
+  - cron: 0 1 * * *
+  workflow_dispatch: null
 jobs:
   extract_data:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+    - name: Set Up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.x
+    - name: Create and Activate Virtual Environment
+      run: 'python -m venv venv  # Create virtual environment
 
-      - name: Set Up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.x"
+        source venv/bin/activate  # Activate the virtual environment
 
-      - name: Create and Activate Virtual Environment
-        run: |
-          python -m venv venv  # Create virtual environment
-          source venv/bin/activate  # Activate the virtual environment
+        '
+    - name: Install Dependencies
+      run: 'source venv/bin/activate  # Make sure venv is active
 
-      - name: Install Dependencies
-        run: |
-          source venv/bin/activate  # Make sure venv is active
-          pip install -r requirements.txt  # Install dependencies
+        pip install -r requirements.txt  # Install dependencies
 
-      - name: Run Data Extraction Script
-        run: |
-          source venv/bin/activate  # Ensure venv is active
-          python extractSolicitations.py  
+        '
+    - name: Run Data Extraction Script
+      run: "source venv/bin/activate  # Ensure venv is active\npython extractSolicitations.py\
+        \  \n"
+'on':
+  schedule:
+  - cron: 0 2 * * *
