@@ -1,0 +1,15 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section class="mt-5">
+    <form method="post">
+        {% csrf_token %}
+        <label for="cron_schedule">Cron Schedule:</label>
+        {{ form.cron_schedule }}
+        <button type="submit">Update</button>
+    </form>    
+</section>
+{% endblock content %}

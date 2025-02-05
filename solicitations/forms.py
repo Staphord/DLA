@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
 from accounts.models import CustomUser
-from solicitations.models import RFQReply
+from solicitations.models import RFQReply, GitHubWorkflow
 
 class UserRegistrationForm(UserCreationForm):
     class Meta:
@@ -45,3 +45,9 @@ class LogoUpdateForm(forms.ModelForm):
         widgets = {
             'logo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
         }
+
+
+class GitHubWorkflowForm(forms.ModelForm):
+    class Meta:
+        model = GitHubWorkflow
+        fields = ["cron_schedule"]

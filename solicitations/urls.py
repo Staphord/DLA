@@ -45,6 +45,9 @@ urlpatterns = [
     path('oem-detail/<oem>', views.oem_detail, name = 'oem-detail'), 
     path('search-oem/',views.search_oem, name='search-oem'),
     path('disable-oem/', views.disable_oem, name='disable-oem'),
-    path('enable-oem/<int:oem_id>/', views.enable_oem, name='enable-oem')
+    path('enable-oem/<int:oem_id>/', views.enable_oem, name='enable-oem'),
+
+    #################### CRON URLS  ##########################
+    path("workflow/", views.update_github_workflow, name="workflow"),
 
 ]

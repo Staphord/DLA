@@ -5,16 +5,22 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, MailTemplate, OEMUser, RFQReply, Solicitation,OEM
+from . models import RFQ, MailTemplate, OEMUser, RFQReply, Solicitation,OEM,GitHubWorkflow
 from django.contrib import messages
 import subprocess
-from . forms import LogoUpdateForm, UserRegistrationForm,RFQReplyForm
+from . forms import LogoUpdateForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.template.loader import render_to_string
 from datetime import datetime
+from git import Repo
+import yaml
 
 # Create your views here.
+
+## path to yaml file
+WORKFLOW_FILE_PATH = r"C:\Users\Staphord Bengesi\Desktop\DLA\.github\workflows\extract_data.yml"
+
 
 def base(request):
     ## replied rfq
@@ -754,5 +760,61 @@ def enable_oem(request, oem_id):
         return redirect('solicitations:disabled-oems')
 
 
+
+#### FUNCTIONS FOR THE ADMIN TO INTERACT WITH CRON JOB CONFIGURATIONS
+
+def update_github_workflow(request):
+    workflow = GitHubWorkflow.objects.first() or GitHubWorkflow()
+
+    if request.method == "POST":
+        form = GitHubWorkflowForm(request.POST, instance=workflow)
+        if form.is_valid():
+            form.save()
+            update_yaml_file(workflow.cron_schedule)  # Update workflow
+            commit_and_push_changes()  # Push to GitHub
+            return redirect("solicitations:solicitations")  # Redirect after saving
+
+    else:
+        form = GitHubWorkflowForm(instance=workflow)
+
+    return render(request, "solicitations/workflows.html", {"form": form})
+
+
+def update_yaml_file(new_cron):
+    """Updates the cron schedule in the GitHub Actions workflow file."""
+    try:
+        # Load the existing YAML file
+        with open(WORKFLOW_FILE_PATH, "r") as f:
+            workflow_data = yaml.safe_load(f) or {}  # Load YAML, default to empty dict if None
+
+        print("Before Update:", workflow_data)  # Debugging
+
+        # Ensure the necessary structure exists
+        if "on" not in workflow_data:
+            workflow_data["on"] = {}
+        if "schedule" not in workflow_data["on"]:
+            workflow_data["on"]["schedule"] = [{}]
+
+        # Update the cron job schedule
+        workflow_data["on"]["schedule"][0]["cron"] = new_cron
+
+        # Save the updated YAML file
+        with open(WORKFLOW_FILE_PATH, "w") as f:
+            yaml.dump(workflow_data, f, default_flow_style=False)
+
+        print("After Update:", workflow_data)  # Debugging
+        return {"success": True, "message": "Cron job updated successfully."}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def commit_and_push_changes():
+    """Commits and pushes the updated workflow file to GitHub."""
+    repo_path = r"C:\Users\Staphord Bengesi\Desktop\DLA"
+    repo = Repo(repo_path)
+    repo.git.add(WORKFLOW_FILE_PATH)
+    repo.index.commit("Updated GitHub Actions cron schedule")
+    repo.remote("origin").push()
 
 

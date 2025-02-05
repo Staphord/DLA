@@ -94,9 +94,8 @@ class MailTemplate(models.Model):
     heading = models.CharField(max_length=50,default="REQUEST FOR QUOTATION")
     userMail = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
-class GitHubWorkflowSchedule(models.Model):
-    hour = models.IntegerField(default=1)  # Default 01:00 AM
-    minute = models.IntegerField(default=0)  # Default 00 minutes
-    day_of_week = models.CharField(max_length=10, default="*")  # * means every day
-    created_at = models.DateTimeField(auto_now_add=True)
+class GitHubWorkflow(models.Model):
+    name = models.CharField(max_length=255, default="Extract Data Every 10 Minutes")
+    cron_schedule = models.CharField(max_length=50, default="0 1 * * *")  # Default: 1 AM daily
+    last_updated = models.DateTimeField(auto_now=True)
 
