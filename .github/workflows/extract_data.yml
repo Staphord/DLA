@@ -1,8 +1,8 @@
-name: Extract Data Every 10 Minutes
+name: Extract Data Every Mid Night
 
 on:
   schedule:
-  - cron: "0 2 * * *"    # Run everyday at 01:00 AM
+  - cron: "0 3 * * *"
   workflow_dispatch:  # Allows manual execution
 
 jobs:
