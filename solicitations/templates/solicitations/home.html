@@ -19,6 +19,7 @@
     </div>
     {% if user.user_type == "admin" %}
     <div class="">
+      <a href="{% url 'solicitations:workflow' %}" class="btn btn-secondary text-white">Set Cron</a>
       <a href="#" class="btn mybg myhover text-white" data-bs-toggle="modal" data-bs-target="#exampleModalToggle">Scrape Solicitations</a>
     </div>
     {% endif %}

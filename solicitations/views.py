@@ -14,6 +14,7 @@ from django.db.models import Q
 from django.template.loader import render_to_string
 from datetime import datetime
 from git import Repo
+from ruamel.yaml import YAML
 import yaml
 
 # Create your views here.
@@ -772,7 +773,7 @@ def update_github_workflow(request):
             form.save()
             update_yaml_file(workflow.cron_schedule)  # Update workflow
             commit_and_push_changes()  # Push to GitHub
-            return redirect("solicitations:solicitations")  # Redirect after saving
+            return redirect("solicitations:home")  # Redirect after saving
 
     else:
         form = GitHubWorkflowForm(instance=workflow)
@@ -781,11 +782,14 @@ def update_github_workflow(request):
 
 
 def update_yaml_file(new_cron):
-    """Updates the cron schedule in the GitHub Actions workflow file."""
+    """Updates the cron schedule in the GitHub Actions workflow file while preserving formatting."""
     try:
+        yaml = YAML()
+        yaml.preserve_quotes = True  # Keep formatting intact
+
         # Load the existing YAML file
         with open(WORKFLOW_FILE_PATH, "r") as f:
-            workflow_data = yaml.safe_load(f) or {}  # Load YAML, default to empty dict if None
+            workflow_data = yaml.load(f) or {}  # Load YAML, default to empty dict if None
 
         print("Before Update:", workflow_data)  # Debugging
 
@@ -793,14 +797,17 @@ def update_yaml_file(new_cron):
         if "on" not in workflow_data:
             workflow_data["on"] = {}
         if "schedule" not in workflow_data["on"]:
-            workflow_data["on"]["schedule"] = [{}]
+            workflow_data["on"]["schedule"] = []
 
         # Update the cron job schedule
-        workflow_data["on"]["schedule"][0]["cron"] = new_cron
+        if workflow_data["on"]["schedule"]:
+            workflow_data["on"]["schedule"][0]["cron"] = new_cron  # Modify existing cron
+        else:
+            workflow_data["on"]["schedule"].append({"cron": new_cron})  # Add cron if missing
 
         # Save the updated YAML file
         with open(WORKFLOW_FILE_PATH, "w") as f:
-            yaml.dump(workflow_data, f, default_flow_style=False)
+            yaml.dump(workflow_data, f)
 
         print("After Update:", workflow_data)  # Debugging
         return {"success": True, "message": "Cron job updated successfully."}
