@@ -251,6 +251,9 @@
                        style="width: 0%;">0%</div>
               </div>
               <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
+              {% if selected_date %}
+              <p id="selectedDateDisplay">Selected date: {{ selected_date }}</p>
+              {% endif %}
           </div>
       </div>
   </div>
@@ -329,9 +332,15 @@ function scrapeSolicitations() {
   const progressBar = document.getElementById('progressBar');
   const status = document.getElementById('status');
   const dateInput = document.getElementById('scrapeDate'); // Date input from exampleModalToggle2
+  const selectedDateElement = document.getElementById('selectedDateDisplay');
 
   // Get the date value (if available)
   const date = dateInput ? dateInput.value : null;
+
+  // Show/hide selected date based on whether scrapeDate is provided
+  if (selectedDateElement) {
+    selectedDateElement.style.display = date ? 'none' : 'block';
+  }
 
   // Reset progress bar and status
   progressBar.style.width = '0%';

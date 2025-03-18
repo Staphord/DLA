@@ -7,6 +7,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 import MySQLdb
 from MySQLdb.cursors import DictCursor
+import json
+import requests
 import os
 import sys
 import django
@@ -91,38 +93,57 @@ click_element(wait, "ctl00_cph1_lnkRfqDatesRecent")
 # User date input
 user_input_date = formated_date if formated_date else None
 print(f'USER DATE INPUT IS {user_input_date}')
-
 # Locate the table
 table_xpath = "//table[@title='RFQ Download Files' and @summary='Table contains links to RFQ files']"
 table = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
-
 # Determine "Post Date" column index
 headers = table.find_elements(By.XPATH, ".//thead/tr/th")
 post_date_index = next(
     (idx + 1 for idx, header in enumerate(headers) if header.text.strip() == "Post Date"),
     None
 )
-
 # Click on the row with the user-specified date
 if post_date_index:
     date_links = table.find_elements(By.XPATH, f".//tbody/tr/td[{post_date_index}]//a")
     
     if date_links:
+        print("All available dates:")
+        for i, link in enumerate(date_links):
+            print(f"Date {i}: {link.text.strip()}")
+        
+        date_to_send = None
+        
         if user_input_date:
-            # Try to click the user-specified date
+            # If user provided a date, use it regardless of whether it's found
+            date_to_send = user_input_date
+            # Still try to find and click the date in the table
             for link in date_links:
                 if link.text.strip() == user_input_date:
                     link.click()
                     print(f"Processing data for the specified date: {user_input_date}")
                     break
             else:
-                # If specified date is not found, click the first available date
-                print(f"Date {user_input_date} not found. Using the first available date: {date_links[0].text.strip()}")
+                print(f"Date {user_input_date} not found. Using the first available date for clicking: {date_links[0].text.strip()}")
                 date_links[0].click()
         else:
-            # If no date is provided, click the first available date
-            print(f"No date provided. Using the first available date: {date_links[0].text.strip()}")
+            # If no user input date, use the first available date
+            date_to_send = date_links[0].text.strip()
+            print(f"No user input date. Using first available date: {date_to_send}")
             date_links[0].click()
+        
+        # Send the appropriate date to Django
+        try:
+            response = requests.post(
+                'http://localhost:8000/solicitations',
+                json={'selected_date': date_to_send, 'is_user_input': bool(user_input_date)},
+                headers={'Content-Type': 'application/json'}
+            )
+            if response.status_code == 200:
+                print(f"Successfully sent date to Django: {date_to_send}")
+            else:
+                print(f"Failed to send date to Django. Status code: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending date to Django: {e}")
     else:
         print("No date links found in the table. Exiting.")
 else:

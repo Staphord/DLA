@@ -34,33 +34,52 @@ def base(request):
     return render(request,'solicitations/base.html',context)
 
 def home(request):
-    user=request.user
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            selected_date = data.get('selected_date')
+            is_user_input = data.get('is_user_input', False)
+            
+            # Store both the date and whether it was user input
+            request.session['selected_date'] = selected_date
+            request.session['is_user_input'] = is_user_input
+            
+            return JsonResponse({'status': 'success'})
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON'})
 
+    user = request.user
     today = datetime.today().strftime("%m-%d-%Y")
-    ## fetch all normal users
-    clients = CustomUser.objects.exclude(is_superuser=True).filter(user_type = 'client')
-    ## count all normal users
+    
+    # Get the selected_date from session or use today's date
+    selected_date = request.session.get('selected_date', today)
+    
+    # Fetch all normal users
+    clients = CustomUser.objects.exclude(is_superuser=True).filter(user_type='client')
     total_clients = clients.count()
-
-    ## fetch all solicitaions
-    solicitations = Solicitation.objects.all().exclude(cage = '-')
-
-    ## count total number of solicitations
-    total_solicitations = solicitations.filter(return_by_date__gte=today).count()
-
-    # fetch user rfqs
-    sent_rfqs = RFQ.objects.filter(created_by = request.user)
-    # count all rfqs
+    
+    # Fetch all solicitations
+    solicitations = Solicitation.objects.all().exclude(cage='-')
+    total_solicitations = solicitations.filter(return_by_date__gte=selected_date).count()
+    
+    # Fetch user rfqs
+    sent_rfqs = RFQ.objects.filter(created_by=request.user)
     total_sent_rfqs = sent_rfqs.count()
-
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-    ## pass data to the template
+    
+    # Replied rfq
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    
     context = {
-        'total_clients':total_clients,'total_solicitations':total_solicitations,
-        'sent_rfqs':sent_rfqs,'total_sent_rfqs':total_sent_rfqs,'replied_rfq':replied_rfq,
-        }
-    return render(request,'solicitations/home.html',context)
+        'total_clients': total_clients,
+        'total_solicitations': total_solicitations,
+        'sent_rfqs': sent_rfqs,
+        'total_sent_rfqs': total_sent_rfqs,
+        'replied_rfq': replied_rfq,
+        'selected_date': selected_date,
+        'is_user_input': request.session.get('is_user_input', False)
+    }
+    
+    return render(request, 'solicitations/home.html', context)
 
 ## view to show all solicitations
 def solicitations(request):
