@@ -5,10 +5,10 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, MailTemplate, OEMUser, RFQReply, Solicitation,OEM,GitHubWorkflow
+from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
 from django.contrib import messages
 import subprocess
-from . forms import LogoUpdateForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
+from . forms import EmailSettingsForm, LogoUpdateForm, UserOEMCustomizationForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.template.loader import render_to_string
@@ -84,23 +84,42 @@ def home(request):
 ## view to show all solicitations
 def solicitations(request):
     today = datetime.today().strftime("%m-%d-%Y")  # Convert today to match database format (mm-dd-yyyy)
-
     # Filter solicitations to exclude expired ones
     solicitations = Solicitation.objects.exclude(cage='-').filter(return_by_date__gte=today)
-
     # Count total valid solicitations
     total_solicitations = solicitations.count()
-
     # Get replied RFQs
     replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
-
+    
     # Attach `oem_disabled` attribute to each solicitation
     for solicitation in solicitations:
         oem = OEM.objects.filter(cage=solicitation.cage).first()
         solicitation.oem_disabled = OEMUser.objects.filter(oem=oem, user=request.user, is_disabled=True).exists() if oem else False
-
-    # Pass filtered solicitations to the template
-    context = {'total_solicitations': total_solicitations, 'solicitations': solicitations, 'replied_rfq': replied_rfq}
+    
+    # Get email settings for the user
+    try:
+        email_settings = EmailSettings.objects.get(user=request.user)
+        auto_send = email_settings.auto_send
+        
+        # Get the display values for the template
+        day_choices_dict = dict(EmailSettings.DAY_CHOICES)
+        send_day_display = day_choices_dict[email_settings.send_day]
+        send_time_display = email_settings.send_time.strftime('%I:%M %p')
+    except EmailSettings.DoesNotExist:
+        auto_send = False
+        send_day_display = "Every day"
+        send_time_display = "09:00 AM"
+    
+    # Pass all context variables to the template
+    context = {
+        'total_solicitations': total_solicitations, 
+        'solicitations': solicitations, 
+        'replied_rfq': replied_rfq,
+        'auto_send': auto_send,
+        'send_day_display': send_day_display,
+        'send_time_display': send_time_display
+    }
+    
     return render(request, 'solicitations/solicitations.html', context)
 
 
@@ -231,6 +250,30 @@ def filtered_solicitations(request):
 
     # Render the filtered solicitations
     return render(request, 'solicitations/filtered_solicitations.html', {'solicitations': solicitations})
+
+def email_settings(request):
+    """View for managing email automation settings"""
+    # Get or create settings for the current user
+    settings, created = EmailSettings.objects.get_or_create(user=request.user)
+    
+    if request.method == 'POST':
+        form = EmailSettingsForm(request.POST, instance=settings)
+        if form.is_valid():
+            form.save()
+            
+            # Create a nice message with the schedule details
+            schedule_info = ""
+            if form.cleaned_data['auto_send']:
+                day_display = dict(EmailSettings.DAY_CHOICES)[form.cleaned_data['send_day']]
+                time_display = form.cleaned_data['send_time'].strftime('%I:%M %p')
+                schedule_info = f" ({day_display} at {time_display})"
+            
+            messages.success(request, f"Email settings updated successfully{schedule_info}")
+            return redirect('solicitations:solicitations')
+    else:
+        form = EmailSettingsForm(instance=settings)
+        
+    return render(request, 'solicitations/email_settings.html', {'form': form})
 #######################  CLIENT RELATED VIEWS  #########################
 
 ## view to show all clients
@@ -700,16 +743,41 @@ def active_oems(request):
 ## view to show oem detail page
 def oem_detail(request, oem):
     # Fetch the specific OEM object using the primary key
-    oem = get_object_or_404(OEM, pk=oem)
-
+    oem_obj = get_object_or_404(OEM, pk=oem)
+    
     # Get all OEMUser associations for this OEM
-    oem_users = OEMUser.objects.filter(oem=oem)
-
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-
+    oem_users = OEMUser.objects.filter(oem=oem_obj)
+    
+    # Get replied RFQs
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    
+    # Get the user's customization for this OEM if it exists
+    try:
+        customization = UserOEMCustomization.objects.get(user=request.user, oem=oem_obj)
+        
+        # Create a dictionary with OEM data, overriding with customizations where available
+        oem_data = {
+            'name': customization.custom_name or oem_obj.name,
+            'cage': oem_obj.cage,  
+            'email': customization.custom_email or oem_obj.email,
+            'phone': customization.custom_phone or oem_obj.phone,
+            'fax': customization.custom_fax or oem_obj.fax,
+            'city': customization.custom_city or oem_obj.city,
+            'street': customization.custom_street or oem_obj.street,
+            'postal_code': customization.custom_postal_code or oem_obj.postal_code,
+        }
+    except UserOEMCustomization.DoesNotExist:
+        # If no customization exists, use original OEM data
+        oem_data = None  
+    
     # Pass the data to the template
-    context = {'oem': oem, 'oem_users': oem_users,'replied_rfq':replied_rfq}
+    context = {
+        'oem': oem_obj, 
+        'oem_data': oem_data,
+        'oem_users': oem_users,
+        'replied_rfq': replied_rfq
+    }
+    
     return render(request, 'solicitations/oems/oem_detail.html', context)
 
 ## view to search for OEM
@@ -778,7 +846,43 @@ def enable_oem(request, oem_id):
         return redirect('solicitations:disabled-oems')
     else:
         return redirect('solicitations:disabled-oems')
-
+    
+## View to edit a particular oem 
+def edit_oem(request, oem):
+    oem_obj = get_object_or_404(OEM, id=oem)
+    
+    # Check if the logged-in user is assigned to this OEM
+    if not OEMUser.objects.filter(user=request.user, oem=oem_obj, is_disabled=False).exists():
+        return HttpResponseForbidden("You do not have permission to edit this OEM.")
+    
+    # Get or create the user's customization for this OEM
+    customization, created = UserOEMCustomization.objects.get_or_create(
+        user=request.user,
+        oem=oem_obj
+    )
+    
+    if request.method == "POST":
+        form = UserOEMCustomizationForm(request.POST, instance=customization)
+        if form.is_valid():
+            form.save()
+            return redirect('solicitations:oem-detail', oem=oem_obj.id)
+    else:
+        form = UserOEMCustomizationForm(instance=customization)
+        
+        # Pre-fill with OEM values if no customizations exist yet
+        if created:
+            initial_data = {
+                'custom_name': oem_obj.name,
+                'custom_email': oem_obj.email,
+                'custom_phone': oem_obj.phone,
+                'custom_fax': oem_obj.fax,
+                'custom_city': oem_obj.city,
+                'custom_street': oem_obj.street,
+                'custom_postal_code': oem_obj.postal_code,
+            }
+            form = UserOEMCustomizationForm(initial=initial_data, instance=customization)
+    
+    return render(request, 'solicitations/oems/edit_oem.html', {'form': form, 'oem': oem_obj})
 
 
 #### FUNCTIONS FOR THE ADMIN TO INTERACT WITH CRON JOB CONFIGURATIONS

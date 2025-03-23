@@ -362,7 +362,7 @@ function scrapeSolicitations() {
 
   // Start scraping process via AJAX
   fetch("{% url 'solicitations:scrap-solicitations' %}", {
-    method: "POST", // Changed to POST to send the date
+    method: "POST",
     headers: {
       "X-Requested-With": "XMLHttpRequest",
       "Content-Type": "application/json", // Specify JSON format

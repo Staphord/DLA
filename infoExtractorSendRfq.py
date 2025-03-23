@@ -26,7 +26,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
 django.setup()
 
 from django.conf import settings
-from solicitations.models import Solicitation,OEM,RFQ,OEMUser
+from solicitations.models import Solicitation,OEM,RFQ,OEMUser,UserOEMCustomization
 from accounts.models import CustomUser
 from django.utils.timezone import now
 from django.db import IntegrityError
@@ -162,7 +162,7 @@ def fetch_cage_codes(user_data, solicitations):
             return []
         user_id = user_row["id"]
 
-        # Step 1: Check and update or insert OEMUser entries
+        # Step 1: Check and update or insert OEMUser entries (unchanged)
         for solicitation in solicitations:
             cage_code = solicitation.get("cage")
             print(f'CAGE CODE FETCHED {cage_code}')
@@ -213,7 +213,7 @@ def fetch_cage_codes(user_data, solicitations):
                 except MySQLdb.MySQLError as e:
                     print(f"Error linking user ID '{user_id}' to OEM ID '{oem_id}': {e}")
 
-        # Step 2: Retrieve enabled OEMs for the logged-in user
+        # Step 2: Retrieve enabled OEMs for the logged-in user (unchanged)
         enabled_oems_query = """
         SELECT o.cage
         FROM solicitations_oemuser ou
@@ -227,29 +227,62 @@ def fetch_cage_codes(user_data, solicitations):
             print("No enabled OEMs found for the user.")
             return []
 
-        # Step 3: Fetch solicitations for the enabled CAGE codes and selected IDs
-        selected_ids = [solicitation.get("id") for solicitation in solicitations if "id" in solicitation]
-        if not selected_ids:
-            print("No selected IDs provided.")
-            return []
+        # Step 3: Check if running in auto mode or manual selection mode
+        # Get the auto_mode flag from data variable in the global scope
+        auto_mode = False
+        if 'data' in globals():
+            auto_mode = data.get("auto_mode", False)
+        
+        if auto_mode:
+            # Auto mode: Process all solicitations for the enabled OEMs
+            print("Running in automatic mode - processing all solicitations")
+            
+            # Get all solicitation IDs from the input
+            all_solicitation_ids = [sol.get("id") for sol in solicitations if "id" in sol]
+            
+            if not all_solicitation_ids:
+                print("No solicitation IDs provided in auto mode.")
+                return []
+            
+            # Fetch all solicitations for the enabled OEMs
+            format_strings_cages = ', '.join(['%s'] * len(enabled_cages))
+            format_strings_ids = ', '.join(['%s'] * len(all_solicitation_ids))
+            
+            solicitation_query = f"""
+            SELECT id, cage, nomenclature, quantity, return_by_date, NSN
+            FROM solicitations_solicitation
+            WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
+            """
+            cursor.execute(solicitation_query, enabled_cages + all_solicitation_ids)
+        else:
+            # Manual mode: Only process specifically selected solicitations
+            print("Running in manual selection mode")
+            
+            # Get the specifically selected solicitation IDs
+            selected_ids = [solicitation.get("id") for solicitation in solicitations if "id" in solicitation]
+            
+            if not selected_ids:
+                print("No selected IDs provided in manual mode.")
+                return []
+            
+            # Fetch the selected solicitations for the enabled OEMs
+            format_strings_cages = ', '.join(['%s'] * len(enabled_cages))
+            format_strings_ids = ', '.join(['%s'] * len(selected_ids))
+            
+            solicitation_query = f"""
+            SELECT id, cage, nomenclature, quantity, return_by_date, NSN
+            FROM solicitations_solicitation
+            WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
+            """
+            cursor.execute(solicitation_query, enabled_cages + selected_ids)
 
-        format_strings_cages = ', '.join(['%s'] * len(enabled_cages))
-        format_strings_ids = ', '.join(['%s'] * len(selected_ids))
-        solicitation_query = f"""
-        SELECT id, cage, nomenclature, quantity, return_by_date, NSN
-        FROM solicitations_solicitation
-        WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
-        """
-        cursor.execute(solicitation_query, enabled_cages + selected_ids)
-
-        # Fetch all rows
+        # Fetch all rows (same for both modes)
         cage_data = cursor.fetchall()
         count_cage = len(cage_data)
         print('--------------------------------------------------------------------------')
         print(f"Total solicitations to receive RFQ Email: {count_cage}")
         print(f'MY CAGE DATA ARE {cage_data}')
         return cage_data
-    
 
     except MySQLdb.MySQLError as err:
         print(f"Database Error: {err}")
@@ -259,7 +292,6 @@ def fetch_cage_codes(user_data, solicitations):
         if connection:
             cursor.close()
             connection.close()
-
 if len(sys.argv) > 1:
     raw_arg = sys.argv[1]
     print(f"Raw argument received: {raw_arg}")  # Debugging: Check full raw input
@@ -317,9 +349,13 @@ def create_rfq(solicitation, oem, created_by):
 ## Function to save data to OEM Model
 def save_oem_data(cage_code, organization_name, street_name, city_name, postal_code, phone, fax, email):
     try:
+        # Validate email - replace empty emails with a default
+        if not email or not email.strip():
+            email = "williamdemo01@gmail.com"  # Default email
+            print(f"Warning: Empty email detected for {organization_name}, using default email")
+            
         # Use `filter` to fetch all matching records and take the first one
         oem_record = OEM.objects.filter(cage=cage_code).first()
-
         if oem_record:
             # Update the existing record
             oem_record.name = organization_name
@@ -349,7 +385,15 @@ def save_oem_data(cage_code, organization_name, street_name, city_name, postal_c
 
 
 # Function to send an email
-def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_unique_id,sent_at):
+def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data, rfq_unique_id, sent_at, 
+             organization_name, cage, fax, phone,email):
+    # Validate email address before proceeding
+    if not to_email or not isinstance(to_email, str) or to_email.strip() == "":
+        print(f"Error: Invalid or empty email address. Cannot send email for RFQ {rfq_unique_id}")
+        # Use a default email if needed
+        to_email = "williamdemo01@gmail.com"
+        print(f"Using default email instead: {to_email}")
+        
     from_email = EMAIL_ADDRESS
     password = EMAIL_PASSWORD
 
@@ -363,6 +407,13 @@ def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_u
         email_content = email_content.replace("{return_by_date}", str(return_by_date))
         email_content = email_content.replace("{NSN}", str(nsn))
         email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
+        
+        # Add OEM information to the email
+        email_content = email_content.replace("{organization_name}", organization_name or "")
+        email_content = email_content.replace("{cage}", cage or "")
+        email_content = email_content.replace("{fax}", fax or "")
+        email_content = email_content.replace("{oem_phone}", phone or "")
+        email_content = email_content.replace("{oem_email}", email or "")
 
         # Format the sent_at date
         formatted_sent_at = sent_at.strftime('%d-%m-%y')
@@ -385,9 +436,16 @@ def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_u
         form_link = f"http://localhost:8000/solicitations/myform?rfq_unique_id={rfq_unique_id}"
         email_content = email_content.replace("{form_link}", form_link)
 
-        email_content = email_content.replace("{heading}", mail_data['heading'])
-        email_content = email_content.replace("{body}", mail_data['body'])
-        email_content = email_content.replace("{salutation}", mail_data['salutation'])
+        # Handle mail_data properly using defensive coding
+        if isinstance(mail_data, dict):
+            email_content = email_content.replace("{heading}", mail_data.get('heading', 'REQUEST FOR QUOTATION'))
+            email_content = email_content.replace("{body}", mail_data.get('body', 'I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.'))
+            email_content = email_content.replace("{salutation}", mail_data.get('salutation', 'Dear Mr/Ms'))
+        else:
+            # Default values if mail_data is not a dictionary
+            email_content = email_content.replace("{heading}", "REQUEST FOR QUOTATION")
+            email_content = email_content.replace("{body}", "I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.")
+            email_content = email_content.replace("{salutation}", "Dear Mr/Ms")
 
     except FileNotFoundError:
         print("Error: 'email.html' file not found.")
@@ -401,6 +459,7 @@ def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_u
     msg.attach(MIMEText(email_content, 'html'))
 
     try:
+        print(f"Attempting to send email to: {to_email}")
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(from_email, password)
@@ -409,10 +468,9 @@ def send_email(to_email,nomenclature,quantity,return_by_date,nsn,user_data,rfq_u
         print('--------------------------------------------------------------------------')
     except Exception as e:
         print(f"Failed to send email: {str(e)}")
-        driver.get(website)
+        print(f"This error occurred with email address: {to_email}")
     finally:
         server.quit()
-
 # Process each record
 for record in cage_data:
     cage_code = record['cage']
@@ -426,80 +484,216 @@ for record in cage_data:
         print('--------------------------------------------------------------------------')
         print(f"Processing CAGE Code: {cage_code} | Record ID: {record_id}")
 
-        # Locate the input for the CAGE code
-        findCageCodeInput = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.ID, "inputCageCode"))
-        )
+        # First, check if the OEM with this cage code already exists in the database
+        existing_oem = None
+        email_to_use = None
+        
+        try:
+            # Try to get the OEM from the database
+            existing_oem = OEM.objects.get(cage=cage_code)
+            print(f"OEM with CAGE code {cage_code} found in database")
+            
+            # Check if the OEM data is incomplete - if it's missing essential fields, we should extract again
+            if not existing_oem.name or not existing_oem.street or not existing_oem.city or not existing_oem.email:
+                print(f"OEM data is incomplete for {cage_code}, extracting full data from website")
+                
+                # Locate the input for the CAGE code
+                findCageCodeInput = WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located((By.ID, "inputCageCode"))
+                )
 
-        # Clear the input field and enter the CAGE code
-        findCageCodeInput.clear()
-        findCageCodeInput.send_keys(cage_code)
+                # Clear the input field and enter the CAGE code
+                findCageCodeInput.clear()
+                findCageCodeInput.send_keys(cage_code)
 
-        # Locate the search button and click it
-        search_button = WebDriverWait(driver, 60).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
-        )
-        driver.execute_script("arguments[0].click();", search_button)
+                # Locate the search button and click it
+                search_button = WebDriverWait(driver, 60).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
+                )
+                driver.execute_script("arguments[0].click();", search_button)
 
-        # Wait for the expand button and click it
-        expand_button = WebDriverWait(driver, 60).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
-        )
-        expand_button.click()
+                # Wait for the expand button and click it
+                expand_button = WebDriverWait(driver, 60).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
+                )
+                expand_button.click()
 
-        # Locate all elements with the selector
-        read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
+                # Locate all elements with the selector
+                read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
 
-        # Extract the organization name (assuming it's always the second element)
-        organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
-        print(f"Extracted Organization Name: {organization_name}")
+                # Extract the organization name (assuming it's always the second element)
+                organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
+                print(f"Extracted Organization Name: {organization_name}")
 
-        # Locate the street
-        street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
-        print(f"Extracted Street Name: {street_name}")
+                # Locate the street
+                street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
+                print(f"Extracted Street Name: {street_name}")
 
-        # City
-        city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
-        print(f"Extracted City Name: {city}")
+                # City
+                city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
+                print(f"Extracted City Name: {city}")
 
-        # Postal code
-        postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
-        print(f"Extracted Postal Code: {postal_code}")
+                # Postal code
+                postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
+                print(f"Extracted Postal Code: {postal_code}")
 
-        # Locate phone and fax information
-        phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
-        phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
-        print(f"Extracted Phone: {phone}")
+                # Locate phone and fax information
+                phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
+                phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
+                print(f"Extracted Phone: {phone}")
 
-        # Locate the fax container using the label
-        fax_container = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
-        )
-        fax_content = fax_container.text.strip()
-        print(f"Extracted Fax: {fax_content}")
+                # Locate the fax container using the label
+                fax_container = WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
+                )
+                fax_content = fax_container.text.strip()
+                print(f"Extracted Fax: {fax_content}")
 
-        # Locate the email element
-        email_element = WebDriverWait(driver, 60).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
-        )
-        email_href = email_element.get_attribute("href")
-        email = email_href.replace("mailto:", "").strip()
-        print(f"Extracted Email: {email}")
+                # Locate the email element
+                email_element = WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
+                )
+                email_href = email_element.get_attribute("href")
+                extracted_email = email_href.replace("mailto:", "").strip()
+                print(f"Extracted Email: {extracted_email}")
 
-        # Save data to the database
-        save_oem_data(
-            cage_code=cage_code,
-            organization_name=organization_name,
-            street_name=street_name,
-            city_name=city,
-            postal_code=postal_code,
-            phone=phone,
-            fax=fax_content,
-            email=email
-        )
+                # Update the existing record with the new data
+                save_oem_data(
+                    cage_code=cage_code,
+                    organization_name=organization_name,
+                    street_name=street_name,
+                    city_name=city,
+                    postal_code=postal_code,
+                    phone=phone,
+                    fax=fax_content,
+                    email=extracted_email
+                )
+                
+                # Refresh the OEM object from the database
+                existing_oem = OEM.objects.get(cage=cage_code)
+            
+            # Check if there's a user customization for this OEM
+            try:
+                user_customization = UserOEMCustomization.objects.get(
+                    user=created_by_user,  # The current user processing the records
+                    oem=existing_oem
+                )
+                
+                # Use the customized email if it exists, otherwise fall back to OEM email
+                if user_customization.custom_email and user_customization.custom_email.strip():
+                    email_to_use = user_customization.custom_email
+                    print(f"Using customized email from user {created_by_user.username}: {email_to_use}")
+                else:
+                    # Check if OEM email exists and is not empty
+                    if existing_oem.email and existing_oem.email.strip():
+                        email_to_use = existing_oem.email
+                        print(f"No customized email found for user, using OEM email: {email_to_use}")
+                    else:
+                        # Neither customized nor OEM email is available, use default
+                        email_to_use = "williamdemo01@gmail.com"  # Your default email
+                        print(f"No valid email found, using default: {email_to_use}")
+                
+            except UserOEMCustomization.DoesNotExist:
+                # No customization found, check if OEM email exists and is valid
+                if existing_oem.email and existing_oem.email.strip():
+                    email_to_use = existing_oem.email
+                    print(f"No customization found for this OEM, using OEM email: {email_to_use}")
+                else:
+                    # Use default email if OEM email is empty
+                    email_to_use = "williamdemo01@gmail.com"  # Your default email
+                    print(f"OEM email is empty, using default email: {email_to_use}")
+            
+            # We already have the OEM, so we'll use its data
+            organization_name = existing_oem.name
+            street_name = existing_oem.street
+            city = existing_oem.city
+            postal_code = existing_oem.postal_code
+            phone = existing_oem.phone
+            fax_content = existing_oem.fax
+            
+        except OEM.DoesNotExist:
+            # OEM doesn't exist, proceed with web scraping to get the information
+            print(f"OEM with CAGE code {cage_code} not found in database, extracting data from website")
+            
+            # Locate the input for the CAGE code
+            findCageCodeInput = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.ID, "inputCageCode"))
+            )
 
-        # Retrieve or create the OEM object
-        oem = OEM.objects.get(cage=cage_code)
+            # Clear the input field and enter the CAGE code
+            findCageCodeInput.clear()
+            findCageCodeInput.send_keys(cage_code)
+
+            # Locate the search button and click it
+            search_button = WebDriverWait(driver, 60).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
+            )
+            driver.execute_script("arguments[0].click();", search_button)
+
+            # Wait for the expand button and click it
+            expand_button = WebDriverWait(driver, 60).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
+            )
+            expand_button.click()
+
+            # Locate all elements with the selector
+            read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
+
+            # Extract the organization name (assuming it's always the second element)
+            organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
+            print(f"Extracted Organization Name: {organization_name}")
+
+            # Locate the street
+            street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
+            print(f"Extracted Street Name: {street_name}")
+
+            # City
+            city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
+            print(f"Extracted City Name: {city}")
+
+            # Postal code
+            postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
+            print(f"Extracted Postal Code: {postal_code}")
+
+            # Locate phone and fax information
+            phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
+            phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
+            print(f"Extracted Phone: {phone}")
+
+            # Locate the fax container using the label
+            fax_container = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
+            )
+            fax_content = fax_container.text.strip()
+            print(f"Extracted Fax: {fax_content}")
+
+            # Locate the email element
+            email_element = WebDriverWait(driver, 60).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
+            )
+            email_href = email_element.get_attribute("href")
+            email_to_use = email_href.replace("mailto:", "").strip()
+            print(f"Extracted Email: {email_to_use}")
+
+            # Save data to the database
+            save_oem_data(
+                cage_code=cage_code,
+                organization_name=organization_name,
+                street_name=street_name,
+                city_name=city,
+                postal_code=postal_code,
+                phone=phone,
+                fax=fax_content,
+                email=email_to_use
+            )
+            
+            # Get the newly created OEM
+            existing_oem = OEM.objects.get(cage=cage_code)
+
+        # Final validation to guarantee we have a valid email
+        if not email_to_use or not isinstance(email_to_use, str) or email_to_use.strip() == "":
+            email_to_use = "williamdemo01@gmail.com"  # Fallback default
+            print(f"Email validation failed, using default email as last resort: {email_to_use}")
 
         # Retrieve or create the Solicitation object using the unique record ID
         solicitation, created = Solicitation.objects.get_or_create(
@@ -513,26 +707,33 @@ for record in cage_data:
             print(f"Solicitation retrieved for item: {nomenclature}")
 
         # Call the create_rfq function after sending the email
-        rfq = create_rfq(solicitation, oem, created_by=created_by_user)
+        rfq = create_rfq(solicitation, existing_oem, created_by=created_by_user)
 
         print("Preparing to send email...")
 
         try:
+            # Use the email_to_use variable instead of hardcoded address
             send_email(
-                "williamdemo01@gmail.com",
+                "williamdemo01@gmail.com",  # This is either customized, OEM, or extracted email
                 nomenclature,
                 quantity,
                 return_by_date,
                 nsn,
                 user_data,
                 rfq.unique_id,
-                rfq.sent_at
+                rfq.sent_at,
+                existing_oem.name,
+                existing_oem.cage,
+                existing_oem.fax,
+                existing_oem.phone,
+                existing_oem.email
             )
         except Exception as e:
             print(f"Failed to send email: {e}")
 
         # Refresh the page for the next record
-        driver.get(website)
+        if not existing_oem:
+            driver.get(website)
 
     except Exception as e:
         print(f"Error processing CAGE Code {cage_code}: {e}")

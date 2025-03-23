@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
 from accounts.models import CustomUser
-from solicitations.models import RFQReply, GitHubWorkflow
+from solicitations.models import EmailSettings, RFQReply, GitHubWorkflow,UserOEMCustomization
 
 class UserRegistrationForm(UserCreationForm):
     class Meta:
@@ -51,3 +51,65 @@ class GitHubWorkflowForm(forms.ModelForm):
     class Meta:
         model = GitHubWorkflow
         fields = ["cron_schedule"]
+
+class UserOEMCustomizationForm(forms.ModelForm):
+    class Meta:
+        model = UserOEMCustomization
+        fields = ['custom_name', 'custom_email', 'custom_phone', 'custom_fax', 
+                  'custom_city', 'custom_street', 'custom_postal_code']
+        labels = {
+            'custom_name': 'Name',
+            'custom_email': 'Email',
+            'custom_phone': 'Phone',
+            'custom_fax': 'Fax',
+            'custom_city': 'City',
+            'custom_street': 'Street',
+            'custom_postal_code': 'Postal Code',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add Bootstrap form-control class to all form fields
+        for field_name, field in self.fields.items():
+            field.widget.attrs['class'] = 'form-control'
+            # Make all fields optional
+            field.required = False
+            
+            # Add placeholders
+            if field_name == 'custom_name':
+                field.widget.attrs['placeholder'] = 'Enter custom name'
+            elif field_name == 'custom_email':
+                field.widget.attrs['placeholder'] = 'Enter custom email'
+            elif field_name == 'custom_phone':
+                field.widget.attrs['placeholder'] = 'Enter custom phone number'
+            elif field_name == 'custom_fax':
+                field.widget.attrs['placeholder'] = 'Enter custom fax number'
+            elif field_name == 'custom_city':
+                field.widget.attrs['placeholder'] = 'Enter custom city'
+            elif field_name == 'custom_street':
+                field.widget.attrs['placeholder'] = 'Enter custom street'
+            elif field_name == 'custom_postal_code':
+                field.widget.attrs['placeholder'] = 'Enter custom postal code'
+
+class EmailSettingsForm(forms.ModelForm):
+    class Meta:
+        model = EmailSettings
+        fields = ['auto_send', 'send_day', 'send_time']
+        widgets = {
+            'auto_send': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'role': 'switch'
+            }),
+            'send_day': forms.Select(attrs={
+                'class': 'form-select'
+            }),
+            'send_time': forms.TimeInput(attrs={
+                'class': 'form-control',
+                'type': 'time'
+            }),
+        }
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add helpful text to the fields
+        self.fields['send_day'].help_text = "Select 'Every day' to send emails daily, or choose a specific day of the week."

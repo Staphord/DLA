@@ -3,110 +3,190 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
-
-
+    <title>Request for Quote</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .ody {
-            background-color: rgba(249, 249, 249, 0.993);
-            padding: 10px;
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f9f9f9;
         }
         .container {
-            margin-left: 55px;
-            margin-right: 55px;
-            margin-top: 5px;
-            margin-bottom: 5px;
+            background-color: rgb(242, 239, 239);
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0px 0px 10px #ccc;
         }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            width: 100px;
+            height: auto;
+        }
+        .info-box {
+            text-align: right;
+        }
+        .highlight-box {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #fefefe;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between; /* Bootstrap effect */
+            align-items: center;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .logo {
+            width: 100px;
+            height: auto;
+        }
+
+        .info-box {
+            text-align: right;
+            font-size: 14px;
+        }
+
+        /* Fallback for email clients that don’t support flexbox */
+        .header div {
+            float: left;
+            width: 50%;
+        }
+        .info-box {
+            float: right;
+            text-align: right;
+        }
+
+        /* Clearfix to prevent layout breaking */
+        .header::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+
         .mylink {
             text-decoration: none;
             background-color: #4CAF50;
             padding: 9px;
-            color: white;
+            color: white !important;
             border-radius: 4px;
         }
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-        th, td {
-            text-align: left;
-            padding: 13px;
-        }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-        th {
-            background-color: #4CAF50;
-            color: white;
-        }
-        .shadow-box {
-            background-color: white;
-            padding: 15px;
-            color: black;
-            border-radius: 5px; /* Optional: Rounded corners */
-        }
-
-        .grid-container {
-            display: flex;
-            justify-content: space-evenly;
-            align-items: center; /* Align items vertically */
-            width: 100%;
-        }
-        .myright{
-            padding-left: 200px;
-            margin-left: 190px;
+        /* Mobile-friendly */
+        @media screen and (max-width: 600px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+            }
+            .header div {
+                float: none;
+                width: 100%;
+            }
+            .info-box {
+                text-align: center;
+                margin-top: 10px;
+            }
         }
     </style>
 </head>
-<body class="ody">
+<body>
     <div class="container">
-            <div class="shadow-box">
-                <div class="grid-container">
-                    <div>
-                        {logo}
-                    </div>
-                    <div class="myright">
-                        <h3>{companyName}</h3>
-                        <p>Phone: {phone}</p>
-                        <p>Address: {address}</p>
-                        <p>Date: {sent_at}</p>
-                    </div>
-                </div>
-                
-                <div style="display: flex; justify-content: center; margin-top: 10px; margin-bottom: 10px;">
-                    <h3>{heading}</h3>
-                </div>                
-                
-                <p>Reference #: {rfq_unique_id}</p>
-                
-                <p>{salutation},</p><br>
-                <p>
-                   {body}
-                </p>
-
-                <div class="">
-                    <table>
-                        <tr>
-                            <th>Nomenclature</th>
-                            <th>Quantity</th>
-                            <th>NSN</th>
-                            <th>Return By</th>
-                        </tr>
-                        <tr>
-                            <td>{nomenclature}</td>
-                            <td>{quantity}</td>
-                            <td>{NSN}</td>
-                            <td>{return_by_date}</td>
-                        </tr>
-                    </table>
-                </div>
-                <br>
-                <p>You can reply to this email by clicking the link below or you can reply as normal.</p> 
-                <br>
-                <a href="{form_link}" class="mylink" style="color: white;">Click here to input price</a>
+        <div class="header">
+            <div>
+                {logo}
             </div>
+            <div class="spacer"></div>
+            <div class="info-box">
+                <p>{companyName}</p>
+                <p>{address}</p>
+                <p>{phone}</p>
+                <p>{email}</p>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 10px;">
+            <h3>Request For Quote</h3>
+            <p><em>This is for Domestic Resale to the US Government.<br>Your best competitive Quote is appreciated</em></p>
+        </div>
+
+        <div class="highlight-box">
+            <p>{salutation},<br>
+            {body}</p>
+        </div>
+
+        <table>
+            <tr>
+                <td>Date: {sent_at}</td>
+                <td>Ref: {rfq_unique_id}</td>
+            </tr>
+            <tr>
+                <td>To: {organization_name}</td>
+                <td>Cage: {cage}</td>
+            </tr>
+            <tr>
+                <td>Phone: {oem_phone}</td>
+                <td>Fax: {fax}</td>
+            </tr>
+            <tr>
+                <td colspan="2">Email: {oem_email}</td>
+            </tr>
+        </table>
+
+        <table>
+            <tr>
+                <th>Part No</th>
+                <th>Nomenclature</th>
+                <th>NSN</th>
+                <th>Quantity</th>
+            </tr>
+            <tr>
+                <td>{part_no}</td>
+                <td>{nomenclature}</td>
+                <td>{NSN}</td>
+                <td>{quantity}</td>
+            </tr>
+        </table>
+
+        <br>
+        <p>You can reply to this email by clicking the link below or you can reply as normal.</p> 
+        <br>
+        <a href="{form_link}" class="mylink">Click here to reply</a>
+
+        <div class="footer">
+            <p>Best regards,</p>
+            <p>{companyName}<br>
+                {address}<br>
+               Phone: {phone}<br>
+               Fax: {company_fax}<br>
+               Email: <a href="mailto:{email}">{email}</a><br>
+               Website: <a href="{company_website}" target="_blank">{company_website}</a>
+            </p>
+        </div>
     </div>
 </body>
 </html>

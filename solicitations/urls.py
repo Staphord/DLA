@@ -13,9 +13,10 @@ urlpatterns = [
     path('scrap-solicitations/',views.scrap_solicitations, name = 'scrap-solicitations'),
     path('solicitation-detail/<solicitation>/', views.solicitation_detail, name='solicitation-detail'),
     path('solicitations/clear/', views.clear_solicitations, name='clear_solicitations'),
-    path('delete-solicitation/<solicitation>', views.delete_solicitation, name='delete-solicitation'),
+    path('delete-solicitation/<solicitation>/', views.delete_solicitation, name='delete-solicitation'),
     path('searched-solicitations/',views.searched_solicitations, name='searched-solicitations'),
     path('flitered-solicitations/', views.filtered_solicitations, name='filtered-solicitations'),
+    path('email-settings/', views.email_settings, name='email-settings'),
 
     ###################  CLIENTS URLS  #####################
     path('clients/',views.clients, name = 'clients'),
@@ -46,6 +47,7 @@ urlpatterns = [
     path('search-oem/',views.search_oem, name='search-oem'),
     path('disable-oem/', views.disable_oem, name='disable-oem'),
     path('enable-oem/<int:oem_id>/', views.enable_oem, name='enable-oem'),
+    path('oem/edit/<int:oem>/', views.edit_oem, name='edit-oem'),
 
     #################### CRON URLS  ##########################
     path("workflow/", views.update_github_workflow, name="workflow"),

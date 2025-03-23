@@ -1,5 +1,7 @@
+import datetime
 from django.db import models
 from django.conf import settings
+
 
 from accounts.models import CustomUser
 
@@ -7,6 +9,9 @@ class Solicitation(models.Model):
     cage = models.CharField(max_length=5)
     nomenclature = models.CharField(max_length=50)
     status = models.CharField(max_length=10, blank=True, null=True)
+    part_number = models.CharField(max_length=15, blank=True, null=True)
+    pr = models.CharField(max_length=15, blank=True, null=True)
+    unit = models.CharField(max_length=15, blank=True, null=True)
     quantity = models.CharField(max_length=20)
     NSN = models.CharField(max_length=20,default='1')
     issued_date = models.CharField(max_length=20)
@@ -21,6 +26,9 @@ class Solicitation(models.Model):
 
     def __str__(self):
         return f"Solicitation-{self.cage} ({self.nomenclature})"
+    
+def get_default_send_time():
+    return datetime.time(0, 0) 
 
 class OEM(models.Model):
     name = models.CharField(max_length=50)
@@ -99,3 +107,57 @@ class GitHubWorkflow(models.Model):
     cron_schedule = models.CharField(max_length=50, default="0 1 * * *")  # Default: 1 AM daily
     last_updated = models.DateTimeField(auto_now=True)
 
+class UserOEMCustomization(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    oem = models.ForeignKey('OEM', on_delete=models.CASCADE)
+    custom_name = models.CharField(max_length=50, blank=True, null=True)
+    custom_email = models.EmailField(blank=True, null=True)
+    custom_phone = models.CharField(max_length=14, blank=True, null=True)
+    custom_fax = models.CharField(max_length=20, blank=True, null=True)
+    custom_city = models.CharField(max_length=50, blank=True, null=True)
+    custom_street = models.CharField(max_length=50, blank=True, null=True)
+    custom_postal_code = models.CharField(max_length=50, blank=True, null=True)
+    
+    class Meta:
+        unique_together = ('user', 'oem')
+        
+    def __str__(self):
+        return f"{self.user.username}'s customization of {self.oem.name}"
+    
+def get_default_send_time():
+    # Return time in 24-hour format, e.g., 00:00 for midnight
+    return datetime.time(0, 0)  # Default to midnight (00:00)
+
+class EmailSettings(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='email_settings')
+    auto_send = models.BooleanField(default=False, help_text="Toggle automatic email sending")
+    
+    DAILY = 'daily'
+    MONDAY = 'monday'
+    TUESDAY = 'tuesday'
+    WEDNESDAY = 'wednesday'
+    THURSDAY = 'thursday'
+    FRIDAY = 'friday'
+    SATURDAY = 'saturday'
+    SUNDAY = 'sunday'
+    
+    DAY_CHOICES = [
+        (DAILY, 'Every day'),
+        (MONDAY, 'Monday'),
+        (TUESDAY, 'Tuesday'),
+        (WEDNESDAY, 'Wednesday'),
+        (THURSDAY, 'Thursday'),
+        (FRIDAY, 'Friday'),
+        (SATURDAY, 'Saturday'),
+        (SUNDAY, 'Sunday'),
+    ]
+    
+    send_day = models.CharField(max_length=20, choices=DAY_CHOICES, default=DAILY)
+    send_time = models.TimeField(default=get_default_send_time)  # Default in 24-hour format
+    
+    def __str__(self):
+        # Ensure send_time is displayed in 24-hour format
+        formatted_time = self.send_time.strftime('%H:%M')  # 24-hour format (HH:mm)
+        if self.send_day == self.DAILY:
+            return f"{self.user.username}'s Email Settings (Daily at {formatted_time})"
+        return f"{self.user.username}'s Email Settings ({self.get_send_day_display()} at {formatted_time})"

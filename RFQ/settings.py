@@ -20,6 +20,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'django_q',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -99,11 +100,14 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/New_York'
 
 USE_I18N = True
 
 USE_TZ = True
+
+TIME_FORMAT = "H:i"  # 24-hour format (e.g., 13:30)
+USE_L10N = False  # Disable locale-based formatting
 
 
 # Static files (CSS, JavaScript, Images)
@@ -122,6 +126,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
+
 #Email credentials
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
@@ -137,6 +142,21 @@ DB_USER='root'
 DB_PASSWORD=''
 DB_PORT = 3306
 DB_NAME='rfq'
+
+# Django Q settings
+Q_CLUSTER = {
+    'name': 'solicitations',
+    'workers': 4,
+    'recycle': 500,
+    'retry':300,
+    'timeout': 240,  # Increased timeout for email processing
+    'compress': True,
+    'save_limit': 250,
+    'queue_limit': 500,
+    'cpu_affinity': 1,
+    'label': 'Django Q',
+    'orm': 'default',  
+}
 
 BASE_URL = 'localhost:8000'
 

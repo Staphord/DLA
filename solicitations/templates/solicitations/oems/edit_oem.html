@@ -1,0 +1,74 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+{% block content %}
+<section class="vh-100">
+    <div class="mt-5 justify-content-center align-items-center">
+        <div class="">
+            Customize OEM View for {{ oem.name }} ({{ oem.cage }})
+        </div>
+        <div class="mt-2">
+            <div class="card shadow-lg">
+                <div class="card-body my-3">
+                    <form action="" method="post">
+                        {% csrf_token %}
+                        
+                        <div class="my-3">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.custom_name.id_for_label }}" class="form-label">Name:</label>
+                                    {{ form.custom_name }}
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Cage Code:</label>
+                                    <input type="text" class="form-control" value="{{ oem.cage }}" disabled>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.custom_email.id_for_label }}" class="form-label">Email:</label>
+                                    {{ form.custom_email }}
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.custom_phone.id_for_label }}" class="form-label">Phone:</label>
+                                    {{ form.custom_phone }}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.custom_fax.id_for_label }}" class="form-label">Fax:</label>
+                                    {{ form.custom_fax }}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.custom_city.id_for_label }}" class="form-label">City:</label>
+                                    {{ form.custom_city }}
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="{{ form.custom_street.id_for_label }}" class="form-label">Street:</label>
+                                    {{ form.custom_street }}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.custom_postal_code.id_for_label }}" class="form-label">Postal Code:</label>
+                                    {{ form.custom_postal_code }}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="my-3">
+                            <div class="row">
+                                <div class="col-md-6 mb-2">
+                                    <a href="{% url 'solicitations:oem-detail' oem.id %}" class="btn btn-secondary w-100">Cancel</a>
+                                </div>
+                                <div class="col-md-6">
+                                    <button type="submit" class="btn btn-info text-white w-100">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock content %}

@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block content %}
-<section>
+<section class="vh-100">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mt-5">
         <div class="col-md-6">
@@ -21,8 +21,25 @@
         </div>
     </div>
 
-    <div class="mt-4">
-        Total Solicitations <span class="badge bg-light text-dark">{{ total_solicitations }}</span>
+    <div class="mt-4 d-flex justify-content-between">
+        <div class="">
+            Total Solicitations <span class="badge bg-light text-dark">{{ total_solicitations }}</span>
+        </div>
+        <div class="">
+            <!-- Conditional display based on auto_send settings -->
+            {% if auto_send %}
+            <div class="alert alert-success mb-0 p-2 d-flex align-items-center">
+                <i class="bi bi-clock-history me-2"></i>Auto-send enabled
+                <a href="{% url 'solicitations:email-settings' %}" class="btn btn-sm btn-outline-success ms-2">
+                    <i class="bi bi-gear-fill"></i> Change
+                </a>
+            </div>
+            {% else %}
+            <a href="{% url 'solicitations:email-settings' %}" class="btn btn-outline-primary">
+                <i class="bi bi-clock"></i> Enable Auto-send
+            </a>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Solicitations Table -->
@@ -33,7 +50,10 @@
                     <table class="table table-sm table-hover my-3">
                         <thead class="table-light">
                             <tr>
+                                <!-- Show checkboxes only when auto-send is disabled -->
+                                {% if not auto_send %}
                                 <th><input type="checkbox" class="form-check-input fs-5" id="selectAll"></th>
+                                {% endif %}
                                 <th class="text-secondary">Cage Code</th>
                                 <th class="text-secondary">Nomenclature</th>
                                 <th class="text-secondary">Quantity</th>
@@ -54,6 +74,8 @@
                                 {% else %}
                                     class="table-light"  onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';"
                                 {% endif %}>
+                                <!-- Show checkboxes only when auto-send is disabled -->
+                                {% if not auto_send %}
                                 <td>
                                     {% if solicitation.oem_disabled %}
                                         <input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();" disabled> 
@@ -61,6 +83,7 @@
                                         <input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();">
                                     {% endif %}
                                 </td>
+                                {% endif %}
                                 <td>{{ solicitation.cage }}</td>
                                 <td>{{ solicitation.nomenclature|title }}</td>
                                 <td>{{ solicitation.quantity }}</td>
@@ -308,24 +331,23 @@
 
         // Show toast notification
         function showToast(message, type = "error") {
-    // Set the toast message
-    $('#selectToast .toast-body').text(message);
+            // Set the toast message
+            $('#selectToast .toast-body').text(message);
 
-    // Update the background color class based on the type
-    const toastElement = $('#selectToast');
-    toastElement.removeClass('bg-success bg-danger'); // Remove any previous styles
+            // Update the background color class based on the type
+            const toastElement = $('#selectToast');
+            toastElement.removeClass('bg-success bg-danger'); // Remove any previous styles
 
-    if (type === "success") {
-        toastElement.addClass('text-bg-success'); // Green background for success
-    } else if (type === "error") {
-        toastElement.addClass('text-bg-danger'); // Red background for danger
-    } 
+            if (type === "success") {
+                toastElement.addClass('text-bg-success'); // Green background for success
+            } else if (type === "error") {
+                toastElement.addClass('text-bg-danger'); // Red background for danger
+            } 
 
-    // Show the toast
-    const toast = new bootstrap.Toast(toastElement[0]);
-    toast.show();
-}
-
+            // Show the toast
+            const toast = new bootstrap.Toast(toastElement[0]);
+            toast.show();
+        }
 
         // Preview mail modal trigger
         $('#sendRfqsButton').click(function (e) {
@@ -338,7 +360,7 @@
             });
 
             if (selectedIds.length === 0) {
-                showToast(); // Show toast if no rows selected
+                showToast("Please select at least one solicitation."); // Show toast if no rows selected
                 return;
             }
 
@@ -442,8 +464,8 @@
                     console.log(selectedIds);
                 },
                 error: function (xhr, status, error) {
-                const response = xhr.responseJSON ? xhr.responseJSON.message : "Unknown error";
-                $('#status').text(`Failed to send RFQs: ${response}`);
+                    const response = xhr.responseJSON ? xhr.responseJSON.message : "Unknown error";
+                    $('#status').text(`Failed to send RFQs: ${response}`);
                 },
                 complete: function () {
                     clearInterval(interval);
