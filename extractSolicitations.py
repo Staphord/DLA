@@ -223,7 +223,7 @@ def handle_pagination():
             break  # Exit the loop on error, or you can continue to handle the error
 
 def process_nsn_links():
-    """Visit NSN links and extract CAGE data."""
+    """Visit NSN links and extract CAGE data and part numbers."""
     cage_codes = []  # List to hold extracted CAGE codes
 
     for row_data in row_data_list:
@@ -233,7 +233,7 @@ def process_nsn_links():
             driver.execute_script("window.open(arguments[0]);", nsn_link)
             driver.switch_to.window(driver.window_handles[-1])  # Switch to the new tab
 
-            # Extract CAGE information from the NSN details page
+            # Extract CAGE information and part numbers from the NSN details page
             try:
                 # Wait for the table containing the CAGE information to be present
                 cage_table = WebDriverWait(driver, 3).until(
@@ -242,23 +242,30 @@ def process_nsn_links():
                 # Find all rows in the table body
                 cage_rows = cage_table.find_elements(By.XPATH, ".//tbody/tr")
                 cage_values = []
+                part_numbers = []
 
-                # Loop through each row to extract the CAGE values
+                # Loop through each row to extract the CAGE values and part numbers
                 for cage_row in cage_rows:
                     try:
                         # Find the CAGE value in the corresponding cell
                         cage_value = cage_row.find_element(By.XPATH, "./td[@headers='h1']").text.strip()
+                        # Find the part number in the corresponding cell
+                        part_number = cage_row.find_element(By.XPATH, "./td[@headers='h2']").text.strip()
+                        
                         cage_values.append(cage_value)
+                        part_numbers.append(part_number)
                         cage_codes.append(cage_value)  # Append the CAGE code to the list
                     except Exception as inner_e:
-                        print(f"Error extracting CAGE value from a row: {inner_e}")
+                        print(f"Error extracting CAGE value or part number from a row: {inner_e}")
                         continue
 
-                # Store the list of CAGE values as a string, joined by commas
+                # Store the list of CAGE values and part numbers as strings, joined by commas
                 row_data['cages'] = ", ".join(cage_values)
+                row_data['part_numbers'] = ", ".join(part_numbers)
 
             except Exception as e:
                 row_data['cages'] = '-'
+                row_data['part_numbers'] = '-'
 
             finally:
                 driver.close()
@@ -269,6 +276,7 @@ def process_nsn_links():
             continue
 
     return cage_codes  # Return the list of CAGE codes
+
 
 def extract_cage_details(cage_codes):
     extracted_data = []  # Initialize the list to hold extracted data
@@ -353,7 +361,6 @@ def extract_cage_details(cage_codes):
 
 # Function to process collected row data into a structured dictionary
 def process_row_data(row_data_list):
-
     # Loop through the collected row data to populate the dictionary
     for row_data in row_data_list:
         try:
@@ -369,12 +376,19 @@ def process_row_data(row_data_list):
             raw_quantity = row_data.get('quantity', '0')  # Default to '0' if missing
             quantity = extract_quantity(raw_quantity)
 
-            # Split CAGE codes into individual entries if there are multiple
+            # Split CAGE codes and part numbers into individual entries if there are multiple
             cage_values = row_data.get('cages', '-').split(', ')
+            part_numbers = row_data.get('part_numbers', '-').split(', ')
 
-            # Generate a separate dictionary for each CAGE code
-            for cage in cage_values:
+            # Ensure part_numbers list is at least as long as cage_values
+            while len(part_numbers) < len(cage_values):
+                part_numbers.append('N/A')
+
+            # Generate a separate dictionary for each CAGE code with its corresponding part number
+            for i, cage in enumerate(cage_values):
                 cage = cage.strip()  # Trim any extra spaces
+                part_number = part_numbers[i].strip() if i < len(part_numbers) else 'N/A'
+                
                 nsn_entry = {
                     'NSN': nsn,
                     'Nomenclature': nomenclature,
@@ -384,6 +398,7 @@ def process_row_data(row_data_list):
                     'Issued Date': issued_date,
                     'Return By Date': return_by_date,
                     'CAGE Code': cage if cage else 'N/A',  # Handle empty CAGE values
+                    'Part Number': part_number if part_number else 'N/A',  # Handle empty part numbers
                 }
                 nsn_data_list.append(nsn_entry)
 
@@ -415,8 +430,8 @@ def save_to_db(data_list, cage_details_list):
     sql_query = """
     INSERT INTO solicitations_solicitation 
     (cage, nsn, nomenclature, status, quantity, issued_date, return_by_date, 
-     organization_name, street_name, city, postal_code, phone, fax, email)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     organization_name, street_name, city, postal_code, phone, fax, email, part_number)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     for data in data_list:
@@ -462,7 +477,8 @@ def save_to_db(data_list, cage_details_list):
                 postal_code,
                 phone,
                 fax,
-                email
+                email,
+                data.get('Part Number', 'N/A')  # Added part number
             ))
             db_connection.commit()
         except MySQLdb.Error as e:
