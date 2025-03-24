@@ -9,18 +9,21 @@
         body {
             font-family: Arial, sans-serif;
             padding: 20px;
+            font-size: 20px;
             background-color: #f9f9f9;
         }
         .container {
-            background-color: rgb(242, 239, 239);
+            background-color: rgb(241, 219, 124);
             padding: 20px;
             border-radius: 5px;
-            box-shadow: 0px 0px 10px #ccc;
+            box-shadow: 0px 0px 10px rgb(241, 219, 124);
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background-color:rgb(226, 194, 51) !important;
+            font-size: 20px;
         }
         .logo {
             width: 100px;
@@ -28,12 +31,14 @@
         }
         .info-box {
             text-align: right;
+            font-size: 20px;
         }
         .highlight-box {
-            background-color: #f9f9f9;
+            background-color: rgb(226, 194, 51);
             padding: 10px;
             border-radius: 5px;
             font-weight: bold;
+            font-size: 17px;
         }
         table {
             width: 100%;
@@ -46,7 +51,7 @@
             text-align: left;
         }
         th {
-            background-color: #fefefe;
+            background-color: rgb(226, 194, 51);
         }
         .footer {
             margin-top: 20px;
@@ -58,8 +63,7 @@
             justify-content: space-between; /* Bootstrap effect */
             align-items: center;
             padding: 10px;
-            background-color: #f9f9f9;
-            border-bottom: 2px solid #ddd;
+            background-color: rgb(226, 194, 51) !important;
         }
 
         .logo {
@@ -70,6 +74,8 @@
         .info-box {
             text-align: right;
             font-size: 14px;
+            font-size: 17px;
+            font-weight: bold;
         }
 
         /* Fallback for email clients that don’t support flexbox */
@@ -91,9 +97,11 @@
 
         .mylink {
             text-decoration: none;
-            background-color: #4CAF50;
-            padding: 9px;
+            background-color: rgb(226, 194, 51);
+            padding: 20px;
             color: white !important;
+            font-size: 20px;
+            font-weight: bold;
             border-radius: 4px;
         }
 
@@ -130,8 +138,8 @@
         </div>
 
         <div style="text-align: center; margin-top: 10px;">
-            <h3>Request For Quote</h3>
-            <p><em>This is for Domestic Resale to the US Government.<br>Your best competitive Quote is appreciated</em></p>
+            <h3 style="font-size: 20px; font-weight: bold;">Request For Quote</h3>
+            <p><em style="font-size: 17px; font-weight: bold;">This is for Domestic Resale to the US Government.<br>Your best competitive Quote is appreciated</em></p>
         </div>
 
         <div class="highlight-box">
@@ -165,7 +173,7 @@
                 <th>Quantity</th>
             </tr>
             <tr>
-                <td>{part_no}</td>
+                <td>{part_number}</td>
                 <td>{nomenclature}</td>
                 <td>{NSN}</td>
                 <td>{quantity}</td>
@@ -182,7 +190,7 @@
             <p>{companyName}<br>
                 {address}<br>
                Phone: {phone}<br>
-               Fax: {company_fax}<br>
+               Fax: {fax}<br>
                Email: <a href="mailto:{email}">{email}</a><br>
                Website: <a href="{company_website}" target="_blank">{company_website}</a>
             </p>

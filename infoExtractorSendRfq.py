@@ -16,6 +16,7 @@ import time
 import os
 import django
 import sys
+from collections import defaultdict  # Import for grouping cage codes
 
 # Add project to Python path
 sys.path.append('D:/projects/GilTech/RFQ') 
@@ -26,7 +27,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
 django.setup()
 
 from django.conf import settings
-from solicitations.models import Solicitation,OEM,RFQ,OEMUser,UserOEMCustomization
+from solicitations.models import Solicitation, OEM, RFQ, OEMUser, UserOEMCustomization
 from accounts.models import CustomUser
 from django.utils.timezone import now
 from django.db import IntegrityError
@@ -54,7 +55,7 @@ chrome_options.add_argument('--pageLoadStrategy=normal')
 ## Initialize Chrome driver path
 PATH = r'C:\Users\chromedriver.exe'
 service = Service(executable_path=PATH)
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()),options=chrome_options)
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 ## Website URL
 website = "https://eportal.nspa.nato.int/Codification/CageTool/CageTool/"
@@ -86,6 +87,9 @@ if len(sys.argv) > 1:
         user_data = data.get("user_data", {})
         solicitations = data.get("solicitations", [])
         mail_data = data.get("mail_data", [])
+        # Get auto_mode flag
+        auto_mode = data.get("auto_mode", False)
+        print(f"Auto mode: {auto_mode}")
 
         print(f'mail data are: {mail_data}')
 
@@ -116,7 +120,7 @@ def generate_unique_id(oem):
     Format: ABC-MM-CAGE-SEQUENCE
     """
     current_month = now().strftime("%m")  # Get current month as two digits
-    oem_prefix = oem.name[:3].upper()  # First three letters of OEM name
+    oem_prefix = oem.name[:3].upper() if oem.name else "OEM"  # First three letters of OEM name or "OEM" if empty
     cage_code = oem.cage.upper()  # CAGE code
 
     # Count existing RFQs for the OEM in the current month
@@ -249,7 +253,7 @@ def fetch_cage_codes(user_data, solicitations):
             format_strings_ids = ', '.join(['%s'] * len(all_solicitation_ids))
             
             solicitation_query = f"""
-            SELECT id, cage, nomenclature, quantity, return_by_date, NSN
+            SELECT id, cage, nomenclature, quantity, return_by_date, NSN, part_number
             FROM solicitations_solicitation
             WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
             """
@@ -270,7 +274,7 @@ def fetch_cage_codes(user_data, solicitations):
             format_strings_ids = ', '.join(['%s'] * len(selected_ids))
             
             solicitation_query = f"""
-            SELECT id, cage, nomenclature, quantity, return_by_date, NSN
+            SELECT id, cage, nomenclature, quantity, return_by_date, NSN, part_number
             FROM solicitations_solicitation
             WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
             """
@@ -292,6 +296,7 @@ def fetch_cage_codes(user_data, solicitations):
         if connection:
             cursor.close()
             connection.close()
+
 if len(sys.argv) > 1:
     raw_arg = sys.argv[1]
     print(f"Raw argument received: {raw_arg}")  # Debugging: Check full raw input
@@ -383,10 +388,249 @@ def save_oem_data(cage_code, organization_name, street_name, city_name, postal_c
     except Exception as e:
         print(f"Error saving data for CAGE Code {cage_code}: {e}")
 
+def extract_oem_data(cage_code):
+    """Extract OEM data from the NATO website for a given CAGE code"""
+    try:
+        # Locate the input for the CAGE code
+        findCageCodeInput = WebDriverWait(driver, 60).until(
+            EC.presence_of_element_located((By.ID, "inputCageCode"))
+        )
 
-# Function to send an email
-def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data, rfq_unique_id, sent_at, 
-             organization_name, cage, fax, phone,email):
+        # Clear the input field and enter the CAGE code
+        findCageCodeInput.clear()
+        findCageCodeInput.send_keys(cage_code)
+
+        # Locate the search button and click it
+        search_button = WebDriverWait(driver, 60).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
+        )
+        driver.execute_script("arguments[0].click();", search_button)
+
+        # Wait for the expand button and click it
+        expand_button = WebDriverWait(driver, 60).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
+        )
+        expand_button.click()
+
+        # Locate all elements with the selector
+        read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
+
+        # Extract the organization name (assuming it's always the second element)
+        organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
+        print(f"Extracted Organization Name: {organization_name}")
+
+        # Locate the street
+        street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
+        print(f"Extracted Street Name: {street_name}")
+
+        # City
+        city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
+        print(f"Extracted City Name: {city}")
+
+        # Postal code
+        postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
+        print(f"Extracted Postal Code: {postal_code}")
+
+        # Locate phone and fax information
+        phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
+        phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
+        print(f"Extracted Phone: {phone}")
+
+        # Locate the fax container using the label
+        fax_container = WebDriverWait(driver, 60).until(
+            EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
+        )
+        fax_content = fax_container.text.strip()
+        print(f"Extracted Fax: {fax_content}")
+
+        # Locate the email element
+        email_element = WebDriverWait(driver, 60).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
+        )
+        email_href = email_element.get_attribute("href")
+        extracted_email = email_href.replace("mailto:", "").strip()
+        print(f"Extracted Email: {extracted_email}")
+
+        # Save data to the database
+        save_oem_data(
+            cage_code=cage_code,
+            organization_name=organization_name,
+            street_name=street_name,
+            city_name=city,
+            postal_code=postal_code,
+            phone=phone,
+            fax=fax_content,
+            email=extracted_email
+        )
+        
+        return {
+            'organization_name': organization_name,
+            'street_name': street_name,
+            'city': city,
+            'postal_code': postal_code,
+            'phone': phone,
+            'fax': fax_content,
+            'email': extracted_email
+        }
+    except Exception as e:
+        print(f"Error extracting data for CAGE Code {cage_code}: {e}")
+        return None
+
+# Function to send a consolidated email
+def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
+    """
+    Send a single email with multiple items to the same CAGE code
+    
+    Args:
+        to_email (str): Email address to send to
+        items (list): List of items to include in the email
+        user_data (dict): User information
+        oem_info (dict): OEM information
+        sent_at: Date when the email is sent
+    """
+    if not sent_at:
+        sent_at = now()
+        
+    # Validate email address before proceeding
+    if not to_email or not isinstance(to_email, str) or to_email.strip() == "":
+        print(f"Error: Invalid or empty email address. Cannot send email to {oem_info.get('organization_name', 'unknown')}")
+        # Use a default email if needed
+        to_email = "williamdemo01@gmail.com"
+        print(f"Using default email instead: {to_email}")
+        
+    from_email = EMAIL_ADDRESS
+    password = EMAIL_PASSWORD
+
+    try:
+        # Open the existing email template
+        with open("email.html", "r") as file:
+            email_template = file.read()
+            
+        # Create the HTML table rows for multiple items
+        item_rows = ""
+        for item in items:
+            item_rows += f"""
+            <tr>
+                <td>{item['part_number']}</td>
+                <td>{item['nomenclature']}</td>
+                <td>{item['NSN']}</td>
+                <td>{item['quantity']}</td>
+            </tr>
+            """
+            
+        # Use first item's RFQ ID as reference
+        rfq_unique_id = items[0]['rfq_unique_id'] if items else 'N/A'
+        
+        # Replace the original table row with our multiple rows
+        # Find the pattern for the single row in the table
+        single_row_pattern = """<tr>
+                <td>{part_number}</td>
+                <td>{nomenclature}</td>
+                <td>{NSN}</td>
+                <td>{quantity}</td>
+            </tr>"""
+            
+        # Replace just that row with our multiple rows
+        email_content = email_template.replace(single_row_pattern, item_rows)
+            
+        # Format the sent_at date
+        formatted_sent_at = sent_at.strftime('%d-%m-%y')
+        email_content = email_content.replace("{sent_at}", formatted_sent_at)
+        
+        # Replace OEM information placeholders
+        email_content = email_content.replace("{organization_name}", oem_info.get('organization_name', ''))
+        email_content = email_content.replace("{cage}", oem_info.get('cage', ''))
+        email_content = email_content.replace("{fax}", oem_info.get('fax', ''))
+        email_content = email_content.replace("{oem_phone}", oem_info.get('phone', ''))
+        email_content = email_content.replace("{oem_email}", oem_info.get('email', ''))
+        
+        # Replace placeholders for user data
+        email_content = email_content.replace("{username}", user_data.get('username', ''))
+        email_content = email_content.replace("{email}", user_data.get('email', ''))
+        email_content = email_content.replace("{phone}", user_data.get('phone', ''))
+        email_content = email_content.replace("{address}", user_data.get('address', ''))
+        email_content = email_content.replace("{companyName}", user_data.get('companyName', ''))
+        email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
+        
+        # Generate a complete URL for the logo
+        logo_url = 'https://cdn.pixabay.com/photo/2020/08/05/13/27/eco-5465459_1280.png'
+        email_content = email_content.replace("{logo}", f'<img src="{logo_url}" alt="Company Logo" style="width: 150px;">')
+
+        # Generate a unique link to the form using the rfq_unique_id
+        form_link = f"http://localhost:8000/solicitations/myform?rfq_unique_id={rfq_unique_id}"
+        email_content = email_content.replace("{form_link}", form_link)
+
+        # Handle mail_data properly using defensive coding
+        if 'mail_data' in globals() and isinstance(mail_data, dict):
+            email_content = email_content.replace("{heading}", mail_data.get('heading', 'REQUEST FOR QUOTATION'))
+            email_content = email_content.replace("{body}", mail_data.get('body', 'I hope this message finds you well. We are currently looking for the following items. Kindly provide your lowest possible price.'))
+            email_content = email_content.replace("{salutation}", mail_data.get('salutation', 'Dear Mr/Ms'))
+        else:
+            # Default values if mail_data is not available
+            email_content = email_content.replace("{heading}", "REQUEST FOR QUOTATION")
+            email_content = email_content.replace("{body}", "I hope this message finds you well. We are currently looking for the following items. Kindly provide your lowest possible price.")
+            email_content = email_content.replace("{salutation}", "Dear Mr/Ms")
+            
+        # Replace any website reference if available
+        company_website = user_data.get('website')
+        email_content = email_content.replace("{company_website}", company_website)
+
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = to_email
+        msg['Subject'] = f"REQUEST FOR QUOTATION - {len(items)} Items"
+
+        msg.attach(MIMEText(email_content, 'html'))
+
+        try:
+            print(f"Attempting to send consolidated email to: {to_email}")
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.starttls()
+            server.login(from_email, password)
+            server.sendmail(from_email, to_email, msg.as_string())  ###### replace with to_email
+            print(f"Consolidated email successfully sent to {to_email}")
+            print('--------------------------------------------------------------------------')
+        except Exception as e:
+            print(f"Failed to send email: {str(e)}")
+            print(f"This error occurred with email address: {to_email}")
+        finally:
+            server.quit()
+            
+    except FileNotFoundError:
+        print("Error: 'email.html' file not found.")
+    except Exception as e:
+        print(f"Error preparing email: {e}")
+
+
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = to_email
+        msg['Subject'] = "REQUEST FOR QUOTATION - Multiple Items"
+
+        msg.attach(MIMEText(email_content, 'html'))
+
+        try:
+            print(f"Attempting to send consolidated email to: {to_email}")
+            server = smtplib.SMTP("smtp.gmail.com", 587)
+            server.starttls()
+            server.login(from_email, password)
+            server.sendmail(from_email, to_email, msg.as_string())   ########### to_email
+            print(f"Consolidated email successfully sent to {to_email}")
+            print('--------------------------------------------------------------------------')
+        except Exception as e:
+            print(f"Failed to send email: {str(e)}")
+            print(f"This error occurred with email address: {to_email}")
+        finally:
+            server.quit()
+            
+    except FileNotFoundError:
+        print("Error: 'email.html' file not found.")
+    except Exception as e:
+        print(f"Error preparing email: {e}")
+
+# Function to send a single email (unchanged from original)
+def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data, rfq_unique_id, sent_at, part_number,
+             organization_name, cage, fax, phone, email):
     # Validate email address before proceeding
     if not to_email or not isinstance(to_email, str) or to_email.strip() == "":
         print(f"Error: Invalid or empty email address. Cannot send email for RFQ {rfq_unique_id}")
@@ -407,6 +651,7 @@ def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data,
         email_content = email_content.replace("{return_by_date}", str(return_by_date))
         email_content = email_content.replace("{NSN}", str(nsn))
         email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
+        email_content = email_content.replace("{part_number}", str(part_number))
         
         # Add OEM information to the email
         email_content = email_content.replace("{organization_name}", organization_name or "")
@@ -427,8 +672,6 @@ def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data,
         email_content = email_content.replace("{companyName}", user_data['companyName'])
         
         # Generate a complete URL for the logo
-        base_url = "http://localhost:8000" 
-        #logo_url = f"{base_url}{user_data['logo']}"
         logo_url = 'https://cdn.pixabay.com/photo/2020/08/05/13/27/eco-5465459_1280.png'
         email_content = email_content.replace("{logo}", f'<img src="{logo_url}" alt="Company Logo" style="width: 150px;">')
 
@@ -437,7 +680,7 @@ def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data,
         email_content = email_content.replace("{form_link}", form_link)
 
         # Handle mail_data properly using defensive coding
-        if isinstance(mail_data, dict):
+        if 'mail_data' in globals() and isinstance(mail_data, dict):
             email_content = email_content.replace("{heading}", mail_data.get('heading', 'REQUEST FOR QUOTATION'))
             email_content = email_content.replace("{body}", mail_data.get('body', 'I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price.'))
             email_content = email_content.replace("{salutation}", mail_data.get('salutation', 'Dear Mr/Ms'))
@@ -471,109 +714,223 @@ def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data,
         print(f"This error occurred with email address: {to_email}")
     finally:
         server.quit()
-# Process each record
-for record in cage_data:
-    cage_code = record['cage']
-    nomenclature = record['nomenclature']
-    quantity = record['quantity']
-    return_by_date = record['return_by_date']
-    nsn = record['NSN']
-    record_id = record['id']  # Use the record's unique ID for email tracking
 
+# Determine if we should use auto mode
+auto_mode = False
+if 'data' in globals():
+    auto_mode = data.get("auto_mode", False)
+
+# No longer needed since we're modifying the existing template directly
+# This function is removed
+'''
+def modify_email_template():
     try:
-        print('--------------------------------------------------------------------------')
-        print(f"Processing CAGE Code: {cage_code} | Record ID: {record_id}")
-
-        # First, check if the OEM with this cage code already exists in the database
-        existing_oem = None
-        email_to_use = None
-        
-        try:
-            # Try to get the OEM from the database
-            existing_oem = OEM.objects.get(cage=cage_code)
-            print(f"OEM with CAGE code {cage_code} found in database")
+        with open("email.html", "r") as file:
+            content = file.read()
             
-            # Check if the OEM data is incomplete - if it's missing essential fields, we should extract again
-            if not existing_oem.name or not existing_oem.street or not existing_oem.city or not existing_oem.email:
-                print(f"OEM data is incomplete for {cage_code}, extracting full data from website")
+        # Find the table that contains item information and replace it with a dynamic version
+        # Look for the original table with a single row - checking multiple patterns
+        original_table_patterns = [
+            # Pattern 1: Standard format with consistent indentation
+            # ...pattern code removed...
+        ]
+        
+        # Replace with a table that can have multiple rows
+        new_table = # ...replaced code removed...
+        
+        # Try each pattern until we find a match
+        # ...replaced code removed...
+        
+        # Write the modified template back
+        # ...replaced code removed...
+            
+        print("Email template modified for consolidated emails")
+        return found_match
+    except Exception as e:
+        print(f"Error modifying email template: {e}")
+        return False
+'''
+
+# Main processing logic
+if auto_mode:
+    print("Running in auto mode - will consolidate emails for same CAGE codes")
+    
+    # Group records by CAGE code
+    cage_groups = defaultdict(list)
+    for record in cage_data:
+        cage_code = record['cage']
+        cage_groups[cage_code].append(record)
+    
+    print(f"Grouped {len(cage_data)} records into {len(cage_groups)} unique CAGE codes")
+    
+    
+    # Process each CAGE code group
+    for cage_code, records in cage_groups.items():
+        try:
+            print('--------------------------------------------------------------------------')
+            print(f"Processing CAGE Code group: {cage_code} with {len(records)} records")
+            
+            # First check if OEM exists and is complete in the database
+            try:
+                existing_oem = OEM.objects.get(cage=cage_code)
+                print(f"OEM with CAGE code {cage_code} found in database")
                 
-                # Locate the input for the CAGE code
-                findCageCodeInput = WebDriverWait(driver, 60).until(
-                    EC.presence_of_element_located((By.ID, "inputCageCode"))
-                )
-
-                # Clear the input field and enter the CAGE code
-                findCageCodeInput.clear()
-                findCageCodeInput.send_keys(cage_code)
-
-                # Locate the search button and click it
-                search_button = WebDriverWait(driver, 60).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
-                )
-                driver.execute_script("arguments[0].click();", search_button)
-
-                # Wait for the expand button and click it
-                expand_button = WebDriverWait(driver, 60).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
-                )
-                expand_button.click()
-
-                # Locate all elements with the selector
-                read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
-
-                # Extract the organization name (assuming it's always the second element)
-                organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
-                print(f"Extracted Organization Name: {organization_name}")
-
-                # Locate the street
-                street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
-                print(f"Extracted Street Name: {street_name}")
-
-                # City
-                city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
-                print(f"Extracted City Name: {city}")
-
-                # Postal code
-                postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
-                print(f"Extracted Postal Code: {postal_code}")
-
-                # Locate phone and fax information
-                phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
-                phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
-                print(f"Extracted Phone: {phone}")
-
-                # Locate the fax container using the label
-                fax_container = WebDriverWait(driver, 60).until(
-                    EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
-                )
-                fax_content = fax_container.text.strip()
-                print(f"Extracted Fax: {fax_content}")
-
-                # Locate the email element
-                email_element = WebDriverWait(driver, 60).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
-                )
-                email_href = email_element.get_attribute("href")
-                extracted_email = email_href.replace("mailto:", "").strip()
-                print(f"Extracted Email: {extracted_email}")
-
-                # Update the existing record with the new data
-                save_oem_data(
-                    cage_code=cage_code,
-                    organization_name=organization_name,
-                    street_name=street_name,
-                    city_name=city,
-                    postal_code=postal_code,
-                    phone=phone,
-                    fax=fax_content,
-                    email=extracted_email
-                )
+                # Check if the OEM data is incomplete - if it's missing essential fields, extract from website
+                if not existing_oem.name or not existing_oem.street or not existing_oem.city or not existing_oem.email:
+                    print(f"OEM data is incomplete for {cage_code}, extracting full data from website")
+                    oem_data = extract_oem_data(cage_code)
+                    # Refresh the OEM object from the database
+                    existing_oem = OEM.objects.get(cage=cage_code)
                 
-                # Refresh the OEM object from the database
+            except OEM.DoesNotExist:
+                # OEM doesn't exist, proceed with web scraping to get the information
+                print(f"OEM with CAGE code {cage_code} not found in database, extracting data from website")
+                oem_data = extract_oem_data(cage_code)
+                # Get the newly created OEM
                 existing_oem = OEM.objects.get(cage=cage_code)
             
-            # Check if there's a user customization for this OEM
+            # Determine which email to use
+            email_to_use = None
             try:
+                # Check if there's a user customization for this OEM
+                user_customization = UserOEMCustomization.objects.get(
+                    user=created_by_user,
+                    oem=existing_oem
+                )
+                
+                # Use the customized email if it exists, otherwise fall back to OEM email
+                if user_customization.custom_email and user_customization.custom_email.strip():
+                    email_to_use = user_customization.custom_email
+                    print(f"Using customized email from user {created_by_user.username}: {email_to_use}")
+                else:
+                    # Check if OEM email exists and is not empty
+                    if existing_oem.email and existing_oem.email.strip():
+                        email_to_use = existing_oem.email
+                        print(f"No customized email found for user, using OEM email: {email_to_use}")
+                    else:
+                        # Neither customized nor OEM email is available, use default
+                        email_to_use = "williamdemo01@gmail.com"  # Default email
+                        print(f"No valid email found, using default: {email_to_use}")
+                
+            except UserOEMCustomization.DoesNotExist:
+                # No customization found, check if OEM email exists and is valid
+                if existing_oem.email and existing_oem.email.strip():
+                    email_to_use = existing_oem.email
+                    print(f"No customization found for this OEM, using OEM email: {email_to_use}")
+                else:
+                    # Use default email if OEM email is empty
+                    email_to_use = "williamdemo01@gmail.com"  # Default email
+                    print(f"OEM email is empty, using default email: {email_to_use}")
+            
+            # Create RFQs for each record and prepare items for consolidated email
+            items_for_email = []
+            for record in records:
+                # Get data from the record
+                nomenclature = record['nomenclature']
+                quantity = record['quantity']
+                return_by_date = record['return_by_date']
+                nsn = record['NSN']
+                part_number = record['part_number']
+                record_id = record['id']
+                
+                # Retrieve or create the Solicitation object using the unique record ID
+                solicitation, created = Solicitation.objects.get_or_create(
+                    id=record_id,
+                    defaults={'nomenclature': nomenclature, 'quantity': quantity}
+                )
+                
+                if created:
+                    print(f"Solicitation created for item: {nomenclature}")
+                else:
+                    print(f"Solicitation retrieved for item: {nomenclature}")
+                
+                # Create an RFQ for this solicitation
+                rfq = create_rfq(solicitation, existing_oem, created_by=created_by_user)
+                
+                # Add item to the list for the consolidated email
+                if rfq:
+                    items_for_email.append({
+                        'nomenclature': nomenclature,
+                        'quantity': quantity,
+                        'return_by_date': return_by_date,
+                        'NSN': nsn,
+                        'part_number': part_number,
+                        'rfq_unique_id': rfq.unique_id
+                    })
+            
+            # Only send email if we have items
+            if items_for_email:
+                # Prepare OEM info for email
+                oem_info = {
+                    'organization_name': existing_oem.name,
+                    'cage': existing_oem.cage,
+                    'street': existing_oem.street,
+                    'city': existing_oem.city,
+                    'postal_code': existing_oem.postal_code,
+                    'phone': existing_oem.phone,
+                    'fax': existing_oem.fax,
+                    'email': existing_oem.email
+                }
+                
+                # Send the consolidated email
+                print(f"Sending consolidated email with {len(items_for_email)} items to {email_to_use}")
+                send_consolidated_email(
+                    "williamdemo01@gmail.com", 
+                    items_for_email, 
+                    user_data, 
+                    oem_info, 
+                    now()
+                )
+            else:
+                print(f"No valid items to include in email for CAGE code {cage_code}")
+            
+            # Refresh the browser page for the next CAGE code
+            driver.get(website)
+                
+        except Exception as e:
+            print(f"Error processing CAGE Code group {cage_code}: {e}")
+            
+else:
+    # Even in manual mode, consolidate emails for the same CAGE code
+    print("Running in manual mode - still consolidating emails for same CAGE codes")
+    
+    # Group records by CAGE code
+    cage_groups = defaultdict(list)
+    for record in cage_data:
+        cage_code = record['cage']
+        cage_groups[cage_code].append(record)
+    
+    print(f"Grouped {len(cage_data)} records into {len(cage_groups)} unique CAGE codes")
+    
+    # Process each CAGE code group
+    for cage_code, records in cage_groups.items():
+        try:
+            print('--------------------------------------------------------------------------')
+            print(f"Processing CAGE Code group: {cage_code} with {len(records)} records")
+            
+            # First check if OEM exists and is complete in the database
+            try:
+                existing_oem = OEM.objects.get(cage=cage_code)
+                print(f"OEM with CAGE code {cage_code} found in database")
+                
+                # Check if the OEM data is incomplete - if it's missing essential fields, extract from website
+                if not existing_oem.name or not existing_oem.street or not existing_oem.city or not existing_oem.email:
+                    print(f"OEM data is incomplete for {cage_code}, extracting full data from website")
+                    oem_data = extract_oem_data(cage_code)
+                    # Refresh the OEM object from the database
+                    existing_oem = OEM.objects.get(cage=cage_code)
+                
+            except OEM.DoesNotExist:
+                # OEM doesn't exist, proceed with web scraping to get the information
+                print(f"OEM with CAGE code {cage_code} not found in database, extracting data from website")
+                oem_data = extract_oem_data(cage_code)
+                # Get the newly created OEM
+                existing_oem = OEM.objects.get(cage=cage_code)
+            
+            # Determine which email to use
+            email_to_use = None
+            try:
+                # Check if there's a user customization for this OEM
                 user_customization = UserOEMCustomization.objects.get(
                     user=created_by_user,  # The current user processing the records
                     oem=existing_oem
@@ -603,140 +960,74 @@ for record in cage_data:
                     email_to_use = "williamdemo01@gmail.com"  # Your default email
                     print(f"OEM email is empty, using default email: {email_to_use}")
             
-            # We already have the OEM, so we'll use its data
-            organization_name = existing_oem.name
-            street_name = existing_oem.street
-            city = existing_oem.city
-            postal_code = existing_oem.postal_code
-            phone = existing_oem.phone
-            fax_content = existing_oem.fax
+            # Create RFQs for each record and prepare items for consolidated email
+            items_for_email = []
+            for record in records:
+                # Get data from the record
+                nomenclature = record['nomenclature']
+                quantity = record['quantity']
+                return_by_date = record['return_by_date']
+                nsn = record['NSN']
+                part_number = record['part_number']
+                record_id = record['id']
+                
+                # Retrieve or create the Solicitation object using the unique record ID
+                solicitation, created = Solicitation.objects.get_or_create(
+                    id=record_id,
+                    defaults={'nomenclature': nomenclature, 'quantity': quantity}
+                )
+                
+                if created:
+                    print(f"Solicitation created for item: {nomenclature}")
+                else:
+                    print(f"Solicitation retrieved for item: {nomenclature}")
+                
+                # Create an RFQ for this solicitation
+                rfq = create_rfq(solicitation, existing_oem, created_by=created_by_user)
+                
+                # Add item to the list for the consolidated email
+                if rfq:
+                    items_for_email.append({
+                        'nomenclature': nomenclature,
+                        'quantity': quantity,
+                        'return_by_date': return_by_date,
+                        'NSN': nsn,
+                        'part_number': part_number,
+                        'rfq_unique_id': rfq.unique_id
+                    })
             
-        except OEM.DoesNotExist:
-            # OEM doesn't exist, proceed with web scraping to get the information
-            print(f"OEM with CAGE code {cage_code} not found in database, extracting data from website")
+            # Only send email if we have items
+            if items_for_email:
+                # Prepare OEM info for email
+                oem_info = {
+                    'organization_name': existing_oem.name,
+                    'cage': existing_oem.cage,
+                    'street': existing_oem.street,
+                    'city': existing_oem.city,
+                    'postal_code': existing_oem.postal_code,
+                    'phone': existing_oem.phone,
+                    'fax': existing_oem.fax,
+                    'email': existing_oem.email
+                }
+                
+                # Send the consolidated email
+                print(f"Sending consolidated email with {len(items_for_email)} items to {email_to_use}")
+                send_consolidated_email(
+                    "williamdemo01@gmail.com", 
+                    items_for_email, 
+                    user_data, 
+                    oem_info, 
+                    now()
+                )
+            else:
+                print(f"No valid items to include in email for CAGE code {cage_code}")
             
-            # Locate the input for the CAGE code
-            findCageCodeInput = WebDriverWait(driver, 60).until(
-                EC.presence_of_element_located((By.ID, "inputCageCode"))
-            )
-
-            # Clear the input field and enter the CAGE code
-            findCageCodeInput.clear()
-            findCageCodeInput.send_keys(cage_code)
-
-            # Locate the search button and click it
-            search_button = WebDriverWait(driver, 60).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
-            )
-            driver.execute_script("arguments[0].click();", search_button)
-
-            # Wait for the expand button and click it
-            expand_button = WebDriverWait(driver, 60).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
-            )
-            expand_button.click()
-
-            # Locate all elements with the selector
-            read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
-
-            # Extract the organization name (assuming it's always the second element)
-            organization_name = read_only_elements[1].text.strip()  # Index 1 corresponds to the organization name
-            print(f"Extracted Organization Name: {organization_name}")
-
-            # Locate the street
-            street_name = read_only_elements[10].text.strip()  # Index 10 corresponds to the street name
-            print(f"Extracted Street Name: {street_name}")
-
-            # City
-            city = read_only_elements[12].text.strip()  # Index 12 corresponds to the city
-            print(f"Extracted City Name: {city}")
-
-            # Postal code
-            postal_code = read_only_elements[13].text.strip()  # Index 13 corresponds to the postal code
-            print(f"Extracted Postal Code: {postal_code}")
-
-            # Locate phone and fax information
-            phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
-            phone = phone_fax[0].text.strip()  # Index 0 corresponds to the phone
-            print(f"Extracted Phone: {phone}")
-
-            # Locate the fax container using the label
-            fax_container = WebDriverWait(driver, 60).until(
-                EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
-            )
-            fax_content = fax_container.text.strip()
-            print(f"Extracted Fax: {fax_content}")
-
-            # Locate the email element
-            email_element = WebDriverWait(driver, 60).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
-            )
-            email_href = email_element.get_attribute("href")
-            email_to_use = email_href.replace("mailto:", "").strip()
-            print(f"Extracted Email: {email_to_use}")
-
-            # Save data to the database
-            save_oem_data(
-                cage_code=cage_code,
-                organization_name=organization_name,
-                street_name=street_name,
-                city_name=city,
-                postal_code=postal_code,
-                phone=phone,
-                fax=fax_content,
-                email=email_to_use
-            )
-            
-            # Get the newly created OEM
-            existing_oem = OEM.objects.get(cage=cage_code)
-
-        # Final validation to guarantee we have a valid email
-        if not email_to_use or not isinstance(email_to_use, str) or email_to_use.strip() == "":
-            email_to_use = "williamdemo01@gmail.com"  # Fallback default
-            print(f"Email validation failed, using default email as last resort: {email_to_use}")
-
-        # Retrieve or create the Solicitation object using the unique record ID
-        solicitation, created = Solicitation.objects.get_or_create(
-            id=record_id,  # Use the unique ID to differentiate records
-            defaults={'nomenclature': nomenclature, 'quantity': quantity}
-        )
-
-        if created:
-            print(f"Solicitation created for item: {nomenclature}")
-        else:
-            print(f"Solicitation retrieved for item: {nomenclature}")
-
-        # Call the create_rfq function after sending the email
-        rfq = create_rfq(solicitation, existing_oem, created_by=created_by_user)
-
-        print("Preparing to send email...")
-
-        try:
-            # Use the email_to_use variable instead of hardcoded address
-            send_email(
-                "williamdemo01@gmail.com",  # This is either customized, OEM, or extracted email
-                nomenclature,
-                quantity,
-                return_by_date,
-                nsn,
-                user_data,
-                rfq.unique_id,
-                rfq.sent_at,
-                existing_oem.name,
-                existing_oem.cage,
-                existing_oem.fax,
-                existing_oem.phone,
-                existing_oem.email
-            )
-        except Exception as e:
-            print(f"Failed to send email: {e}")
-
-        # Refresh the page for the next record
-        if not existing_oem:
+            # Refresh the browser page for the next CAGE code
             driver.get(website)
+                
+        except Exception as e:
+            print(f"Error processing CAGE Code group {cage_code}: {e}")
+            time.sleep(5)
 
-    except Exception as e:
-        print(f"Error processing CAGE Code {cage_code}: {e}")
-        time.sleep(5)
-
+print("Processing complete!")
 driver.quit()

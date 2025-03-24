@@ -15,6 +15,9 @@ class CustomUser(AbstractUser):
     is_email_verified = models.BooleanField(default=False)
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='client')
     logo = models.ImageField(upload_to='logos/', blank=True, null=True)
+    fax = models.CharField(max_length=20, blank=True, null=True)
+    cage = models.CharField(max_length=10, blank=True, null=True)
+    website = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.username

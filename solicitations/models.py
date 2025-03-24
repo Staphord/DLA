@@ -9,7 +9,7 @@ class Solicitation(models.Model):
     cage = models.CharField(max_length=5)
     nomenclature = models.CharField(max_length=50)
     status = models.CharField(max_length=10, blank=True, null=True)
-    part_number = models.CharField(max_length=15, blank=True, null=True)
+    part_number = models.CharField(max_length=25, blank=True, null=True)
     pr = models.CharField(max_length=15, blank=True, null=True)
     unit = models.CharField(max_length=15, blank=True, null=True)
     quantity = models.CharField(max_length=20)

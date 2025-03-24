@@ -52,6 +52,24 @@
                                 {% endif %}
                             </div>
                             <div class="my-2">
+                                <label for="phone" class="mb-1">Fax:</label>
+                                <input type="text" name="phone" class="form-control" id="phone" required>
+                                {% if form.fax.errors %}
+                                <div class="text-danger">
+                                    {{ form.fax.errors }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="my-2">
+                                <label for="phone" class="mb-1">Cage:</label>
+                                <input type="text" name="phone" class="form-control" id="phone" required>
+                                {% if form.cage.errors %}
+                                <div class="text-danger">
+                                    {{ form.cage.errors }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="my-2">
                                 <label for="company" class="mb-1">Company Name:</label>
                                 <input type="text" name="companyName" class="form-control" maxlength="50" required="" id="companyName">
                                 {% if form.companyName.errors %}
@@ -66,6 +84,15 @@
                                 {% if form.address.errors %}
                                 <div class="text-danger">
                                     {{ form.address.errors }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="my-2">
+                                <label for="phone" class="mb-1">Website:</label>
+                                <input type="text" name="phone" class="form-control" id="phone" required>
+                                {% if form.website.errors %}
+                                <div class="text-danger">
+                                    {{ form.website.errors }}
                                 </div>
                                 {% endif %}
                             </div>
