@@ -7,7 +7,7 @@ from solicitations.models import EmailSettings, RFQReply, GitHubWorkflow,UserOEM
 class UserRegistrationForm(UserCreationForm):
     class Meta:
         model = CustomUser
-        fields = ['username', 'first_name', 'last_name', 'phone', 'companyName', 'address', 'email', 
+        fields = ['username', 'first_name', 'last_name', 'phone', 'companyName', 'address', 'email', 'website','cage','fax',
                   'password1', 'password2', 'user_type', 'logo']
         widgets = {
             'username': forms.TextInput(attrs={'class': 'form-control'}),
@@ -17,6 +17,9 @@ class UserRegistrationForm(UserCreationForm):
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'address': forms.TextInput(attrs={'class': 'form-control'}),
+            'website': forms.TextInput(attrs={'class': 'form-control'}),
+            'cage': forms.TextInput(attrs={'class': 'form-control'}),
+            'fax': forms.TextInput(attrs={'class': 'form-control'}),
             'password1': forms.PasswordInput(attrs={'class': 'form-control'}),
             'password2': forms.PasswordInput(attrs={'class': 'form-control'}),
             'user_type': forms.Select(attrs={'class': 'form-control'}),

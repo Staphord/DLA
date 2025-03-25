@@ -136,7 +136,7 @@ def generate_unique_id(oem):
     unique_id = f"{oem_prefix}-{current_month}-{cage_code}-{sequence_number}"
     return unique_id
 
-## Connect to the MySQL database
+## Connect to the MySQL database and fetch cage codes
 def fetch_cage_codes(user_data, solicitations):
     connection = None
     try:
@@ -166,7 +166,7 @@ def fetch_cage_codes(user_data, solicitations):
             return []
         user_id = user_row["id"]
 
-        # Step 1: Check and update or insert OEMUser entries (unchanged)
+        # Check and update or insert OEMUser entries
         for solicitation in solicitations:
             cage_code = solicitation.get("cage")
             print(f'CAGE CODE FETCHED {cage_code}')
@@ -217,7 +217,7 @@ def fetch_cage_codes(user_data, solicitations):
                 except MySQLdb.MySQLError as e:
                     print(f"Error linking user ID '{user_id}' to OEM ID '{oem_id}': {e}")
 
-        # Step 2: Retrieve enabled OEMs for the logged-in user (unchanged)
+        # Retrieve enabled OEMs for the logged-in user
         enabled_oems_query = """
         SELECT o.cage
         FROM solicitations_oemuser ou
@@ -231,7 +231,7 @@ def fetch_cage_codes(user_data, solicitations):
             print("No enabled OEMs found for the user.")
             return []
 
-        # Step 3: Check if running in auto mode or manual selection mode
+        # Check if running in auto mode or manual selection mode
         # Get the auto_mode flag from data variable in the global scope
         auto_mode = False
         if 'data' in globals():
@@ -628,7 +628,7 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
     except Exception as e:
         print(f"Error preparing email: {e}")
 
-# Function to send a single email (unchanged from original)
+# Function to send a single email
 def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data, rfq_unique_id, sent_at, part_number,
              organization_name, cage, fax, phone, email):
     # Validate email address before proceeding
@@ -719,37 +719,6 @@ def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data,
 auto_mode = False
 if 'data' in globals():
     auto_mode = data.get("auto_mode", False)
-
-# No longer needed since we're modifying the existing template directly
-# This function is removed
-'''
-def modify_email_template():
-    try:
-        with open("email.html", "r") as file:
-            content = file.read()
-            
-        # Find the table that contains item information and replace it with a dynamic version
-        # Look for the original table with a single row - checking multiple patterns
-        original_table_patterns = [
-            # Pattern 1: Standard format with consistent indentation
-            # ...pattern code removed...
-        ]
-        
-        # Replace with a table that can have multiple rows
-        new_table = # ...replaced code removed...
-        
-        # Try each pattern until we find a match
-        # ...replaced code removed...
-        
-        # Write the modified template back
-        # ...replaced code removed...
-            
-        print("Email template modified for consolidated emails")
-        return found_match
-    except Exception as e:
-        print(f"Error modifying email template: {e}")
-        return False
-'''
 
 # Main processing logic
 if auto_mode:

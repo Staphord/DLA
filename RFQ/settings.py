@@ -148,7 +148,7 @@ Q_CLUSTER = {
     'name': 'solicitations',
     'workers': 4,
     'recycle': 500,
-    'retry':0,
+    'retry':300,
     'timeout': 240,  # Increased timeout for email processing
     'compress': True,
     'save_limit': 250,
