@@ -18,6 +18,7 @@
         </div>
     </div>
 
+    <!-- OEM Data Section -->
     <div class="">
         <div class="">
             OEM Data..
@@ -62,10 +63,18 @@
         </div>
     </div>
 
+    <!-- Solicitation and Reply Data Section -->
     <div class="my-2">
         <div class="">
+            {% if is_consolidated %}
+            Solicitations Data (Multiple Items)..
+            {% else %}
             Solicitation Data..
+            {% endif %}
         </div>
+        
+        <!-- For single-item RFQs, show the regular layout -->
+        {% if not is_consolidated %}
         <div class="mt-2">
             <div class="card">
                 <div class="card-body my-3">
@@ -88,8 +97,12 @@
                         <div class="col-md-4">
                             NSN: {{rfq.rfq.solicitation.NSN}}
                         </div>
+                        <div class="col-md-4">
+                            Part #: {{rfq.rfq.solicitation.part_number}}
+                        </div>
                     </div>
                 </div>
+                
                 <div class="card mx-2 mybg">
                     <div class="card-body">
                         <div class="row mt-2 mb-1">
@@ -110,19 +123,102 @@
                         <hr class="text-white">
                         <div class="row mt-2 mb-1">
                             <div class="col text-white mt-2">
-                              <span class="text-warning">Note/Message</span>:  {{ rfq.short_note }}
+                                <span class="text-warning">Note/Message</span>: {{ rfq.short_note }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- For consolidated RFQs, show a summary card with accordion for items -->
+        <div class="mt-2">
+            <div class="card">
+                <div class="card-body my-3">
+                    <h5>RFQ Summary</h5>
+                    <p>This is a consolidated RFQ with {{ rfq_item_replies.count }} items</p>
+                </div>
+                <div class="card mx-2 mybg">
+                    <div class="card-body">
+                        <div class="row mt-2 mb-1">
+                            <div class="col-md-6 text-white mt-2">
+                                Total Price: $ <span class="text-warning">{{ rfq.price }}</span>
+                            </div>
+                            <div class="col-md-6 text-white mt-2">
+                                Items: <span class="text-warning">{{ rfq_item_replies.count }}</span>
+                            </div>
+                        </div>
+                        <hr class="text-white">
+                        <div class="row mt-2 mb-1">
+                            <div class="col text-white mt-2">
+                                <span class="text-warning">Summary Note</span>: {{ rfq.short_note }}
                             </div>
                         </div>
                     </div>
                 </div>
                 
-            </div>
-            <div class="text-center">
-                <span class="text-center mt-2"><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i></span>
+                <!-- Accordion for Item Details -->
+                <div class="accordion mt-3" id="itemDetailsAccordion">
+                    {% for item_reply in rfq_item_replies %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading{{ forloop.counter }}">
+                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ forloop.counter }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapse{{ forloop.counter }}">
+                                <strong>Item {{ forloop.counter }}:</strong> {{ item_reply.solicitation.nomenclature }} ({{ item_reply.solicitation.NSN }})
+                            </button>
+                        </h2>
+                        <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="heading{{ forloop.counter }}" data-bs-parent="#itemDetailsAccordion">
+                            <div class="accordion-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <strong>NSN:</strong> {{ item_reply.solicitation.NSN }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Part #:</strong> {{ item_reply.solicitation.part_number }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Quantity:</strong> {{ item_reply.solicitation.quantity }}
+                                    </div>
+                                </div>
+                                
+                                <!-- Item reply details -->
+                                <div class="card mybg">
+                                    <div class="card-body">
+                                        <div class="row mt-3">
+                                            <div class="col-md-4 text-white">
+                                                Price: $ <span class="text-warning">{{ item_reply.price }}</span> / Piece
+                                            </div>
+                                            <div class="col-md-4 text-white">
+                                                Delivery Mode: {{ item_reply.delivery_mode }}
+                                            </div>
+                                            <div class="col-md-4 text-white">
+                                                {% if item_reply.document %}
+                                                    <a href="{{ item_reply.document.url }}" target="_blank" class="btn btn-warning text-white">View File</a>
+                                                {% else %}
+                                                    <span class="text-white">No file uploaded</span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <hr class="text-white">
+                                        <div class="row">
+                                            <div class="col text-white">
+                                                <span class="text-warning">Note/Message</span>: {{ item_reply.short_note }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
+        {% endif %}
+        
+        <div class="text-center mt-3">
+            <span class="text-center"><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i><i class="bi bi-star-fill text-warning"></i></span>
+        </div>
     </div>
-
 </section>
 
 <!-- Modal -->
@@ -134,7 +230,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          Are you sure you want to delete this Replied RFQ? Rember this task can not be reversed.
+          Are you sure you want to delete this Replied RFQ? Remember this task cannot be reversed.
         </div>
         <div class="modal-footer">
           <button type="button" class="btn mybg hoverbg text-white" data-bs-dismiss="modal">Cancel</button>
@@ -142,6 +238,6 @@
         </div>
       </div>
     </div>
-  </div>
+</div>
 
 {% endblock content %}

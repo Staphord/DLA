@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
 from accounts.models import CustomUser
-from solicitations.models import EmailSettings, RFQReply, GitHubWorkflow,UserOEMCustomization
+from solicitations.models import EmailSettings, RFQItemReply, RFQReply, GitHubWorkflow,UserOEMCustomization
 
 class UserRegistrationForm(UserCreationForm):
     class Meta:
@@ -116,3 +116,18 @@ class EmailSettingsForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # Add helpful text to the fields
         self.fields['send_day'].help_text = "Select 'Every day' to send emails daily, or choose a specific day of the week."
+
+class RFQItemReplyForm(forms.ModelForm):
+    class Meta:
+        model = RFQItemReply
+        fields = ['price', 'delivery_mode', 'short_note', 'document']
+        widgets = {
+            'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'delivery_mode': forms.Select(attrs={'class': 'form-control'}),
+            'short_note': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Add an optional note',
+            }),
+            'document': forms.ClearableFileInput(attrs={'class': 'form-control'}),
+        }

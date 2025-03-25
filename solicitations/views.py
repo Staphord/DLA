@@ -5,17 +5,17 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
+from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQItem, RFQItemReply, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
 from django.contrib import messages
 import subprocess
-from . forms import EmailSettingsForm, LogoUpdateForm, UserOEMCustomizationForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
+from . forms import EmailSettingsForm, LogoUpdateForm, RFQItemReplyForm, UserOEMCustomizationForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.template.loader import render_to_string
 from datetime import datetime
 from git import Repo
 from ruamel.yaml import YAML
-import yaml
+from django.db.models import Sum
 
 # Create your views here.
 
@@ -408,9 +408,32 @@ def rfq_detail(request, rfq):
     except RFQ.DoesNotExist:
         return HttpResponseNotFound("RFQ not found")
     
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-    context = {'rfq': rfq,'replied_rfq':replied_rfq}
+    # Check if this is a consolidated RFQ (has multiple items)
+    rfq_items = RFQItem.objects.filter(rfq=rfq)
+    is_consolidated = rfq_items.exists()
+    
+    # Get all solicitations for a consolidated RFQ, making sure to not include duplicates
+    if is_consolidated:
+        # Get all solicitations including the primary one
+        all_solicitations = [item.solicitation for item in rfq_items]
+        
+        # Count the total number of unique solicitations
+        total_item_count = len(set(sol.id for sol in all_solicitations))
+    else:
+        all_solicitations = []
+        total_item_count = 1  # Just the primary solicitation
+    
+    # Get replied RFQs
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    
+    context = {
+        'rfq': rfq,
+        'replied_rfq': replied_rfq,
+        'is_consolidated': is_consolidated,
+        'all_solicitations': all_solicitations,
+        'total_item_count': total_item_count
+    }
+    
     return render(request, 'solicitations/procurements/rfq_detail.html', context)
 
 ##view to delete RFQ
@@ -422,64 +445,170 @@ def delete_rfq(request,rfq):
 ## this is for displaying form for reply
 def rfq_reply_view(request):
     user = request.user
-
-    rfq_unique_id = request.GET.get('rfq_unique_id')  # Get the unique_id from query params
-    rfq = get_object_or_404(RFQ, unique_id=rfq_unique_id)  # Fetch RFQ by unique_id
-    solicitation = rfq.solicitation
-
-    # Initialize the form variable
-    form = RFQReplyForm()
-
-    # Check if there's already a reply for this RFQ by this user
-    if RFQReply.objects.filter(rfq=rfq, rfq_creator=user).exists():
-        # Add a message to show to the user
-        messages.error(request, "You have already submitted a reply for this RFQ.")
-        return render(request, 'solicitations/procurements/rfq_reply.html', {
-            'form': form, 'rfq': rfq, 'solicitation': solicitation, 'already_replied': True
-        })
-
+    rfq_unique_id = request.GET.get('rfq_unique_id')
+    item_index = request.GET.get('item_index', '0')
+    
+    try:
+        item_index = int(item_index)
+    except ValueError:
+        item_index = 0
+        
+    rfq = get_object_or_404(RFQ, unique_id=rfq_unique_id)
+    
+    # Get all solicitations
+    all_solicitations = [rfq.solicitation]  # Start with primary
+    rfq_items = RFQItem.objects.filter(rfq=rfq)
+    is_consolidated = rfq_items.exists()
+    
+    if is_consolidated:
+        for item in rfq_items:
+            if item.solicitation.id != rfq.solicitation.id:
+                all_solicitations.append(item.solicitation)
+    
+    # Get current solicitation
+    if 0 <= item_index < len(all_solicitations):
+        current_solicitation = all_solicitations[item_index]
+    else:
+        current_solicitation = rfq.solicitation
+        item_index = 0
+    
+    # Check if already replied to THIS SPECIFIC ITEM
+    existing_reply = RFQItemReply.objects.filter(
+        rfq=rfq, 
+        rfq_creator=user,
+        solicitation=current_solicitation
+    ).first()
+    
+    form = RFQItemReplyForm()
+    
     if request.method == 'POST':
-        form = RFQReplyForm(request.POST, request.FILES)
+        form = RFQItemReplyForm(request.POST, request.FILES)
         if form.is_valid():
             rfq_reply = form.save(commit=False)
-            rfq_reply.rfq = rfq  # Get the unsaved RFQ instance
-            rfq_reply.rfq_creator = user  # Associate the reply with the RFQ
+            rfq_reply.rfq = rfq
+            rfq_reply.solicitation = current_solicitation
+            rfq_reply.rfq_creator = user
             rfq_reply.save()
-            return JsonResponse({"success": True})
-
+            
+            # Check if all items have been replied to
+            all_items_replied = True
+            for sol in all_solicitations:
+                if not RFQItemReply.objects.filter(rfq=rfq, rfq_creator=user, solicitation=sol).exists():
+                    all_items_replied = False
+                    break
+            
+            # If all items have been replied to, create a main RFQReply as a summary
+            if all_items_replied and is_consolidated:
+                # Calculate total price
+                total_price = RFQItemReply.objects.filter(
+                    rfq=rfq, rfq_creator=user
+                ).aggregate(Sum('price'))['price__sum']
+                
+                # Check if overall reply exists
+                if not RFQReply.objects.filter(rfq=rfq, rfq_creator=user).exists():
+                    RFQReply.objects.create(
+                        rfq=rfq,
+                        rfq_creator=user,
+                        price=total_price,
+                        delivery_mode=rfq_reply.delivery_mode,
+                        short_note=f"Consolidated reply for {len(all_solicitations)} items. See individual item replies for details."
+                    )
+            
+            # Redirect to next item if available
+            if is_consolidated and item_index < len(all_solicitations) - 1:
+                next_index = item_index + 1
+                return JsonResponse({
+                    "success": True, 
+                    "next_item": True,
+                    "next_url": f"?rfq_unique_id={rfq_unique_id}&item_index={next_index}"
+                })
+            else:
+                return JsonResponse({"success": True, "next_item": False})
+    
     return render(request, 'solicitations/procurements/rfq_reply.html', {
-        'form': form, 'rfq': rfq, 'solicitation': solicitation, 'already_replied': False
+        'form': form,
+        'rfq': rfq,
+        'current_solicitation': current_solicitation,
+        'is_consolidated': is_consolidated,
+        'item_index': item_index,
+        'total_items': len(all_solicitations),
+        'existing_reply': existing_reply,
+        'is_last_item': item_index == len(all_solicitations) - 1,
+        'all_solicitations': all_solicitations
     })
 
 ## view to show all replied views
 def replied_rfq(request):
-    # Fetch all RFQ replies, ordered by the latest first
+    # Fetch all standard RFQ replies
     replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
-
+    
+    # Fetch all individual item replies and get their unique RFQ IDs
+    item_replies = RFQItemReply.objects.filter(rfq__created_by=request.user)
+    
+    # Get RFQ IDs that have item replies but no standard reply
+    rfq_ids_with_item_replies = item_replies.values_list('rfq', flat=True).distinct()
+    
+    # Check which RFQs have item replies but no standard reply
+    for rfq_id in rfq_ids_with_item_replies:
+        if not replied_rfq_queryset.filter(rfq_id=rfq_id).exists():
+            # Get the RFQ object
+            rfq = RFQ.objects.get(id=rfq_id)
+            
+            # Count how many item replies this RFQ has
+            item_count = RFQItemReply.objects.filter(rfq=rfq, rfq_creator=request.user).count()
+            
+            # Set appropriate note based on item count
+            if item_count > 1:
+                note = f'Consolidated reply for {item_count} items'
+                delivery_mode = 'Mixed'
+            else:
+                # Get the single item reply
+                item_reply = RFQItemReply.objects.filter(rfq=rfq, rfq_creator=request.user).first()
+                if item_reply:
+                    note = f'Reply for {item_reply.solicitation.nomenclature}'
+                    delivery_mode = item_reply.delivery_mode
+                else:
+                    note = 'Standard reply'
+                    delivery_mode = 'Standard'
+            
+            # Calculate total price from item replies
+            total_price = RFQItemReply.objects.filter(rfq=rfq, rfq_creator=request.user).aggregate(Sum('price'))['price__sum'] or 0
+            
+            # Create and save a real RFQReply object
+            RFQReply.objects.create(
+                rfq=rfq,
+                rfq_creator=request.user,
+                price=total_price,
+                delivery_mode=delivery_mode,
+                short_note=note,
+                is_viewed=False
+            )
+    
+    # After creating any missing records, fetch the complete list again
+    replied_rfq_queryset = RFQReply.objects.filter(rfq__created_by=request.user).order_by('-id')
+    
     # Count all RFQs (total number of replies)
-    total_replied_rfq = replied_rfq_queryset.filter(rfq__created_by=request.user).count()
-
+    total_replied_rfq = replied_rfq_queryset.count()
+    
     # Set up the paginator, 25 replies per page
     paginator = Paginator(replied_rfq_queryset, 25)
     page = request.GET.get('page')
-
     # Get the current page of replies
     rfq = paginator.get_page(page)
-
+    
     # Fetch all RFQs
     sent_rfqs = RFQ.objects.filter(created_by=request.user)
-
     # Count all RFQs
-    total_sent_rfqs = sent_rfqs.filter(created_by = request.user).count()
-
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-
-    # Pass the paginated replies and total count to the template
+    total_sent_rfqs = sent_rfqs.filter(created_by=request.user).count()
+    
+    ## unviewed replies
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    
     context = {
         'total_replied_rfq': total_replied_rfq,
         'rfq': rfq,
-        'total_sent_rfqs': total_sent_rfqs,'replied_rfq':replied_rfq
+        'total_sent_rfqs': total_sent_rfqs,
+        'replied_rfq': replied_rfq
     }
     return render(request, 'solicitations/procurements/replied_rfq.html', context)
 
@@ -488,17 +617,29 @@ def replied_rfq(request):
 def replied_rfq_detail(request, rfq):
     # Retrieve the RFQReply object or return a 404 error if it doesn't exist
     rfq_instance = get_object_or_404(RFQReply, pk=rfq)
-
     ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    
+    # Check if this is a consolidated RFQ with multiple item replies
+    rfq_item_replies = RFQItemReply.objects.filter(rfq=rfq_instance.rfq, rfq_creator=request.user)
+    is_consolidated = rfq_item_replies.count() > 1  # Only if there are multiple items
     
     # Toggle the is_viewed field to True
     if not rfq_instance.is_viewed:  # Update only if it's not already True
         rfq_instance.is_viewed = True
         rfq_instance.save()
-
+        
+        # Also mark any related item replies as viewed
+        if rfq_item_replies.exists():
+            rfq_item_replies.update(is_viewed=True)
+    
     # Pass the RFQReply object to the template
-    context = {'rfq': rfq_instance,'replied_rfq':replied_rfq}
+    context = {
+        'rfq': rfq_instance,
+        'replied_rfq': replied_rfq,
+        'is_consolidated': is_consolidated,
+        'rfq_item_replies': rfq_item_replies
+    }
     return render(request, 'solicitations/procurements/replied_rfq_detail.html', context)
 
 #view to search for Replied RFQS

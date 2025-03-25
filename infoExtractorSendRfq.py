@@ -27,7 +27,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
 django.setup()
 
 from django.conf import settings
-from solicitations.models import Solicitation, OEM, RFQ, OEMUser, UserOEMCustomization
+from solicitations.models import RFQItem, Solicitation, OEM, RFQ, OEMUser, UserOEMCustomization
 from accounts.models import CustomUser
 from django.utils.timezone import now
 from django.db import IntegrityError
@@ -351,6 +351,39 @@ def create_rfq(solicitation, oem, created_by):
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
 
+def create_consolidated_rfq(solicitations, oem, created_by):
+    """
+    Creates a single RFQ entry for multiple solicitations with the same CAGE code.
+    """
+    try:
+        # Generate a unique ID for the RFQ
+        unique_id = generate_unique_id(oem)
+        print(f"Generated consolidated unique_id is {unique_id}")
+        
+        # Use the first solicitation as the primary one
+        primary_solicitation = solicitations[0]
+        
+        # Create the RFQ
+        rfq = RFQ.objects.create(
+            solicitation=primary_solicitation,
+            oem=oem,
+            created_by=created_by,
+            unique_id=unique_id
+        )
+        
+        # Link all solicitations to this RFQ
+        for solicitation in solicitations:
+            RFQItem.objects.create(
+                rfq=rfq,
+                solicitation=solicitation
+            )
+        
+        print(f"Consolidated RFQ created successfully: {rfq} with {len(solicitations)} items")
+        return rfq
+    except Exception as e:
+        print(f"Error creating consolidated RFQ: {e}")
+        return None
+
 ## Function to save data to OEM Model
 def save_oem_data(cage_code, organization_name, street_name, city_name, postal_code, phone, fax, email):
     try:
@@ -628,7 +661,7 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
     except Exception as e:
         print(f"Error preparing email: {e}")
 
-# Function to send a single email
+# Function to send a single email 
 def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data, rfq_unique_id, sent_at, part_number,
              organization_name, cage, fax, phone, email):
     # Validate email address before proceeding
@@ -720,6 +753,7 @@ auto_mode = False
 if 'data' in globals():
     auto_mode = data.get("auto_mode", False)
 
+
 # Main processing logic
 if auto_mode:
     print("Running in auto mode - will consolidate emails for same CAGE codes")
@@ -744,7 +778,7 @@ if auto_mode:
                 existing_oem = OEM.objects.get(cage=cage_code)
                 print(f"OEM with CAGE code {cage_code} found in database")
                 
-                # Check if the OEM data is incomplete - if it's missing essential fields, extract from website
+                # Check if the OEM data is incomplete
                 if not existing_oem.name or not existing_oem.street or not existing_oem.city or not existing_oem.email:
                     print(f"OEM data is incomplete for {cage_code}, extracting full data from website")
                     oem_data = extract_oem_data(cage_code)
@@ -758,7 +792,7 @@ if auto_mode:
                 # Get the newly created OEM
                 existing_oem = OEM.objects.get(cage=cage_code)
             
-            # Determine which email to use
+            # Determine which email to use (keep your existing email determination code)
             email_to_use = None
             try:
                 # Check if there's a user customization for this OEM
@@ -791,18 +825,15 @@ if auto_mode:
                     email_to_use = "williamdemo01@gmail.com"  # Default email
                     print(f"OEM email is empty, using default email: {email_to_use}")
             
-            # Create RFQs for each record and prepare items for consolidated email
-            items_for_email = []
+            # Collect solicitation objects
+            solicitation_objects = []
             for record in records:
                 # Get data from the record
                 nomenclature = record['nomenclature']
                 quantity = record['quantity']
-                return_by_date = record['return_by_date']
-                nsn = record['NSN']
-                part_number = record['part_number']
                 record_id = record['id']
                 
-                # Retrieve or create the Solicitation object using the unique record ID
+                # Retrieve or create the Solicitation object
                 solicitation, created = Solicitation.objects.get_or_create(
                     id=record_id,
                     defaults={'nomenclature': nomenclature, 'quantity': quantity}
@@ -813,19 +844,51 @@ if auto_mode:
                 else:
                     print(f"Solicitation retrieved for item: {nomenclature}")
                 
-                # Create an RFQ for this solicitation
+                solicitation_objects.append(solicitation)
+            
+            # Different handling based on number of records
+            items_for_email = []
+            
+            # For multiple items with the same CAGE code, create one consolidated RFQ
+            if len(records) > 1:
+                print(f"Creating consolidated RFQ for {len(records)} items with CAGE code {cage_code}")
+                consolidated_rfq = create_consolidated_rfq(solicitation_objects, existing_oem, created_by=created_by_user)
+                
+                if consolidated_rfq:
+                    # Prepare items for the consolidated email
+                    for record in records:
+                        items_for_email.append({
+                            'nomenclature': record['nomenclature'],
+                            'quantity': record['quantity'],
+                            'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
+                            'NSN': record['NSN'] if record['NSN'] else "N/A",
+                            'part_number': record['part_number'] if record['part_number'] else "N/A",
+                            'rfq_unique_id': consolidated_rfq.unique_id  # Same RFQ ID for all
+                        })
+                else:
+                    print(f"Failed to create consolidated RFQ for CAGE code {cage_code}")
+                    
+            # For a single item with a unique CAGE code, create a separate RFQ
+            else:
+                print(f"Creating individual RFQ for CAGE code {cage_code}")
+                record = records[0]  # Only one record in this case
+                solicitation = solicitation_objects[0]  # Get the single solicitation object
+                
+                # Use your original create_rfq function for a single solicitation
                 rfq = create_rfq(solicitation, existing_oem, created_by=created_by_user)
                 
-                # Add item to the list for the consolidated email
                 if rfq:
+                    # Prepare a single item for the email
                     items_for_email.append({
-                        'nomenclature': nomenclature,
-                        'quantity': quantity,
-                        'return_by_date': return_by_date,
-                        'NSN': nsn,
-                        'part_number': part_number,
+                        'nomenclature': record['nomenclature'],
+                        'quantity': record['quantity'],
+                        'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
+                        'NSN': record['NSN'] if record['NSN'] else "N/A",
+                        'part_number': record['part_number'] if record['part_number'] else "N/A",
                         'rfq_unique_id': rfq.unique_id
                     })
+                else:
+                    print(f"Failed to create individual RFQ for CAGE code {cage_code}")
             
             # Only send email if we have items
             if items_for_email:
@@ -841,10 +904,10 @@ if auto_mode:
                     'email': existing_oem.email
                 }
                 
-                # Send the consolidated email
-                print(f"Sending consolidated email with {len(items_for_email)} items to {email_to_use}")
+                # Send the email (consolidated or individual)
+                print(f"Sending email with {len(items_for_email)} items to {email_to_use}")
                 send_consolidated_email(
-                    "williamdemo01@gmail.com", 
+                    "williamdemo01@gmail.com",  # email_to_use
                     items_for_email, 
                     user_data, 
                     oem_info, 
@@ -858,6 +921,8 @@ if auto_mode:
                 
         except Exception as e:
             print(f"Error processing CAGE Code group {cage_code}: {e}")
+            import traceback
+            traceback.print_exc()  # This will give more detailed error information
             
 else:
     # Even in manual mode, consolidate emails for the same CAGE code
@@ -882,7 +947,7 @@ else:
                 existing_oem = OEM.objects.get(cage=cage_code)
                 print(f"OEM with CAGE code {cage_code} found in database")
                 
-                # Check if the OEM data is incomplete - if it's missing essential fields, extract from website
+                # Check if the OEM data is incomplete
                 if not existing_oem.name or not existing_oem.street or not existing_oem.city or not existing_oem.email:
                     print(f"OEM data is incomplete for {cage_code}, extracting full data from website")
                     oem_data = extract_oem_data(cage_code)
@@ -896,12 +961,12 @@ else:
                 # Get the newly created OEM
                 existing_oem = OEM.objects.get(cage=cage_code)
             
-            # Determine which email to use
+            # Determine which email to use (keep your existing email determination code)
             email_to_use = None
             try:
                 # Check if there's a user customization for this OEM
                 user_customization = UserOEMCustomization.objects.get(
-                    user=created_by_user,  # The current user processing the records
+                    user=created_by_user,
                     oem=existing_oem
                 )
                 
@@ -916,7 +981,7 @@ else:
                         print(f"No customized email found for user, using OEM email: {email_to_use}")
                     else:
                         # Neither customized nor OEM email is available, use default
-                        email_to_use = "williamdemo01@gmail.com"  # Your default email
+                        email_to_use = "williamdemo01@gmail.com"  # Default email
                         print(f"No valid email found, using default: {email_to_use}")
                 
             except UserOEMCustomization.DoesNotExist:
@@ -926,21 +991,18 @@ else:
                     print(f"No customization found for this OEM, using OEM email: {email_to_use}")
                 else:
                     # Use default email if OEM email is empty
-                    email_to_use = "williamdemo01@gmail.com"  # Your default email
+                    email_to_use = "williamdemo01@gmail.com"  # Default email
                     print(f"OEM email is empty, using default email: {email_to_use}")
             
-            # Create RFQs for each record and prepare items for consolidated email
-            items_for_email = []
+            # Collect solicitation objects
+            solicitation_objects = []
             for record in records:
                 # Get data from the record
                 nomenclature = record['nomenclature']
                 quantity = record['quantity']
-                return_by_date = record['return_by_date']
-                nsn = record['NSN']
-                part_number = record['part_number']
                 record_id = record['id']
                 
-                # Retrieve or create the Solicitation object using the unique record ID
+                # Retrieve or create the Solicitation object
                 solicitation, created = Solicitation.objects.get_or_create(
                     id=record_id,
                     defaults={'nomenclature': nomenclature, 'quantity': quantity}
@@ -951,19 +1013,51 @@ else:
                 else:
                     print(f"Solicitation retrieved for item: {nomenclature}")
                 
-                # Create an RFQ for this solicitation
+                solicitation_objects.append(solicitation)
+            
+            # Different handling based on number of records
+            items_for_email = []
+            
+            # For multiple items with the same CAGE code, create one consolidated RFQ
+            if len(records) > 1:
+                print(f"Creating consolidated RFQ for {len(records)} items with CAGE code {cage_code}")
+                consolidated_rfq = create_consolidated_rfq(solicitation_objects, existing_oem, created_by=created_by_user)
+                
+                if consolidated_rfq:
+                    # Prepare items for the consolidated email
+                    for record in records:
+                        items_for_email.append({
+                            'nomenclature': record['nomenclature'],
+                            'quantity': record['quantity'],
+                            'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
+                            'NSN': record['NSN'] if record['NSN'] else "N/A",
+                            'part_number': record['part_number'] if record['part_number'] else "N/A",
+                            'rfq_unique_id': consolidated_rfq.unique_id  # Same RFQ ID for all
+                        })
+                else:
+                    print(f"Failed to create consolidated RFQ for CAGE code {cage_code}")
+                    
+            # For a single item with a unique CAGE code, create a separate RFQ
+            else:
+                print(f"Creating individual RFQ for CAGE code {cage_code}")
+                record = records[0]  # Only one record in this case
+                solicitation = solicitation_objects[0]  # Get the single solicitation object
+                
+                # Use your original create_rfq function for a single solicitation
                 rfq = create_rfq(solicitation, existing_oem, created_by=created_by_user)
                 
-                # Add item to the list for the consolidated email
                 if rfq:
+                    # Prepare a single item for the email
                     items_for_email.append({
-                        'nomenclature': nomenclature,
-                        'quantity': quantity,
-                        'return_by_date': return_by_date,
-                        'NSN': nsn,
-                        'part_number': part_number,
+                        'nomenclature': record['nomenclature'],
+                        'quantity': record['quantity'],
+                        'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
+                        'NSN': record['NSN'] if record['NSN'] else "N/A",
+                        'part_number': record['part_number'] if record['part_number'] else "N/A",
                         'rfq_unique_id': rfq.unique_id
                     })
+                else:
+                    print(f"Failed to create individual RFQ for CAGE code {cage_code}")
             
             # Only send email if we have items
             if items_for_email:
@@ -979,10 +1073,10 @@ else:
                     'email': existing_oem.email
                 }
                 
-                # Send the consolidated email
-                print(f"Sending consolidated email with {len(items_for_email)} items to {email_to_use}")
+                # Send the email (consolidated or individual)
+                print(f"Sending email with {len(items_for_email)} items to {email_to_use}")
                 send_consolidated_email(
-                    "williamdemo01@gmail.com", 
+                    "williamdemo01@gmail.com",  # email_to_use
                     items_for_email, 
                     user_data, 
                     oem_info, 
@@ -996,7 +1090,8 @@ else:
                 
         except Exception as e:
             print(f"Error processing CAGE Code group {cage_code}: {e}")
-            time.sleep(5)
+            import traceback
+            traceback.print_exc()  # This will give more detailed error information
 
 print("Processing complete!")
 driver.quit()

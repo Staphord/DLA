@@ -18,6 +18,7 @@
         </div>
     </div>
 
+    <!-- OEM Data Section - No change needed -->
     <div class="">
         <div class="">
             OEM Data..
@@ -62,41 +63,86 @@
         </div>
     </div>
 
-    <div class="my-2">
-        <div class="">
-            Solicitation Data..
-        </div>
-        <div class="mt-2">
-            <div class="card">
-                <div class="card-body my-3">
-                    <div class="row my-2">
-                        <div class="col-md-4">
-                            Cage Code: {{rfq.solicitation.cage}}
-                        </div>
-                        <div class="col-md-4">
-                            Nomenclature: {{rfq.solicitation.nomenclature|title}}
-                        </div>
-                        <div class="col-md-4">
-                            Quantity: {{rfq.solicitation.quantity}}
-                        </div>
+    <!-- Solicitation Data Section -->
+<div class="my-2">
+    <div class="">
+        {% if is_consolidated %}
+        Solicitations Data ({{ total_item_count }} items)..
+        {% else %}
+        Solicitation Data..
+        {% endif %}
+    </div>
+    <div class="mt-2">
+        <!-- Primary solicitation info (always shown) -->
+        <div class="card mb-3">
+            <div class="card-body my-3">
+                <h5 class="card-title">Item 1</h5>
+                <div class="row my-2">
+                    <div class="col-md-4">
+                        Cage Code: {{rfq.solicitation.cage}}
                     </div>
-                    <hr>
-                    <div class="row my-2">
-                        <div class="col-md-4">
-                            Return By: {{rfq.solicitation.return_by_date}}
-                        </div>
-                        <div class="col-md-4">
-                            NSN: {{rfq.solicitation.NSN}}
-                        </div>
+                    <div class="col-md-4">
+                        Nomenclature: {{rfq.solicitation.nomenclature|title}}
+                    </div>
+                    <div class="col-md-4">
+                        Quantity: {{rfq.solicitation.quantity}}
+                    </div>
+                </div>
+                <hr>
+                <div class="row my-2">
+                    <div class="col-md-4">
+                        Return By: {{rfq.solicitation.return_by_date}}
+                    </div>
+                    <div class="col-md-4">
+                        NSN: {{rfq.solicitation.NSN}}
+                    </div>
+                    <div class="col-md-4">
+                        Part Number: {{rfq.solicitation.part_number}}
                     </div>
                 </div>
             </div>
         </div>
+        
+        <!-- Additional solicitations for consolidated RFQs -->
+        {% if is_consolidated %}
+            {% for solicitation in all_solicitations %}
+                {% if solicitation.id != rfq.solicitation.id %}
+                <div class="card mb-3">
+                    <div class="card-body my-3">
+                        <h5 class="card-title">Item {{ forloop.counter }}</h5>
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Cage Code: {{solicitation.cage}}
+                            </div>
+                            <div class="col-md-4">
+                                Nomenclature: {{solicitation.nomenclature|title}}
+                            </div>
+                            <div class="col-md-4">
+                                Quantity: {{solicitation.quantity}}
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Return By: {{solicitation.return_by_date}}
+                            </div>
+                            <div class="col-md-4">
+                                NSN: {{solicitation.NSN}}
+                            </div>
+                            <div class="col-md-4">
+                                Part Number: {{solicitation.part_number}}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
     </div>
-
+</div>
 </section>
 
-<!-- Modal -->
+<!-- Delete Modal - No change needed -->
 <div class="modal fade" id="deleteModal-{{rfq.id}}" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -105,7 +151,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          Are you sure you want to delete this RFQ? Rember this task can not be reversed.
+          Are you sure you want to delete this RFQ? Remember this task cannot be reversed.
         </div>
         <div class="modal-footer">
           <button type="button" class="btn mybg hoverbg text-white" data-bs-dismiss="modal">Cancel</button>
@@ -113,6 +159,6 @@
         </div>
       </div>
     </div>
-  </div>
+</div>
 
 {% endblock content %}

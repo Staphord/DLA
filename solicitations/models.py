@@ -199,3 +199,29 @@ class RFQItem(models.Model):
     
     def __str__(self):
         return f"Item in {self.rfq.unique_id}: {self.solicitation.nomenclature}"
+
+### This model will handle RFQ having multiple items
+class RFQItemReply(models.Model):
+    rfq = models.ForeignKey(RFQ, on_delete=models.CASCADE, related_name='item_replies')
+    solicitation = models.ForeignKey(Solicitation, on_delete=models.CASCADE, related_name='rfq_item_replies')
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    delivery_mode = models.CharField(
+        max_length=5,
+        choices=[('Free', 'Free'), ('Paid', 'Paid')]
+    )
+    created_at = models.DateField(auto_now_add=True)
+    short_note = models.TextField(max_length=1000, blank=True, null=True)
+    document = models.FileField(upload_to='replies/item_documents/', blank=True, null=True)
+    rfq_creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='rfq_item_replies',
+        editable=False
+    )
+    is_viewed = models.BooleanField(default=False)
+    
+    class Meta:
+        unique_together = ['rfq', 'solicitation', 'rfq_creator']
+        
+    def __str__(self):
+        return f"Reply for item {self.solicitation.nomenclature} in RFQ-{self.rfq.unique_id}"
