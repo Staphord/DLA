@@ -2,6 +2,8 @@ import datetime
 from django.db import models
 from django.conf import settings
 from accounts.models import CustomUser
+from django.utils import timezone
+
 
 
 ### This model store solicitations data
@@ -225,3 +227,81 @@ class RFQItemReply(models.Model):
         
     def __str__(self):
         return f"Reply for item {self.solicitation.nomenclature} in RFQ-{self.rfq.unique_id}"
+    
+class RFQChat(models.Model):
+    """
+    Model to represent a chat conversation related to a specific RFQ
+    """
+    rfq = models.OneToOneField('RFQ', on_delete=models.CASCADE, related_name='chat')
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_activity = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    
+    def __str__(self):
+        return f"Chat for RFQ-{self.rfq.unique_id}"
+    
+    def get_supplier(self):
+        """
+        Returns the first user associated with the OEM (supplier)
+        """
+        return self.rfq.oem.users.first()
+    
+    def get_vendor(self):
+        """
+        Returns the vendor (RFQ creator)
+        """
+        return self.rfq.created_by
+    
+    def get_unread_count_for_user(self, user):
+        """
+        Returns the count of unread messages for a specific user
+        """
+        return self.messages.filter(is_read=False).exclude(sender=user).count()
+
+class RFQChatMessage(models.Model):
+    """
+    Model to store individual messages in an RFQ chat
+    """
+    chat = models.ForeignKey(RFQChat, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_chat_messages')
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    # For attachments (optional)
+    attachment = models.FileField(upload_to='chat/attachments/', null=True, blank=True)
+    attachment_name = models.CharField(max_length=255, null=True, blank=True)
+    
+    class Meta:
+        ordering = ['timestamp']
+    
+    def __str__(self):
+        return f"Message from {self.sender.username} at {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+    
+    def mark_as_read(self):
+        """
+        Mark this message as read
+        """
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save()
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save method to handle email notifications
+        """
+        # Check if this is a new message (not yet saved)
+        is_new = self.pk is None
+        
+        # Save the message
+        super().save(*args, **kwargs)
+        
+        # Send email notification if this is a new message
+        if is_new:
+            # Determine the recipient
+            if self.sender == self.chat.get_vendor():
+                recipient = self.chat.get_supplier()
+            else:
+                recipient = self.chat.get_vendor()

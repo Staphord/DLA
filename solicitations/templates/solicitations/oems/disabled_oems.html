@@ -42,20 +42,20 @@
                     </thead>
                     <tbody>
                         {% for oem in disabled %}
-                        <tr>
+                        <tr onclick="location.href='{% url 'solicitations:oem-detail' oem.oem.id %}';">
                             <td>{{oem.oem.cage}}</td>
                             <td>{{oem.oem.name|title}}</td>
                             <td>{{oem.oem.city|title}}</td>
                             <td>{{oem.oem.phone}}</td>
                             <td>
                                 <div class="dropdown text-center">
-                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
                                     <i class="bi bi-caret-down-fill"></i>
                                 </a>
                               
                                 <ul class="dropdown-menu">
                                   <li><a class="dropdown-item" href="{% url 'solicitations:oem-detail' oem.oem.id %}">View More</a></li>
-                                  <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#enableOem-{{oem.id}}">Enable</a></li>
+                                  <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#enableOem-{{oem.id}}" onclick="event.stopPropagation();">Enable</a></li>
                                 </ul>
                               </div>
                             </td>

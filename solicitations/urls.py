@@ -52,4 +52,11 @@ urlpatterns = [
     #################### CRON URLS  ##########################
     path("workflow/", views.update_github_workflow, name="workflow"),
 
+    #################### CHAT URLS  ##########################
+    path('rfq/<str:rfq_id>/chat/', views.rfq_chat_detail, name='rfq_chat_detail'),
+    path('rfq/<str:rfq_id>/chat/send-message/', views.send_chat_message_ajax, name='send_chat_message_ajax'),
+    path('rfq/<str:rfq_id>/chat/new-messages/', views.get_new_messages_ajax, name='get_new_messages_ajax'),
+    path('my-chats/', views.rfq_chats_list, name='rfq_chats_list'),
+    path('public/rfq/<str:rfq_id>/chat/<str:access_token>/', views.public_rfq_chat, name='public_rfq_chat'),
+
 ]

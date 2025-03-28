@@ -1,0 +1,84 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+
+{% block content %}
+<div class="container mt-4">
+    <h1>My RFQ Chats</h1>
+    
+    <ul class="nav nav-tabs mb-4" id="chatTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="vendor-tab" data-bs-toggle="tab" data-bs-target="#vendor-chats" type="button" role="tab" aria-controls="vendor-chats" aria-selected="true">
+                As Vendor
+                {% if vendor_chats %}
+                    <span class="badge bg-danger ms-2">{{ vendor_chats|length }}</span>
+                {% endif %}
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="supplier-tab" data-bs-toggle="tab" data-bs-target="#supplier-chats" type="button" role="tab" aria-controls="supplier-chats" aria-selected="false">
+                As Supplier
+                {% if supplier_chats %}
+                    <span class="badge bg-danger ms-2">{{ supplier_chats|length }}</span>
+                {% endif %}
+            </button>
+        </li>
+    </ul>
+    
+    <div class="tab-content" id="chatTabsContent">
+        <!-- Vendor Chats -->
+        <div class="tab-pane fade show active" id="vendor-chats" role="tabpanel" aria-labelledby="vendor-tab">
+            {% if vendor_chats %}
+                <div class="list-group">
+                    {% for chat in vendor_chats %}
+                        <a href="{% url 'solicitations:rfq_chat_detail' chat.rfq.unique_id %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">RFQ-{{ chat.rfq.unique_id }}: {{ chat.rfq.solicitation.nomenclature }}</h5>
+                                <p class="mb-1">
+                                    <strong>Supplier:</strong> {{ chat.rfq.oem.name }}
+                                    <br>
+                                    <small class="text-muted">Last activity: {{ chat.last_activity|date:"M d, Y H:i" }}</small>
+                                </p>
+                            </div>
+                            {% if chat.unread_count %}
+                                <span class="badge bg-primary rounded-pill">{{ chat.unread_count }} new</span>
+                            {% endif %}
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    You don't have any active chats as a vendor.
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Supplier Chats -->
+        <div class="tab-pane fade" id="supplier-chats" role="tabpanel" aria-labelledby="supplier-tab">
+            {% if supplier_chats %}
+                <div class="list-group">
+                    {% for chat in supplier_chats %}
+                        <a href="{% url 'solicitations:rfq_chat_detail' chat.rfq.unique_id %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">RFQ-{{ chat.rfq.unique_id }}: {{ chat.rfq.solicitation.nomenclature }}</h5>
+                                <p class="mb-1">
+                                    <strong>Vendor:</strong> {{ chat.rfq.created_by.get_full_name|default:chat.rfq.created_by.username }}
+                                    <br>
+                                    <small class="text-muted">Last activity: {{ chat.last_activity|date:"M d, Y H:i" }}</small>
+                                </p>
+                            </div>
+                            {% if chat.unread_count %}
+                                <span class="badge bg-primary rounded-pill">{{ chat.unread_count }} new</span>
+                            {% endif %}
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    You don't have any active chats as a supplier.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

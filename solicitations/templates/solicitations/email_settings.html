@@ -11,16 +11,11 @@
                         <h4 class="text-white mb-0">Email Automation Settings</h4>
                     </div>
                     <div class="card-body">
-                        <form method="post">
+                        
+                        <!-- Settings Form -->
+                        <form method="post" id="settingsForm">
                             {% csrf_token %}
-                            
-                            <!-- Auto Send Toggle -->
-                            <div class="form-group mb-4">
-                                <div class="form-check form-switch d-flex justify-content-end my-3 fs-3">
-                                    {{ form.auto_send }}
-                                    </label>
-                                </div>
-                            </div>
+                            {{ form.auto_send }}
                             
                             <!-- Schedule Settings -->
                             <div id="schedule-settings" class="card p-3 bg-light mb-4">
@@ -30,13 +25,11 @@
                                     <div class="col-md-6">
                                         <label for="{{ form.send_day.id_for_label }}" class="form-label">Frequency:</label>
                                         {{ form.send_day }}
-                                        <div class="form-text">{{ form.send_day.help_text }}</div>
                                     </div>
                                     
                                     <div class="col-md-6">
                                         <label for="{{ form.send_time.id_for_label }}" class="form-label">Time:</label>
                                         {{ form.send_time }}
-                                        <div class="form-text">Select the time when emails should be sent</div>
                                     </div>
                                 </div>
                                 
@@ -49,10 +42,26 @@
                                 </div>
                             </div>
                             
+                            <!-- Current Status Display -->
+                            <div class="mb-3">
+                                <span class="fw-bold me-2">Current Status:</span>
+                                {% if is_enabled %}
+                                <span class="badge bg-success">Enabled</span>
+                                {% else %}
+                                <span class="badge bg-danger">Disabled</span>
+                                {% endif %}
+                            </div>
+                            
                             <!-- Action Buttons -->
                             <div class="d-flex justify-content-between">
                                 <a href="{% url 'solicitations:solicitations' %}" class="btn btn-secondary">Cancel</a>
-                                <button type="submit" class="btn mybg btn-warning text-white">Save Settings</button>
+                                <button type="submit" class="btn {% if is_enabled %}btn-danger{% else %}btn-success{% endif %}">
+                                    {% if is_enabled %}
+                                    <i class="fas fa-power-off"></i> Disable Automation
+                                    {% else %}
+                                    <i class="fas fa-power-on"></i> Enable Automation
+                                    {% endif %}
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -64,21 +73,9 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const autoSendToggle = document.getElementById('{{ form.auto_send.id_for_label }}');
-        const scheduleSettings = document.getElementById('schedule-settings');
         const daySelect = document.getElementById('{{ form.send_day.id_for_label }}');
         const timeInput = document.getElementById('{{ form.send_time.id_for_label }}');
         const schedulePreview = document.getElementById('schedulePreview');
-        
-        // Toggle schedule settings visibility based on auto_send value
-        function toggleScheduleSettings() {
-            if (autoSendToggle.checked) {
-                scheduleSettings.style.display = 'block';
-                updateSchedulePreview();
-            } else {
-                scheduleSettings.style.display = 'block';
-            }
-        }
         
         // Update schedule preview
         function updateSchedulePreview() {
@@ -92,12 +89,10 @@
             }
         }
 
-        
-        // Set initial state
-        toggleScheduleSettings();
+        // Initialize the preview
+        updateSchedulePreview();
         
         // Add event listeners
-        autoSendToggle.addEventListener('change', toggleScheduleSettings);
         daySelect.addEventListener('change', updateSchedulePreview);
         timeInput.addEventListener('change', updateSchedulePreview);
     });

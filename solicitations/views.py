@@ -5,19 +5,20 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser
-from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQItem, RFQItemReply, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
+from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQChat, RFQChatMessage, RFQItem, RFQItemReply, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
 from django.contrib import messages
 import subprocess
 from . forms import EmailSettingsForm, LogoUpdateForm, RFQItemReplyForm, UserOEMCustomizationForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.template.loader import render_to_string
+from django.urls import reverse
 from datetime import datetime
 from git import Repo
 from ruamel.yaml import YAML
 from django.db.models import Sum
-
-# Create your views here.
+from django.core.signing import Signer, BadSignature
+import base64
 
 ## path to yaml file
 WORKFLOW_FILE_PATH = r"C:\Users\Staphord Bengesi\Desktop\DLA\.github\workflows\extract_data.yml"
@@ -257,33 +258,55 @@ def email_settings(request):
     settings, created = EmailSettings.objects.get_or_create(user=request.user)
     
     if request.method == 'POST':
+        # Process the form data
         form = EmailSettingsForm(request.POST, instance=settings)
         if form.is_valid():
-            form.save()
+            # Toggle the auto_send status (opposite of current)
+            settings = form.save(commit=False)
+            settings.auto_send = not settings.auto_send
+            settings.save()
             
-            # Create a nice message with the schedule details
-            schedule_info = ""
-            if form.cleaned_data['auto_send']:
-                day_display = dict(EmailSettings.DAY_CHOICES)[form.cleaned_data['send_day']]
-                time_display = form.cleaned_data['send_time'].strftime('%I:%M %p')
+            # Create appropriate message
+            status_msg = "enabled" if settings.auto_send else "disabled"
+            
+            if settings.auto_send:
+                # Include schedule details in message only when enabling
+                day_display = dict(EmailSettings.DAY_CHOICES)[settings.send_day]
+                time_display = settings.send_time.strftime('%I:%M %p')
                 schedule_info = f" ({day_display} at {time_display})"
-            
-            messages.success(request, f"Email settings updated successfully{schedule_info}")
+                messages.success(request, f"Email automation has been {status_msg}{schedule_info}")
+            else:
+                messages.success(request, f"Email automation has been {status_msg}")
+                
             return redirect('solicitations:solicitations')
     else:
         form = EmailSettingsForm(instance=settings)
         
-    return render(request, 'solicitations/email_settings.html', {'form': form})
+    return render(request, 'solicitations/email_settings.html', {
+        'form': form, 
+        'is_enabled': settings.auto_send
+    })
 #######################  CLIENT RELATED VIEWS  #########################
 
 ## view to show all clients
 def clients(request):
-    clients = CustomUser.objects.exclude(is_superuser=True).filter(user_type = 'client')
+    # Get all clients who are not superusers and have non-empty first_name AND last_name
+    clients = CustomUser.objects.exclude(is_superuser=True)\
+                               .filter(user_type='client')\
+                               .exclude(Q(first_name='') | Q(first_name=None) | Q(last_name='') | Q(last_name=None))
+    
     total_clients = clients.count()
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator = request.user, is_viewed = False)
-    context = {"clients":clients,'total_clients':total_clients,'replied_rfq':replied_rfq}
-    return render(request,'solicitations/clients/clients.html',context)
+    
+    # Get replied RFQs
+    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    
+    context = {
+        "clients": clients,
+        'total_clients': total_clients,
+        'replied_rfq': replied_rfq
+    }
+    
+    return render(request, 'solicitations/clients/clients.html', context)
 
 ## view add clients
 def add_client(request):
@@ -1087,5 +1110,549 @@ def commit_and_push_changes():
     repo.git.add(WORKFLOW_FILE_PATH)
     repo.index.commit("Updated GitHub Actions cron schedule")
     repo.remote("origin").push()
+
+################ CHAT VIEWS  #######################################
+
+def send_chat_notification_email(message):
+    """
+    Send an email notification about a new chat message to the recipient
+    
+    Args:
+        message: RFQChatMessage instance
+    """
+    
+    print("Starting email function")
+    
+    # Determine the recipient
+    if message.sender == message.chat.rfq.created_by:
+        # Sender is the vendor, recipient is the supplier (OEM)
+        
+        # First, check if there's a customization for this OEM and sender
+        customization = UserOEMCustomization.objects.filter(
+            user=message.sender,
+            oem=message.chat.rfq.oem
+        ).first()
+        
+        if customization and customization.custom_email:
+            # Use the customized email if available
+            recipient_email = customization.custom_email
+            recipient_name = customization.custom_name or message.chat.rfq.oem.name
+            print(f"Using customized OEM email: {recipient_name} ({recipient_email})")
+        else:
+            # Fall back to the OEM's default email
+            recipient_email = message.chat.rfq.oem.email
+            recipient_name = message.chat.rfq.oem.name
+            print(f"Using default OEM email: {recipient_name} ({recipient_email})")
+    else:
+        # Sender is the supplier, recipient is the vendor
+        recipient = message.chat.rfq.created_by
+        recipient_email = recipient.email
+        recipient_name = recipient.get_full_name() or recipient.username
+        print(f"Recipient is Vendor: {recipient_name} ({recipient_email})")
+    
+    # Get chat URL
+    chat_url = settings.BASE_URL + reverse('solicitations:rfq_chat_detail', kwargs={'rfq_id': message.chat.rfq.unique_id})
+    print(f"Generated chat URL: {chat_url}")
+    
+    # Get message preview (truncate if too long)
+    message_preview = message.content[:100] + ('...' if len(message.content) > 100 else '')
+    
+    # Get sender name
+    sender_name = message.sender.get_full_name() or message.sender.username
+    
+    # Prepare email context
+    context = {
+        'recipient_name': recipient_name,
+        'sender_name': sender_name,
+        'rfq_id': message.chat.rfq.unique_id,
+        'rfq_nomenclature': message.chat.rfq.solicitation.nomenclature,
+        'message_preview': message_preview,
+        'chat_url': chat_url,
+        'company_name': 'Your Company Name',  
+    }
+    
+    # Render email templates
+    subject = f"New message regarding RFQ-{message.chat.rfq.unique_id}"
+    
+    try:
+        html_message = render_to_string('solicitations/emails/vendor_notification.html', context)
+        plain_message = render_to_string('solicitations/emails/vendor_notification.txt', context)
+        
+        print(f"Attempting to send email to: {recipient_email}")
+        
+        # Send the email
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient_email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        print("Email sent successfully")
+        return True
+    except Exception as e:
+        # Log the error but don't crash the application
+        print(f"Error sending notification email: {e}")
+        return False
+    
+
+def rfq_chat_detail(request, rfq_id):
+    """
+    View to display the chat interface for a specific RFQ
+    """
+    # Get the RFQ instance
+    rfq = get_object_or_404(RFQ, unique_id=rfq_id)
+    
+    # Check if the user has permission to view this chat
+    # User must be either the vendor (RFQ creator) or the supplier (OEM user)
+    is_vendor = request.user == rfq.created_by
+    is_supplier = request.user in rfq.oem.users.all()
+    
+    if not (is_vendor or is_supplier):
+        return HttpResponseForbidden("You don't have permission to access this chat.")
+    
+    # Get the associated RFQ reply for the back button
+    rfq_reply = None
+    if is_supplier:
+        rfq_reply = RFQReply.objects.filter(rfq=rfq, rfq_creator=request.user).first()
+    else:  # is_vendor
+        rfq_reply = RFQReply.objects.filter(rfq=rfq).first()
+    
+    # Get or create the chat for this RFQ
+    chat, created = RFQChat.objects.get_or_create(rfq=rfq)
+    
+    # Mark all unread messages as read
+    unread_messages = chat.messages.filter(is_read=False).exclude(sender=request.user)
+    for message in unread_messages:
+        message.mark_as_read()
+    
+    # If the user submitted a new message
+    if request.method == 'POST':
+        message_content = request.POST.get('message')
+        attachment = request.FILES.get('attachment')
+        
+        if message_content or attachment:
+            # Create the new message
+            new_message = RFQChatMessage.objects.create(
+                chat=chat,
+                sender=request.user,
+                content=message_content or '',
+                attachment=attachment,
+                attachment_name=attachment.name if attachment else None
+            )
+            
+            # Send email notification
+            send_chat_notification_email(new_message)
+            
+            # Redirect to prevent form resubmission
+            return redirect('solicitations:rfq_chat_detail', rfq_id=rfq_id)
+        else:
+            messages.error(request, "Message cannot be empty.")
+    
+    # Get all messages for this chat
+    chat_messages = chat.messages.all()
+    
+    # Prepare context for the template
+    context = {
+        'rfq': rfq,
+        'chat': chat,
+        'chat_messages': chat_messages,
+        'is_vendor': is_vendor,
+        'is_supplier': is_supplier,
+        'rfq_reply': rfq_reply,
+    }
+    
+    return render(request, 'solicitations/chat/chat_detail.html', context)
+
+def send_chat_notification_email(message):
+    """
+    Send an email notification about a new chat message to the recipient
+    """
+    
+    try:
+        print("Starting email notification process")
+        
+        # Determine the recipient
+        if message.sender == message.chat.rfq.created_by:
+            # Sender is the vendor, recipient is the supplier (OEM)
+            print("Sender is the vendor, recipient is the supplier (OEM)")
+            
+            # First, check if there's a customization for this OEM and sender
+            customization = UserOEMCustomization.objects.filter(
+                user=message.sender,
+                oem=message.chat.rfq.oem
+            ).first()
+            
+            if customization and customization.custom_email:
+                # Use the customized email if available
+                recipient_email = customization.custom_email
+                recipient_name = customization.custom_name or message.chat.rfq.oem.name
+                print(f"Using customized email: {recipient_email}, name: {recipient_name}")
+            else:
+                # Fall back to the OEM's default email
+                recipient_email = message.chat.rfq.oem.email
+                recipient_name = message.chat.rfq.oem.name
+                print(f"Using OEM default email: {recipient_email}, name: {recipient_name}")
+                
+            # OEM recipients need the public chat URL with token
+            access_token = generate_oem_access_token(message.chat.rfq)
+            chat_url = settings.BASE_URL + reverse('solicitations:public_rfq_chat', 
+                                                 kwargs={
+                                                     'rfq_id': message.chat.rfq.unique_id, 
+                                                     'access_token': access_token
+                                                 })
+            print(f"Generated OEM chat URL: {chat_url}")
+        else:
+            # Sender is the supplier, recipient is the vendor
+            print("Sender is the supplier, recipient is the vendor")
+            recipient = message.chat.rfq.created_by
+            recipient_email = recipient.email
+            recipient_name = recipient.get_full_name() or recipient.username
+            print(f"Using vendor email: {recipient_email}, name: {recipient_name}")
+            
+            # Vendor recipients use the authenticated chat URL
+            chat_url = settings.BASE_URL + reverse('solicitations:rfq_chat_detail', 
+                                                 kwargs={'rfq_id': message.chat.rfq.unique_id})
+            print(f"Generated vendor chat URL: {chat_url}")
+        
+        # Validate recipient email
+        if not recipient_email or '@' not in recipient_email:
+            print(f"ERROR: Invalid recipient email: {recipient_email}")
+            return False
+            
+        # Log the recipient email for debugging
+        print(f"Sending notification email to: {recipient_email}")
+        
+        # Get message preview (truncate if too long)
+        message_preview = message.content[:100] + ('...' if len(message.content) > 100 else '')
+        print(f"Message preview: {message_preview}")
+        
+        # Get sender name
+        sender_name = message.sender.get_full_name() or message.sender.username
+        print(f"Sender name: {sender_name}")
+        
+        # Get RFQ details - handle multiple items
+        rfq = message.chat.rfq
+        
+        # Check if this RFQ has multiple items
+        rfq_items = RFQItem.objects.filter(rfq=rfq)
+        
+        if rfq_items.exists():
+            print(f"Found {rfq_items.count()} items for this RFQ")
+            # This RFQ has multiple items
+            items = []
+            for item in rfq_items:
+                solicitation = item.solicitation
+                items.append({
+                    'part_number': solicitation.part_number if hasattr(solicitation, 'part_number') else "N/A",
+                    'quantity': solicitation.quantity if hasattr(solicitation, 'quantity') else "N/A",
+                    'nomenclature': solicitation.nomenclature if hasattr(solicitation, 'nomenclature') else "N/A",
+                    'nsn': solicitation.NSN if hasattr(solicitation, 'NSN') else "N/A",
+                    'unit': solicitation.unit if hasattr(solicitation, 'unit') else "N/A"
+                })
+                print(f"Item added: {items[-1]}")
+        else:
+            # Single solicitation attached directly to RFQ
+            print("No RFQ items found, using the main solicitation")
+            solicitation = rfq.solicitation
+            items = [{
+                'part_number': solicitation.part_number if hasattr(solicitation, 'part_number') else "N/A",
+                'quantity': solicitation.quantity if hasattr(solicitation, 'quantity') else "N/A",
+                'nomenclature': solicitation.nomenclature if hasattr(solicitation, 'nomenclature') else "N/A",
+                'nsn': solicitation.NSN if hasattr(solicitation, 'NSN') else "N/A",
+                'unit': solicitation.unit if hasattr(solicitation, 'unit') else "N/A"
+            }]
+            print(f"Single item: {items[0]}")
+        
+        # Check email settings
+        print(f"Email settings check - FROM_EMAIL: {settings.DEFAULT_FROM_EMAIL}")
+        print(f"Email settings check - EMAIL_HOST: {settings.EMAIL_HOST}")
+        print(f"Email settings check - EMAIL_PORT: {settings.EMAIL_PORT}")
+        
+        # Prepare email context
+        context = {
+            'recipient_name': recipient_name,
+            'sender_name': sender_name,
+            'rfq_id': rfq.unique_id,
+            'rfq_nomenclature': rfq.solicitation.nomenclature,  # Primary solicitation nomenclature
+            'message_preview': message_preview,
+            'chat_url': chat_url,
+            'company_name': 'Your Company Name',
+            'items': items,  # Pass the list of items
+            # For backwards compatibility, include the first item's details directly
+            'part_number': items[0]['part_number'] if items else "N/A",
+            'quantity': items[0]['quantity'] if items else "N/A",
+        }
+        print("Email context prepared")
+        
+        # Render email templates
+        template_html = 'solicitations/emails/vendor_notification.html'
+        template_text = 'solicitations/emails/vendor_notification.txt'
+        
+        subject = f"New message regarding RFQ-{rfq.unique_id}"
+        print(f"Email subject: {subject}")
+        
+        try:
+            print(f"Attempting to render email templates: {template_html} and {template_text}")
+            html_message = render_to_string(template_html, context)
+            plain_message = render_to_string(template_text, context)
+            print("Email templates rendered successfully")
+            
+            # Send the email
+            print(f"Attempting to send email to {recipient_email}...")
+            result = send_mail(
+                subject=subject,
+                message=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[recipient_email],
+                html_message=html_message,
+                fail_silently=False,
+            )
+            
+            # Log the result
+            print(f"Email send attempt result: {result}")
+            return True
+            
+        except Exception as e:
+            print(f"ERROR: Email rendering/sending failed: {str(e)}")
+            import traceback
+            print(traceback.format_exc())  # Print full traceback
+            return False
+            
+    except Exception as e:
+        print(f"ERROR: General error in send_chat_notification_email: {str(e)}")
+        import traceback
+        print(traceback.format_exc())  # Print full traceback
+        return False
+
+def generate_oem_access_token(rfq):
+    """
+    Generate a secure access token for the OEM to access the chat
+    """
+    from django.core.signing import Signer
+    import base64
+    
+    # Create a unique token value based on the RFQ and OEM email
+    signer = Signer()
+    token_value = f"rfq_chat_{rfq.unique_id}_{rfq.oem.email}"
+    
+    # Sign the token
+    signed_token = signer.sign(token_value)
+    
+    # Base64 encode the token to make it URL-safe
+    encoded_token = base64.urlsafe_b64encode(signed_token.encode()).decode()
+    
+    return encoded_token
+
+def send_chat_message_ajax(request, rfq_id):
+    """
+    AJAX view to send a new chat message without reloading the page
+    """
+    # Get the RFQ instance
+    rfq = get_object_or_404(RFQ, unique_id=rfq_id)
+    
+    # Check permissions
+    is_vendor = request.user == rfq.created_by
+    is_supplier = request.user in rfq.oem.users.all()
+    
+    if not (is_vendor or is_supplier):
+        return JsonResponse({'status': 'error', 'message': 'Permission denied'}, status=403)
+    
+    # Get message content
+    message_content = request.POST.get('message')
+    attachment = request.FILES.get('attachment')
+    
+    if not message_content and not attachment:
+        return JsonResponse({'status': 'error', 'message': 'Message cannot be empty'}, status=400)
+    
+    # Get or create the chat
+    chat, created = RFQChat.objects.get_or_create(rfq=rfq)
+    
+    # Create the message
+    message = RFQChatMessage.objects.create(
+        chat=chat,
+        sender=request.user,
+        content=message_content or '',
+        attachment=attachment,
+        attachment_name=attachment.name if attachment else None
+    )
+    
+    # Send email notification
+    send_chat_notification_email(message)
+    
+    # Prepare the response data
+    message_data = {
+        'id': message.id,
+        'content': message.content,
+        'timestamp': message.timestamp.strftime('%Y-%m-%d %H:%M'),
+        'sender_name': request.user.get_full_name() or request.user.username,
+        'is_own_message': True,
+        'has_attachment': bool(message.attachment),
+        'attachment_url': message.attachment.url if message.attachment else None,
+        'attachment_name': message.attachment_name,
+    }
+    
+    return JsonResponse({'status': 'success', 'message': message_data})
+
+
+def get_new_messages_ajax(request, rfq_id):
+    """
+    AJAX view to get new messages without reloading the page
+    """
+    # Get the RFQ instance
+    rfq = get_object_or_404(RFQ, unique_id=rfq_id)
+    
+    # Check permissions
+    is_vendor = request.user == rfq.created_by
+    is_supplier = request.user in rfq.oem.users.all()
+    
+    if not (is_vendor or is_supplier):
+        return JsonResponse({'status': 'error', 'message': 'Permission denied'}, status=403)
+    
+    # Get the last message ID the client has
+    last_message_id = request.GET.get('last_message_id', 0)
+    
+    # Get or create the chat
+    chat, created = RFQChat.objects.get_or_create(rfq=rfq)
+    
+    # Get new messages
+    new_messages = chat.messages.filter(id__gt=last_message_id)
+    
+    # Mark messages as read if they're not from the current user
+    for message in new_messages:
+        if message.sender != request.user and not message.is_read:
+            message.mark_as_read()
+    
+    # Prepare message data for JSON response
+    messages_data = []
+    for message in new_messages:
+        messages_data.append({
+            'id': message.id,
+            'content': message.content,
+            'timestamp': message.timestamp.strftime('%Y-%m-%d %H:%M'),
+            'sender_name': message.sender.get_full_name() or message.sender.username,
+            'is_own_message': message.sender == request.user,
+            'has_attachment': bool(message.attachment),
+            'attachment_url': message.attachment.url if message.attachment else None,
+            'attachment_name': message.attachment_name,
+        })
+    
+    return JsonResponse({'status': 'success', 'messages': messages_data})
+
+
+def rfq_chats_list(request):
+    """
+    View to display a list of all active chats for the current user
+    """
+    # Get all RFQs where the user is either vendor or supplier
+    vendor_rfqs = RFQ.objects.filter(created_by=request.user)
+    supplier_rfqs = RFQ.objects.filter(oem__users=request.user)
+    
+    # Find RFQs with active chats
+    vendor_chats = RFQChat.objects.filter(rfq__in=vendor_rfqs, is_active=True)
+    supplier_chats = RFQChat.objects.filter(rfq__in=supplier_rfqs, is_active=True)
+    
+    # Count unread messages for each chat
+    for chat in list(vendor_chats) + list(supplier_chats):
+        chat.unread_count = chat.get_unread_count_for_user(request.user)
+    
+    context = {
+        'vendor_chats': vendor_chats,
+        'supplier_chats': supplier_chats,
+    }
+    
+    return render(request, 'solicitations/chat/chats_list.html', context)
+
+def public_rfq_chat(request, rfq_id, access_token):
+    """
+    Public view for OEMs without accounts to view and reply to chat messages
+    """
+    
+    # Get the RFQ instance
+    rfq = get_object_or_404(RFQ, unique_id=rfq_id)
+    
+    try:
+        # Decode the token from base64
+        decoded_token = base64.urlsafe_b64decode(access_token.encode()).decode()
+        
+        # Verify the token
+        signer = Signer()
+        verified_value = signer.unsign(decoded_token)
+        
+        # Check if the verified value matches what we expect
+        expected_value = f"rfq_chat_{rfq_id}_{rfq.oem.email}"
+        if verified_value != expected_value:
+            return HttpResponseForbidden("Invalid access token.")
+    except Exception as e:
+        return HttpResponseForbidden("Invalid or expired access token.")
+    
+    # Get or create the chat for this RFQ
+    chat, created = RFQChat.objects.get_or_create(rfq=rfq)
+    
+    # Process form submission
+    if request.method == 'POST':
+        message_content = request.POST.get('message')
+        attachment = request.FILES.get('attachment')
+        
+        if message_content or attachment:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            # Force create a different user for OEM messages
+            oem_email = rfq.oem.email
+            oem_username = f"oem_{rfq.oem.cage.lower()}_public"
+            
+            try:
+                oem_user = User.objects.get(username=oem_username)
+                print(f"Found existing public OEM user: {oem_user.id} - {oem_user.username}")
+            except User.DoesNotExist:
+                # Create a new user
+                oem_user = User.objects.create_user(
+                    username=oem_username,
+                    email=oem_email,
+                    password=User.objects.make_random_password(),
+                    first_name=f"OEM {rfq.oem.name[:20]}"
+                )
+                print(f"Created new public OEM user: {oem_user.id} - {oem_user.username}")
+            
+            print(f"Using specific public OEM user: {oem_user.id} - {oem_user.username}")
+            
+            # Create message with this specific OEM user
+            message = RFQChatMessage.objects.create(
+                chat=chat,
+                sender=oem_user,
+                content=message_content or '',
+                attachment=attachment,
+                attachment_name=attachment.name if attachment else None
+            )
+            
+            # Verify the message was created with the correct sender
+            print(f"Message created with sender ID: {message.sender.id}, username: {message.sender.username}")
+            
+            # Show success message
+            messages.success(request, "Your message has been sent successfully.")
+            
+            # Redirect to prevent form resubmission
+            return redirect('solicitations:public_rfq_chat', rfq_id=rfq_id, access_token=access_token)
+    
+    # Get all messages for this chat
+    chat_messages = chat.messages.all()
+    
+    # Add a flag to each message to indicate if it's from the vendor
+    for message in chat_messages:
+        message.is_from_vendor = (message.sender == rfq.created_by)
+    
+    # Prepare context for the template
+    context = {
+        'rfq': rfq,
+        'chat': chat,
+        'chat_messages': chat_messages,
+        'access_token': access_token,
+        'oem_name': rfq.oem.name,
+    }
+    
+    return render(request, 'solicitations/chat/public_rfq_chat.html', context)
+
 
 

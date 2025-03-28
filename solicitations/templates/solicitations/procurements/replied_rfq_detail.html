@@ -14,7 +14,16 @@
         </div>
         <div class="d-flex gap-3">
             <a href="{% url 'solicitations:replied-rfq' %}" class="btn bg-secondary text-white"><i class="bi bi-arrow-left"></i> Back</a>
-            <a href="#" class="btn mybg hoverbg text-white">Print <i class="bi bi-printer"></i></a>
+            
+            <!-- Chat Button Added Here -->
+            <a href="{% url 'solicitations:rfq_chat_detail' rfq.rfq.unique_id %}" class="btn mybg hoverbg text-white">
+                <i class="bi bi-chat-dots"></i> 
+                {% if chat_exists %}
+                    Chat 
+                {% else %}
+                    Start Chat
+                {% endif %}
+            </a>
         </div>
     </div>
 
@@ -131,7 +140,7 @@
             </div>
         </div>
         {% else %}
-        <!-- For consolidated RFQs, show a summary card with accordion for items -->
+        <!-- For consolidated RFQs, show a summary card with table for items -->
         <div class="mt-2">
             <div class="card">
                 <div class="card-body my-3">
@@ -156,60 +165,48 @@
                         </div>
                     </div>
                 </div>
-                
-                <!-- Accordion for Item Details -->
-                <div class="accordion mt-3" id="itemDetailsAccordion">
-                    {% for item_reply in rfq_item_replies %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="heading{{ forloop.counter }}">
-                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ forloop.counter }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapse{{ forloop.counter }}">
-                                <strong>Item {{ forloop.counter }}:</strong> {{ item_reply.solicitation.nomenclature }} ({{ item_reply.solicitation.NSN }})
-                            </button>
-                        </h2>
-                        <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="heading{{ forloop.counter }}" data-bs-parent="#itemDetailsAccordion">
-                            <div class="accordion-body">
-                                <div class="row mb-3">
-                                    <div class="col-md-4">
-                                        <strong>NSN:</strong> {{ item_reply.solicitation.NSN }}
-                                    </div>
-                                    <div class="col-md-4">
-                                        <strong>Part #:</strong> {{ item_reply.solicitation.part_number }}
-                                    </div>
-                                    <div class="col-md-4">
-                                        <strong>Quantity:</strong> {{ item_reply.solicitation.quantity }}
-                                    </div>
-                                </div>
                                 
-                                <!-- Item reply details -->
-                                <div class="card mybg">
-                                    <div class="card-body">
-                                        <div class="row mt-3">
-                                            <div class="col-md-4 text-white">
-                                                Price: $ <span class="text-warning">{{ item_reply.price }}</span> / Piece
-                                            </div>
-                                            <div class="col-md-4 text-white">
-                                                Delivery Mode: {{ item_reply.delivery_mode }}
-                                            </div>
-                                            <div class="col-md-4 text-white">
-                                                {% if item_reply.document %}
-                                                    <a href="{{ item_reply.document.url }}" target="_blank" class="btn btn-warning text-white">View File</a>
-                                                {% else %}
-                                                    <span class="text-white">No file uploaded</span>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                        <hr class="text-white">
-                                        <div class="row">
-                                            <div class="col text-white">
-                                                <span class="text-warning">Note/Message</span>: {{ item_reply.short_note }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                <!-- Table for Item Details instead of Accordion -->
+                <div class="card-body mt-3">
+                    <h5>Item Details</h5>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped">
+                            <thead class="mybg text-white">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Nomenclature</th>
+                                    <!-- <th>NSN</th>
+                                    <th>Part #</th> -->
+                                    <th>Quantity</th>
+                                    <th>Price</th>
+                                    <th>Delivery Mode</th>
+                                    <th>Document</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item_reply in rfq_item_replies %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ item_reply.solicitation.nomenclature }}</td>
+                                    <!-- <td>{{ item_reply.solicitation.NSN }}</td>
+                                    <td>{{ item_reply.solicitation.part_number }}</td> -->
+                                    <td>{{ item_reply.solicitation.quantity }}</td>
+                                    <td>$ {{ item_reply.price }}</td>
+                                    <td>{{ item_reply.delivery_mode }}</td>
+                                    <td>
+                                        {% if item_reply.document %}
+                                            <a href="{{ item_reply.document.url }}" target="_blank" class="btn btn-sm btn-warning text-white">View</a>
+                                        {% else %}
+                                            <span class="text-muted">None</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ item_reply.short_note }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
-                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -220,24 +217,5 @@
         </div>
     </div>
 </section>
-
-<!-- Modal -->
-<div class="modal fade" id="deleteRepliedModal-{{rfq.id}}" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="deleteModalLabel">Delete RFQ</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          Are you sure you want to delete this Replied RFQ? Remember this task cannot be reversed.
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn mybg hoverbg text-white" data-bs-dismiss="modal">Cancel</button>
-          <a href="{% url 'solicitations:delete-replied-rfq' rfq.id %}" class="btn btn-danger">Yes Delete</a>
-        </div>
-      </div>
-    </div>
-</div>
 
 {% endblock content %}

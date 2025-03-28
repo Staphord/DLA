@@ -99,10 +99,7 @@ class EmailSettingsForm(forms.ModelForm):
         model = EmailSettings
         fields = ['auto_send', 'send_day', 'send_time']
         widgets = {
-            'auto_send': forms.CheckboxInput(attrs={
-                'class': 'form-check-input',
-                'role': 'switch'
-            }),
+            'auto_send': forms.HiddenInput(),  # Make it a hidden field instead of removing it
             'send_day': forms.Select(attrs={
                 'class': 'form-select'
             }),

@@ -1,0 +1,246 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section>
+    <div class="d-flex justify-content-between mb-3">
+        <div class="">
+            Chat For RFQ <span class="badge bg-light text-dark">{{rfq.unique_id}}</span>
+        </div>
+        <div class="">
+            {% if is_vendor %}
+            With Supplier <span class="badge bg-light text-dark">{{rfq.oem.name}}</span>
+            {% else %}
+            With Vendor <span class="badge bg-light text-dark">{{rfq.created_by.username}}</span>
+            {% endif %}
+        </div>
+        <div class="d-flex gap-3">
+            <!-- Fixed back button that works for both scenarios -->
+            {% if rfq_reply %}
+                <a href="{% url 'solicitations:replied-rfq-detail' rfq_reply.id %}" class="btn bg-secondary text-white"><i class="bi bi-arrow-left"></i> Back to RFQ</a>
+            {% else %}
+                <a href="{% url 'solicitations:dashboard' %}" class="btn bg-secondary text-white"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header mybg text-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-dots me-2"></i>
+                        {% if is_vendor %}
+                            Chat with {{ rfq.oem.name }}
+                        {% else %}
+                            Chat with {{ rfq.created_by.get_full_name|default:rfq.created_by.username }}
+                        {% endif %}
+                    </h5>
+                </div>
+                <small>
+                    <i class="bi bi-calendar me-1"></i> 
+                    RFQ Item: {{ rfq.solicitation.nomenclature }}
+                </small>
+            </div>
+        </div>
+        
+        <div class="card-body p-0">
+            <!-- Chat messages container -->
+            <div id="chat-messages" style="height: 500px; overflow-y: auto; background-color: #f8f9fa; padding: 15px;">
+                {% if chat_messages %}
+                    {% for message in chat_messages %}
+                        <div class="mb-3 {% if message.sender == request.user %}text-end{% endif %}" data-message-id="{{ message.id }}">
+                            <div class="d-inline-block p-3 rounded {% if message.sender == request.user %}mybg text-white{% else %}bg-white{% endif %}" style="max-width: 75%;">
+                                <div>{{ message.content|linebreaks }}</div>
+                                
+                                {% if message.attachment %}
+                                    <div class="mt-2 pt-2 border-top {% if message.sender == request.user %}border-white{% endif %}">
+                                        <a href="{{ message.attachment.url }}" target="_blank" class="btn btn-sm {% if message.sender == request.user %}btn-outline-light{% else %}btn-outline-secondary{% endif %}">
+                                            <i class="bi bi-paperclip me-1"></i>
+                                            <span>{{ message.attachment_name|default:"Attachment" }}</span>
+                                        </a>
+                                    </div>
+                                {% endif %}
+                                
+                                <div class="text-end mt-1">
+                                    <small class="{% if message.sender == request.user %}text-light{% else %}text-muted{% endif %}">
+                                        {{ message.timestamp|date:"M d, Y H:i" }}
+                                        {% if message.is_read and message.sender == request.user %}
+                                            <i class="bi bi-check-all ms-1"></i>
+                                        {% endif %}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="mb-3">
+                            <i class="bi bi-chat-dots text-secondary" style="font-size: 3rem;"></i>
+                        </div>
+                        <p class="text-muted">No messages yet. Start the conversation!</p>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <!-- Message input form -->
+            <div class="p-3 border-top">
+                <form method="post" enctype="multipart/form-data" id="messageForm">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <textarea name="message" id="message-input" class="form-control" placeholder="Type your message..." rows="2" required></textarea>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="input-group" style="max-width: 300px;">
+                            <input type="file" name="attachment" id="attachment-input" class="form-control form-control-sm">
+                            <label class="input-group-text" for="attachment-input">
+                                <i class="bi bi-paperclip"></i>
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="btn mybg hoverbg text-white">
+                            <i class="bi bi-send me-1"></i> Send
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Scroll to the bottom of the chat container on page load
+    function scrollToBottom() {
+        const chatContainer = document.getElementById('chat-messages');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+    
+    // Get the last message ID
+    function getLastMessageId() {
+        const messages = document.querySelectorAll('[data-message-id]');
+        if (messages.length > 0) {
+            return messages[messages.length - 1].dataset.messageId;
+        }
+        return 0;
+    }
+    
+    // Add a new message to the chat container
+    function addMessage(message) {
+        const chatContainer = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        
+        messageDiv.className = `mb-3 ${message.is_own_message ? 'text-end' : ''}`;
+        messageDiv.dataset.messageId = message.id;
+        
+        let messageHtml = '';
+        
+        if (!message.is_own_message) {
+            messageHtml += `
+                <div class="mb-1 text-muted">
+                    <i class="bi bi-person-circle me-1"></i>
+                    ${message.sender_name}
+                </div>
+            `;
+        }
+        
+        messageHtml += `
+            <div class="d-inline-block p-3 rounded ${message.is_own_message ? 'mybg text-white' : 'bg-light'}" style="max-width: 75%;">
+                <div>${message.content.replace(/\n/g, '<br>')}</div>
+        `;
+        
+        if (message.has_attachment) {
+            messageHtml += `
+                <div class="mt-2 pt-2 border-top ${message.is_own_message ? 'border-white' : ''}">
+                    <a href="${message.attachment_url}" target="_blank" class="btn btn-sm ${message.is_own_message ? 'btn-outline-light' : 'btn-outline-secondary'}">
+                        <i class="bi bi-paperclip me-1"></i>
+                        <span>${message.attachment_name || 'Attachment'}</span>
+                    </a>
+                </div>
+            `;
+        }
+        
+        messageHtml += `
+                <div class="text-end mt-1">
+                    <small class="${message.is_own_message ? 'text-light' : 'text-muted'}">
+                        ${message.timestamp}
+                        ${message.is_own_message ? '<i class="bi bi-check ms-1"></i>' : ''}
+                    </small>
+                </div>
+            </div>
+        `;
+        
+        messageDiv.innerHTML = messageHtml;
+        chatContainer.appendChild(messageDiv);
+        
+        scrollToBottom();
+    }
+    
+    // Poll for new messages
+    function pollNewMessages() {
+        const lastMessageId = getLastMessageId();
+        
+        fetch(`{% url 'solicitations:get_new_messages_ajax' rfq.unique_id %}?last_message_id=${lastMessageId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success' && data.messages.length > 0) {
+                    data.messages.forEach(message => {
+                        addMessage(message);
+                    });
+                }
+            })
+            .catch(error => console.error('Error polling for new messages:', error));
+    }
+    
+    // Submit message via AJAX
+    document.getElementById('messageForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const messageInput = document.getElementById('message-input');
+        const attachmentInput = document.getElementById('attachment-input');
+        
+        if (!messageInput.value && !attachmentInput.files.length) {
+            alert('Please enter a message or attach a file.');
+            return;
+        }
+        
+        const formData = new FormData(this);
+        
+        fetch('{% url 'solicitations:send_chat_message_ajax' rfq.unique_id %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Add the message to the chat
+                addMessage(data.message);
+                
+                // Clear the form inputs
+                messageInput.value = '';
+                attachmentInput.value = '';
+            } else {
+                alert('Error sending message: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while sending your message.');
+        });
+    });
+    
+    // Initial scroll to bottom
+    document.addEventListener('DOMContentLoaded', function() {
+        scrollToBottom();
+        
+        // Start polling for new messages every 5 seconds
+        setInterval(pollNewMessages, 5000);
+    });
+</script>
+{% endblock %}
