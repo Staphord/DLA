@@ -134,7 +134,7 @@ if post_date_index:
         # Send the appropriate date to Django
         try:
             response = requests.post(
-                'http://localhost:8000/solicitations',
+                'http://localhost:8000/solicitations/',
                 json={'selected_date': date_to_send, 'is_user_input': bool(user_input_date)},
                 headers={'Content-Type': 'application/json'}
             )

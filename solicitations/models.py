@@ -165,6 +165,7 @@ class EmailSettings(models.Model):
     
     send_day = models.CharField(max_length=20, choices=DAY_CHOICES, default=DAILY)
     send_time = models.TimeField(default=get_default_send_time)  # Default in 24-hour format
+    last_processed = models.DateTimeField(null=True, blank=True, help_text="When emails were last processed for this user")
     
     def __str__(self):
         # Ensure send_time is displayed in 24-hour format

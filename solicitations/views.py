@@ -14,10 +14,11 @@ from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from datetime import datetime
+from django.utils import timezone
 from git import Repo
 from ruamel.yaml import YAML
 from django.db.models import Sum
-from django.core.signing import Signer, BadSignature
+from django.core.signing import Signer
 import base64
 
 ## path to yaml file
@@ -502,43 +503,70 @@ def rfq_reply_view(request):
         solicitation=current_solicitation
     ).first()
     
-    form = RFQItemReplyForm()
+    # Determine if this is the last item
+    is_last_item = item_index == len(all_solicitations) - 1
+    
+    form = RFQReplyForm()  # Using RFQReplyForm here
     
     if request.method == 'POST':
-        form = RFQItemReplyForm(request.POST, request.FILES)
+        form = RFQReplyForm(request.POST, request.FILES)  # Using RFQReplyForm here
         if form.is_valid():
-            rfq_reply = form.save(commit=False)
-            rfq_reply.rfq = rfq
-            rfq_reply.solicitation = current_solicitation
-            rfq_reply.rfq_creator = user
-            rfq_reply.save()
+            # Create RFQItemReply
+            rfq_item_reply = RFQItemReply(
+                rfq=rfq,
+                solicitation=current_solicitation,
+                rfq_creator=user,
+                price=form.cleaned_data.get('price')
+            )
             
-            # Check if all items have been replied to
-            all_items_replied = True
-            for sol in all_solicitations:
-                if not RFQItemReply.objects.filter(rfq=rfq, rfq_creator=user, solicitation=sol).exists():
-                    all_items_replied = False
-                    break
-            
-            # If all items have been replied to, create a main RFQReply as a summary
-            if all_items_replied and is_consolidated:
-                # Calculate total price
-                total_price = RFQItemReply.objects.filter(
-                    rfq=rfq, rfq_creator=user
-                ).aggregate(Sum('price'))['price__sum']
+            # Only process document, note, and delivery mode if this is the last item or not consolidated
+            if not is_consolidated or is_last_item:
+                rfq_item_reply.document = form.cleaned_data.get('document')
+                rfq_item_reply.short_note = form.cleaned_data.get('short_note')
+                rfq_item_reply.delivery_mode = form.cleaned_data.get('delivery_mode')
+            else:
+                rfq_item_reply.document = None
+                rfq_item_reply.short_note = ""
+                rfq_item_reply.delivery_mode = "Free"
                 
-                # Check if overall reply exists
-                if not RFQReply.objects.filter(rfq=rfq, rfq_creator=user).exists():
-                    RFQReply.objects.create(
-                        rfq=rfq,
-                        rfq_creator=user,
-                        price=total_price,
-                        delivery_mode=rfq_reply.delivery_mode,
-                        short_note=f"Consolidated reply for {len(all_solicitations)} items. See individual item replies for details."
-                    )
+            rfq_item_reply.save()
+            
+            # If this is the last item or only item, create/update the main RFQReply
+            if not is_consolidated or is_last_item:
+                # Calculate total price
+                total_price = 0
+                if is_consolidated:
+                    # Sum prices from all item replies
+                    from django.db.models import Sum
+                    total_price = RFQItemReply.objects.filter(
+                        rfq=rfq, rfq_creator=user
+                    ).aggregate(Sum('price'))['price__sum'] or 0
+                else:
+                    total_price = rfq_item_reply.price
+                
+                # Get or create the main RFQReply
+                main_reply, created = RFQReply.objects.get_or_create(
+                    rfq=rfq,
+                    rfq_creator=user,
+                    defaults={
+                        'price': total_price,
+                        'delivery_mode': rfq_item_reply.delivery_mode,
+                        'short_note': rfq_item_reply.short_note,
+                        'document': rfq_item_reply.document
+                    }
+                )
+                
+                # If not created (already exists), update it
+                if not created:
+                    main_reply.price = total_price
+                    main_reply.delivery_mode = rfq_item_reply.delivery_mode
+                    main_reply.short_note = rfq_item_reply.short_note
+                    if rfq_item_reply.document:
+                        main_reply.document = rfq_item_reply.document
+                    main_reply.save()
             
             # Redirect to next item if available
-            if is_consolidated and item_index < len(all_solicitations) - 1:
+            if is_consolidated and not is_last_item:
                 next_index = item_index + 1
                 return JsonResponse({
                     "success": True, 
@@ -556,7 +584,7 @@ def rfq_reply_view(request):
         'item_index': item_index,
         'total_items': len(all_solicitations),
         'existing_reply': existing_reply,
-        'is_last_item': item_index == len(all_solicitations) - 1,
+        'is_last_item': is_last_item,
         'all_solicitations': all_solicitations
     })
 
@@ -640,15 +668,31 @@ def replied_rfq(request):
 def replied_rfq_detail(request, rfq):
     # Retrieve the RFQReply object or return a 404 error if it doesn't exist
     rfq_instance = get_object_or_404(RFQReply, pk=rfq)
-    ## replied rfq
-    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
     
-    # Check if this is a consolidated RFQ with multiple item replies
-    rfq_item_replies = RFQItemReply.objects.filter(rfq=rfq_instance.rfq, rfq_creator=request.user)
-    is_consolidated = rfq_item_replies.count() > 1  # Only if there are multiple items
+    # Get all related RFQItemReply objects for this RFQ
+    rfq_item_replies = RFQItemReply.objects.filter(rfq=rfq_instance.rfq)
+    
+    # Check if this RFQ has multiple item replies (consolidated)
+    is_consolidated = rfq_item_replies.count() > 1
+    
+    # Calculate the total price (sum of price × quantity for each item)
+    total_price = 0
+    for item in rfq_item_replies:
+        try:
+            # Convert quantity to float (since it's stored as a string)
+            quantity = float(item.solicitation.quantity)
+            # Calculate item total and add to running sum
+            item_total = float(item.price) * quantity
+            total_price += item_total
+        except (ValueError, TypeError):
+            # Skip items where conversion fails
+            print(f"Warning: Could not calculate total for item {item.id}")
+    
+    # Format total price to 2 decimal places
+    total_price = round(total_price, 2)
     
     # Toggle the is_viewed field to True
-    if not rfq_instance.is_viewed:  # Update only if it's not already True
+    if not rfq_instance.is_viewed:
         rfq_instance.is_viewed = True
         rfq_instance.save()
         
@@ -656,13 +700,19 @@ def replied_rfq_detail(request, rfq):
         if rfq_item_replies.exists():
             rfq_item_replies.update(is_viewed=True)
     
+    # Check if a chat exists for this RFQ
+    chat_exists = hasattr(rfq_instance.rfq, 'chat')
+    
     # Pass the RFQReply object to the template
     context = {
         'rfq': rfq_instance,
-        'replied_rfq': replied_rfq,
+        'replied_rfq': RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False),
         'is_consolidated': is_consolidated,
-        'rfq_item_replies': rfq_item_replies
+        'rfq_item_replies': rfq_item_replies,
+        'calculated_total': total_price,
+        'chat_exists': chat_exists
     }
+    
     return render(request, 'solicitations/procurements/replied_rfq_detail.html', context)
 
 #view to search for Replied RFQS
@@ -796,16 +846,36 @@ def send_rfqs(request):
         return JsonResponse({"error": error_message}, status=500)
 
 def get_chart_data(request):
-    # Dynamic calculation for solicitation
-    solicitations = Solicitation.objects.exclude(cage = '-').count() 
-
+    # Get current date for comparing return dates
+    current_date = timezone.now().date()
+    
+    # First filter out solicitations with empty/dash cage codes
+    all_valid_solicitations = Solicitation.objects.filter(
+        ~Q(cage='') & ~Q(cage='-')  # Exclude empty or dash cage codes
+    )
+    
+    valid_solicitations = []
+    for sol in all_valid_solicitations:
+        try:
+            return_date = datetime.strptime(sol.return_by_date, "%m-%d-%Y").date()
+            
+            # Compare date objects (not strings)
+            if return_date >= current_date:  # Only count if not expired
+                valid_solicitations.append(sol.id)
+        except (ValueError, TypeError):
+            # Skip invalid dates
+            pass
+    
+    # Count only valid solicitations
+    solicitations = len(valid_solicitations)
+    
     # Dynamic calculation for "Replied" - count of replies for all RFQs
-    replied = RFQReply.objects.filter(rfq_creator = request.user).count() 
-    print(f'rREPLIED RFQS {replied}')
-
+    replied = RFQReply.objects.filter(rfq_creator=request.user).count() 
+    print(f'REPLIED RFQS {replied}')
+    
     # Dynamic calculation for "Sent" - count of all RFQs
     sent = RFQ.objects.filter(created_by=request.user).count()
-
+    
     # Return the data as JSON
     return JsonResponse({
         'solicitations': solicitations,

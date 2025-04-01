@@ -97,7 +97,7 @@ class UserOEMCustomizationForm(forms.ModelForm):
 class EmailSettingsForm(forms.ModelForm):
     class Meta:
         model = EmailSettings
-        fields = ['auto_send', 'send_day', 'send_time']
+        fields = ['auto_send', 'send_day', 'send_time', 'last_processed']
         widgets = {
             'auto_send': forms.HiddenInput(),  # Make it a hidden field instead of removing it
             'send_day': forms.Select(attrs={
@@ -107,12 +107,17 @@ class EmailSettingsForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'time'
             }),
+            'last_processed': forms.HiddenInput(),  # Hide this field from the user
         }
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Add helpful text to the fields
         self.fields['send_day'].help_text = "Select 'Every day' to send emails daily, or choose a specific day of the week."
+        
+        # Make last_processed not required
+        if 'last_processed' in self.fields:
+            self.fields['last_processed'].required = False
 
 class RFQItemReplyForm(forms.ModelForm):
     class Meta:

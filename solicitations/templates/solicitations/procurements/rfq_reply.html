@@ -139,12 +139,22 @@
                                 Fill out this form and if the cost is competitive we will be back to you as soon as possible
                                 {% endif %}
                             </div>
+                            
+                            {% if is_consolidated and not is_last_item %}
+                            <div class="alert alert-info mt-2">
+                                <small><i class="bi bi-info-circle"></i> Note: You'll be able to add notes, select delivery mode, and upload documents on the final item.</small>
+                            </div>
+                            {% endif %}
+                            
                             <form method="post" id="form-id" enctype="multipart/form-data">
                                 {% csrf_token %}
                                 <div class="my-1">
                                   <label for="id_price">Price:</label>
                                   <input type="number" name="price" class="form-control" step="0.01" required="" id="id_price" {% if existing_reply %}disabled value="{{ existing_reply.price }}"{% endif %}>
                                 </div>
+                                
+                                <!-- Only show these fields if it's the last item or not a consolidated RFQ -->
+                                {% if not is_consolidated or is_last_item %}
                                 <div class="my-1">
                                   <label for="id_delivery_mode">Delivery mode:</label>
                                   <select name="delivery_mode" class="form-select" id="id_delivery_mode" {% if existing_reply %}disabled{% endif %}>
@@ -164,6 +174,11 @@
                                   <small class="text-muted">Document already uploaded</small>
                                   {% endif %}
                                 </div>
+                                {% else %}
+                                <!-- Hidden fields for non-last items -->
+                                <input type="hidden" name="delivery_mode" value="Free">
+                                <input type="hidden" name="short_note" value="">
+                                {% endif %}
                                 
                                 {% if existing_reply %}
                                     {% if is_consolidated and not is_last_item %}
