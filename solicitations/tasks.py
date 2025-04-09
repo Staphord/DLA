@@ -251,6 +251,11 @@ def process_user_solicitations(user_id):
         success_count = 0
         failure_count = 0
         
+        # Find script path once
+        script_path = find_script_path()
+        if not script_path:
+            raise FileNotFoundError("Selenium script not found")
+        
         for batch_num in range(total_batches):
             start_idx = batch_num * BATCH_SIZE
             end_idx = start_idx + BATCH_SIZE
@@ -258,43 +263,71 @@ def process_user_solicitations(user_id):
             
             print(f"\nProcessing batch {batch_num + 1}/{total_batches}")
             
+            # Prepare the data for this batch (outside transaction)
+            script_data = {
+                "user_data": user_data,
+                "mail_data": mail_data,
+                "solicitations": batch_data,
+                "auto_mode": True
+            }
+            
+            json_data = json.dumps(script_data)
+            
             try:
-                with transaction.atomic():
-                    # Prepare the data for this batch
-                    script_data = {
-                        "user_data": user_data,
-                        "mail_data": mail_data,
-                        "solicitations": batch_data,
-                        "auto_mode": True
-                    }
+                # Execute script (outside transaction)
+                print(f"Executing script for batch {batch_num + 1}")
+                result = execute_script(script_path, json_data)
+                
+                print(f"Script execution result: returncode={result.returncode}")
+                if len(result.stderr) > 0:
+                    print(f"Script stderr: {result.stderr[:500]}...")  # Print first 500 chars of stderr
+                
+                # Process the results
+                if result.returncode == 0:
+                    # Success - update database in a transaction
+                    status_ids = [status_mapping[sol['id']] for sol in batch_data]
+                    print(f"Script succeeded. Updating {len(status_ids)} status records to 'sent'")
                     
-                    json_data = json.dumps(script_data)
-                    
-                    # Find and execute script
-                    script_path = find_script_path()
-                    if not script_path:
-                        raise FileNotFoundError("Selenium script not found")
-                    
-                    result = execute_script(script_path, json_data)
-                    
-                    if result.returncode == 0:
+                    try:
+                        # Update in separate transaction
+                        with transaction.atomic():
+                            # Update statuses for successful batch
+                            updated = SolicitationEmailStatus.objects.filter(
+                                id__in=status_ids
+                            ).update(
+                                email_sent=True,
+                                email_sent_at=timezone.now(),
+                                email_status='sent'
+                            )
+                            print(f"Successfully updated {updated} of {len(status_ids)} status records")
+                        
+                        # Count as success if database updated
                         success_count += len(batch_data)
-                        # Update statuses for successful batch
-                        SolicitationEmailStatus.objects.filter(
-                            id__in=[status_mapping[sol['id']] for sol in batch_data]
-                        ).update(
-                            email_sent=True,
-                            email_sent_at=timezone.now(),
-                            email_status='sent'
-                        )
                         print(f"Batch {batch_num + 1} succeeded")
-                    else:
+                    except Exception as db_e:
+                        # Database error
+                        print(f"Error updating database for batch {batch_num + 1}: {str(db_e)}")
                         failure_count += len(batch_data)
-                        print(f"Batch {batch_num + 1} failed: {result.stderr}")
+                else:
+                    # Script failed
+                    failure_count += len(batch_data)
+                    print(f"Batch {batch_num + 1} failed: Script returned non-zero exit code")
+                    
+                    # Update status to 'failed' to prevent endless retries
+                    try:
+                        with transaction.atomic():
+                            SolicitationEmailStatus.objects.filter(
+                                id__in=[status_mapping[sol['id']] for sol in batch_data]
+                            ).update(
+                                email_status='failed'
+                            )
+                    except Exception as update_e:
+                        print(f"Error updating statuses to 'failed': {str(update_e)}")
                         
             except Exception as e:
                 failure_count += len(batch_data)
                 print(f"Error processing batch {batch_num + 1}: {str(e)}")
+                print(traceback.format_exc())
         
         print(f"\nProcessing complete. Results:")
         print(f"Total solicitations: {len(all_solicitations_data)}")

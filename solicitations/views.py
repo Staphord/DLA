@@ -87,7 +87,7 @@ def home(request):
 def solicitations(request):
     today = datetime.today().strftime("%m-%d-%Y")  # Convert today to match database format (mm-dd-yyyy)
     # Filter solicitations to exclude expired ones
-    solicitations = Solicitation.objects.exclude(cage='-').filter(return_by_date__gte=today)
+    solicitations = Solicitation.objects.exclude(Q(cage='-') | Q(cage='N/A')).filter(return_by_date__gte=today)
     # Count total valid solicitations
     total_solicitations = solicitations.count()
     # Get replied RFQs
@@ -262,31 +262,48 @@ def email_settings(request):
         # Process the form data
         form = EmailSettingsForm(request.POST, instance=settings)
         if form.is_valid():
-            # Toggle the auto_send status (opposite of current)
-            settings = form.save(commit=False)
-            settings.auto_send = not settings.auto_send
-            settings.save()
+            # Check which action was performed
+            action_type = request.POST.get('action_type', 'toggle_status')
             
-            # Create appropriate message
-            status_msg = "enabled" if settings.auto_send else "disabled"
-            
-            if settings.auto_send:
-                # Include schedule details in message only when enabling
+            if action_type == 'save_schedule':
+                # Save the schedule changes and ensure auto_send is enabled
+                settings = form.save(commit=False)
+                settings.auto_send = True  # Automatically enable when saving changes
+                settings.save()
+                
+                # Include schedule details in message
                 day_display = dict(EmailSettings.DAY_CHOICES)[settings.send_day]
                 time_display = settings.send_time.strftime('%I:%M %p')
-                schedule_info = f" ({day_display} at {time_display})"
-                messages.success(request, f"Email automation has been {status_msg}{schedule_info}")
-            else:
-                messages.success(request, f"Email automation has been {status_msg}")
+                messages.success(request, f"Schedule updated and automation enabled ({day_display} at {time_display})")
+            
+            elif action_type == 'toggle_status':
+                # Toggle the auto_send status (opposite of current)
+                settings = form.save(commit=False)
+                settings.auto_send = not settings.auto_send
+                settings.save()
                 
+                # Create appropriate message
+                status_msg = "enabled" if settings.auto_send else "disabled"
+                
+                if settings.auto_send:
+                    # Include schedule details in message only when enabling
+                    day_display = dict(EmailSettings.DAY_CHOICES)[settings.send_day]
+                    time_display = settings.send_time.strftime('%I:%M %p')
+                    schedule_info = f" ({day_display} at {time_display})"
+                    messages.success(request, f"Email automation has been {status_msg}{schedule_info}")
+                else:
+                    messages.success(request, f"Email automation has been {status_msg}")
+            
             return redirect('solicitations:solicitations')
     else:
         form = EmailSettingsForm(instance=settings)
-        
-    return render(request, 'solicitations/email_settings.html', {
-        'form': form, 
-        'is_enabled': settings.auto_send
-    })
+    
+    context = {
+        'form': form,
+        'is_enabled': settings.auto_send,
+    }
+    
+    return render(request, 'solicitations/email_settings.html', context)
 #######################  CLIENT RELATED VIEWS  #########################
 
 ## view to show all clients

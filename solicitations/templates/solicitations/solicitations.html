@@ -58,7 +58,7 @@
                                 <th class="text-secondary">Nomenclature</th>
                                 <th class="text-secondary">Quantity</th>
                                 <th class="text-secondary">NSN</th>
-                                <th class="text-secondary">status</th>
+                                <th class="text-secondary">Unit</th>
                                 <th class="text-secondary">Date Issued</th>
                                 <th class="text-secondary">Return By</th>
                                 {% if user.user_type == 'admin' %}
@@ -88,7 +88,7 @@
                                 <td>{{ solicitation.nomenclature|title }}</td>
                                 <td>{{ solicitation.quantity }}</td>
                                 <td>{{ solicitation.NSN }}</td>
-                                <td>{{ solicitation.status }}</td>
+                                <td>{{ solicitation.unit }}</td>
                                 <td>{{ solicitation.issued_date }}</td>
                                 <td>{{ solicitation.return_by_date }}</td>
                                 {% if user.user_type == 'admin' %}

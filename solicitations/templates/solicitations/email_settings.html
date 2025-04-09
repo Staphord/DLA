@@ -55,7 +55,9 @@
                             <!-- Action Buttons -->
                             <div class="d-flex justify-content-between">
                                 <a href="{% url 'solicitations:solicitations' %}" class="btn btn-secondary">Cancel</a>
-                                <button type="submit" class="btn {% if is_enabled %}btn-danger{% else %}btn-success{% endif %}">
+                                
+                                <!-- Dynamic button that changes based on schedule changes -->
+                                <button type="submit" id="actionButton" name="toggle_status" class="btn {% if is_enabled %}btn-danger{% else %}btn-success{% endif %}">
                                     {% if is_enabled %}
                                     <i class="fas fa-power-off"></i> Disable Automation
                                     {% else %}
@@ -63,6 +65,9 @@
                                     {% endif %}
                                 </button>
                             </div>
+                            
+                            <!-- Hidden input to track which action to perform -->
+                            <input type="hidden" id="action_type" name="action_type" value="toggle_status">
                         </form>
                     </div>
                 </div>
@@ -76,6 +81,12 @@
         const daySelect = document.getElementById('{{ form.send_day.id_for_label }}');
         const timeInput = document.getElementById('{{ form.send_time.id_for_label }}');
         const schedulePreview = document.getElementById('schedulePreview');
+        const actionButton = document.getElementById('actionButton');
+        const actionType = document.getElementById('action_type');
+        
+        // Store initial values to detect changes
+        const initialDay = daySelect.value;
+        const initialTime = timeInput.value;
         
         // Update schedule preview
         function updateSchedulePreview() {
@@ -86,6 +97,29 @@
                 schedulePreview.textContent = `Emails will be sent every day at ${timeValue}`;
             } else {
                 schedulePreview.textContent = `Emails will be sent every ${dayText} at ${timeValue}`;
+            }
+            
+            // Check if changes were made to schedule
+            const hasChanges = (daySelect.value !== initialDay || timeInput.value !== initialTime);
+            
+            // Update button based on changes
+            if (hasChanges) {
+                // Replace with Save Changes button
+                actionButton.innerHTML = '<i class="fas fa-save"></i> Save Changes';
+                actionButton.className = 'btn btn-warning text-white';
+                actionButton.name = 'save_schedule';
+                actionType.value = 'save_schedule';
+            } else {
+                // Restore original toggle button
+                {% if is_enabled %}
+                    actionButton.innerHTML = '<i class="fas fa-power-off"></i> Disable Automation';
+                    actionButton.className = 'btn btn-danger';
+                {% else %}
+                    actionButton.innerHTML = '<i class="fas fa-power-on"></i> Enable Automation';
+                    actionButton.className = 'btn btn-success';
+                {% endif %}
+                actionButton.name = 'toggle_status';
+                actionType.value = 'toggle_status';
             }
         }
 

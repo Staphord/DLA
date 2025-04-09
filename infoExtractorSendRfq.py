@@ -253,7 +253,7 @@ def fetch_cage_codes(user_data, solicitations):
             format_strings_ids = ', '.join(['%s'] * len(all_solicitation_ids))
             
             solicitation_query = f"""
-            SELECT id, cage, nomenclature, quantity, return_by_date, NSN, part_number
+            SELECT id, cage, nomenclature, quantity, return_by_date, NSN, part_number,unit
             FROM solicitations_solicitation
             WHERE cage IN ({format_strings_cages}) AND id IN ({format_strings_ids})
             """
@@ -513,13 +513,6 @@ def extract_oem_data(cage_code):
 def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
     """
     Send a single email with multiple items to the same CAGE code
-    
-    Args:
-        to_email (str): Email address to send to
-        items (list): List of items to include in the email
-        user_data (dict): User information
-        oem_info (dict): OEM information
-        sent_at: Date when the email is sent
     """
     if not sent_at:
         sent_at = now()
@@ -546,6 +539,7 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
             <tr>
                 <td>{item['part_number']}</td>
                 <td>{item['nomenclature']}</td>
+                <th>{item['unit']}</th>
                 <td>{item['NSN']}</td>
                 <td>{item['quantity']}</td>
             </tr>
@@ -554,17 +548,26 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
         # Use first item's RFQ ID as reference
         rfq_unique_id = items[0]['rfq_unique_id'] if items else 'N/A'
         
-        # Replace the original table row with our multiple rows
-        # Find the pattern for the single row in the table
-        single_row_pattern = """<tr>
-                <td>{part_number}</td>
-                <td>{nomenclature}</td>
-                <td>{NSN}</td>
-                <td>{quantity}</td>
-            </tr>"""
-            
-        # Replace just that row with our multiple rows
-        email_content = email_template.replace(single_row_pattern, item_rows)
+        # Look for the table structure in the template
+        table_start = "<table>\n            <tr>\n                <th>Part No</th>\n                <th>Nomenclature</th>\n                <th>Unit</th>\n                <th>NSN</th>\n                <th>Quantity</th>\n            </tr>"
+        placeholder_row = "<tr>\n                <td>{part_number}</td>\n                <td>{nomenclature}</td>\n                <th>{unit}</th>\n                <td>{NSN}</td>\n                <td>{quantity}</td>\n            </tr>"
+        
+        # Find the position after the table headers
+        if table_start in email_template and placeholder_row in email_template:
+            # Replace just the placeholder row with our generated rows
+            email_content = email_template.replace(placeholder_row, item_rows)
+        else:
+            # Fallback: just replace placeholder variables with first item values
+            email_content = email_template
+            if items:
+                first_item = items[0]
+                email_content = email_content.replace("{part_number}", str(first_item['part_number']))
+                email_content = email_content.replace("{nomenclature}", str(first_item['nomenclature']))
+                email_content = email_content.replace("{unit}", str(first_item['unit']))
+                email_content = email_content.replace("{NSN}", str(first_item['NSN']))
+                email_content = email_content.replace("{quantity}", str(first_item['quantity']))
+                # Log this fallback
+                print("Warning: Couldn't find table pattern, using fallback replacement")
             
         # Format the sent_at date
         formatted_sent_at = sent_at.strftime('%d-%m-%y')
@@ -584,7 +587,7 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
         email_content = email_content.replace("{address}", user_data.get('address', ''))
         email_content = email_content.replace("{companyName}", user_data.get('companyName', ''))
         email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
-        
+       
         # Generate a complete URL for the logo
         logo_url = 'https://cdn.pixabay.com/photo/2020/08/05/13/27/eco-5465459_1280.png'
         email_content = email_content.replace("{logo}", f'<img src="{logo_url}" alt="Company Logo" style="width: 150px;">')
@@ -605,7 +608,7 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
             email_content = email_content.replace("{salutation}", "Dear Mr/Ms")
             
         # Replace any website reference if available
-        company_website = user_data.get('website')
+        company_website = user_data.get('website', 'https://example.com')
         email_content = email_content.replace("{company_website}", company_website)
 
         msg = MIMEMultipart()
@@ -634,35 +637,8 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
     except Exception as e:
         print(f"Error preparing email: {e}")
 
-
-        msg = MIMEMultipart()
-        msg['From'] = from_email
-        msg['To'] = to_email
-        msg['Subject'] = "REQUEST FOR QUOTATION - Multiple Items"
-
-        msg.attach(MIMEText(email_content, 'html'))
-
-        try:
-            print(f"Attempting to send consolidated email to: {to_email}")
-            server = smtplib.SMTP("smtp.gmail.com", 587)
-            server.starttls()
-            server.login(from_email, password)
-            server.sendmail(from_email, to_email, msg.as_string())   ########### to_email
-            print(f"Consolidated email successfully sent to {to_email}")
-            print('--------------------------------------------------------------------------')
-        except Exception as e:
-            print(f"Failed to send email: {str(e)}")
-            print(f"This error occurred with email address: {to_email}")
-        finally:
-            server.quit()
-            
-    except FileNotFoundError:
-        print("Error: 'email.html' file not found.")
-    except Exception as e:
-        print(f"Error preparing email: {e}")
-
 # Function to send a single email 
-def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data, rfq_unique_id, sent_at, part_number,
+def send_email(to_email, nomenclature, quantity, return_by_date, nsn,unit, user_data, rfq_unique_id, sent_at, part_number,
              organization_name, cage, fax, phone, email):
     # Validate email address before proceeding
     if not to_email or not isinstance(to_email, str) or to_email.strip() == "":
@@ -685,6 +661,7 @@ def send_email(to_email, nomenclature, quantity, return_by_date, nsn, user_data,
         email_content = email_content.replace("{NSN}", str(nsn))
         email_content = email_content.replace("{rfq_unique_id}", rfq_unique_id)
         email_content = email_content.replace("{part_number}", str(part_number))
+        email_content = email_content.replace("{unit}", str(unit))
         
         # Add OEM information to the email
         email_content = email_content.replace("{organization_name}", organization_name or "")
@@ -863,6 +840,7 @@ if auto_mode:
                             'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
                             'NSN': record['NSN'] if record['NSN'] else "N/A",
                             'part_number': record['part_number'] if record['part_number'] else "N/A",
+                            'unit': record.get('unit', 'EA'),  # Default to 'EA' if unit not specified
                             'rfq_unique_id': consolidated_rfq.unique_id  # Same RFQ ID for all
                         })
                 else:
@@ -885,6 +863,7 @@ if auto_mode:
                         'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
                         'NSN': record['NSN'] if record['NSN'] else "N/A",
                         'part_number': record['part_number'] if record['part_number'] else "N/A",
+                        'unit': record.get('unit', 'EA'),  # Default to EA if not specified
                         'rfq_unique_id': rfq.unique_id
                     })
                 else:
@@ -1032,6 +1011,7 @@ else:
                             'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
                             'NSN': record['NSN'] if record['NSN'] else "N/A",
                             'part_number': record['part_number'] if record['part_number'] else "N/A",
+                            'unit': record.get('unit', 'EA'),  # Default to EA if not specified
                             'rfq_unique_id': consolidated_rfq.unique_id  # Same RFQ ID for all
                         })
                 else:
@@ -1054,6 +1034,7 @@ else:
                         'return_by_date': record['return_by_date'] if record['return_by_date'] else "N/A",
                         'NSN': record['NSN'] if record['NSN'] else "N/A",
                         'part_number': record['part_number'] if record['part_number'] else "N/A",
+                        'unit': record.get('unit', 'EA'),  # Default to EA if not specified
                         'rfq_unique_id': rfq.unique_id
                     })
                 else:

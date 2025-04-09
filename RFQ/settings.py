@@ -103,9 +103,7 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'America/New_York'
 
 USE_I18N = True
-
 USE_TZ = True
-
 TIME_FORMAT = "H:i"  # 24-hour format (e.g., 13:30)
 USE_L10N = False  # Disable locale-based formatting
 
@@ -155,7 +153,8 @@ Q_CLUSTER = {
     'queue_limit': 500,
     'cpu_affinity': 1,
     'label': 'Django Q',
-    'orm': 'default',  
+    'orm': 'default', 
+    'use_django_timezone': True,
 }
 
 BASE_URL = 'http://localhost:8000'
