@@ -59,7 +59,7 @@ chrome_options.add_argument('--disable-extensions')
 chrome_options.add_argument('--allow-insecure-localhost')
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
 chrome_options.add_argument("--memory-growth=4096")
-chrome_options.add_argument("--single-process")  # For resource-constrained systems
+#chrome_options.add_argument("--single-process")  # For resource-constrained systems
 chrome_options.add_argument("--disable-setuid-sandbox")
 chrome_options.add_argument('--no-sandbox')
 chrome_options.add_argument('--ssl-version-min=tls1')

@@ -57,11 +57,13 @@ def home(request):
     selected_date = request.session.get('selected_date', today)
     
     # Fetch all normal users
-    clients = CustomUser.objects.exclude(is_superuser=True).filter(user_type='client')
+    clients = CustomUser.objects.exclude(is_superuser=True)\
+                               .filter(user_type='client')\
+                               .exclude(Q(first_name='') | Q(first_name=None) | Q(last_name='') | Q(last_name=None))
     total_clients = clients.count()
     
     # Fetch all solicitations
-    solicitations = Solicitation.objects.all().exclude(cage='-')
+    solicitations = Solicitation.objects.all().exclude(Q(cage='-') | Q(cage='N/A')).filter(return_by_date__gte=today)
     total_solicitations = solicitations.filter(return_by_date__gte=selected_date).count()
     
     # Fetch user rfqs

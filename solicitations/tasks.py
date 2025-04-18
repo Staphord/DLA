@@ -80,10 +80,11 @@ def create_solicitation_email_statuses():
     """Create email status records for solicitations that don't have them"""
     from django.contrib.auth import get_user_model
     User = get_user_model()
+    today = datetime.today().strftime("%m-%d-%Y")
     
     # Get all solicitations that are valid (have cage codes and haven't passed return date)
     valid_solicitations = []
-    all_solicitations = Solicitation.objects.all()
+    all_solicitations = Solicitation.objects.all().exclude(Q(cage='-') | Q(cage='N/A')).filter(return_by_date__gte=today)
     
     current_date = timezone.now().date()
     print(f"Current date: {current_date}")
