@@ -3,7 +3,7 @@
 {% load static %}
 
 {% block content %}
-<section class="section profile">
+<section class="section profile vh-100">
     <div class="row">
       <div class="col-xl-4">
 
@@ -75,19 +75,19 @@
                 </div>
 
                 <div class="row">
-                  <div class="col-lg-3 col-md-4 label">Cage Code</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.cage}}</div>
-              </div>
-
-              <div class="row">
-                  <div class="col-lg-3 col-md-4 label">Fax</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.fax}}</div>
-              </div>
-
-              <div class="row">
-                <div class="col-lg-3 col-md-4 label">Website</div>
-                <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.website}}</div>
-              </div>
+                    <div class="col-lg-3 col-md-4 label">Cage Code</div>
+                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.cage}}</div>
+                </div>
+  
+                <div class="row">
+                    <div class="col-lg-3 col-md-4 label">Fax</div>
+                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.fax}}</div>
+                </div>
+  
+                <div class="row">
+                    <div class="col-lg-3 col-md-4 label">Website</div>
+                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.website}}</div>
+                </div>
 
               </div>
 
@@ -115,10 +115,10 @@
                 <div class="row mx-2 mb-2">
                   <div class="col-lg-3 col-md-4 label">User Name</div>
                   <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.username}}</div>
-              </div>
-                <!-- Change Password Form -->
+                </div>
+
                 <div class="mt-3 text-center justify-content-center">
-                  <a href="{% url 'solicitations:password_reset' %}" class="btn btn-secondary w-75">Reset Password</a>
+                    <a href="{% url 'solicitations:password_reset' %}" class="btn btn-secondary w-75">Reset Password</a>
                 </div>
               <!-- End Change Password Form -->
               </div>

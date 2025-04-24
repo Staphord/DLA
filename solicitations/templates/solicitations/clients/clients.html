@@ -4,13 +4,14 @@
 
 {% block content %}
 
-<section>
+<section class="vh-100">
     <div class="d-flex justify-content-between">
         <div class="">
             Total Clients <span class="badge bg-light text-dark">{{total_clients}}</span>
         </div>
         <div class="">
-            <a href="{% url 'solicitations:add-client' %}" class="btn mybg hoverbg text-white">Add Client</a>
+            <!-- <a href="{% url 'solicitations:add-client' %}" class="btn mybg hoverbg text-white">Add Client</a> -->
+            <a href="{% url 'solicitations:invite_user' %}" class="btn mybg hoverbg text-white">Invite Client</a>
         </div>
     </div>
 

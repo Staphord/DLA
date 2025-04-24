@@ -4,7 +4,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
-from accounts.models import CustomUser
+from accounts.models import CustomUser, Invitation, VerificationToken
 from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQChat, RFQChatMessage, RFQItem, RFQItemReply, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
 from django.contrib import messages
 import subprocess
@@ -20,6 +20,10 @@ from ruamel.yaml import YAML
 from django.db.models import Sum
 from django.core.signing import Signer
 import base64
+from django.contrib.auth import login,authenticate,logout
+from solicitations.forms import LogoUpdateForm
+from django.utils.crypto import get_random_string
+from django.core.mail import EmailMultiAlternatives
 
 ## path to yaml file
 WORKFLOW_FILE_PATH = r"C:\Users\Staphord Bengesi\Desktop\DLA\.github\workflows\extract_data.yml"
@@ -806,9 +810,7 @@ def send_rfqs(request):
         logged_in_user = request.user  
 
         # Retrieve the MailTemplate for the logged-in user
-        mail_template = MailTemplate.objects.filter(userMail=logged_in_user).first()
-        if not mail_template:
-            return JsonResponse({"error": "No mail template found for the user"}, status=404)
+        mail_template, created = MailTemplate.objects.get_or_create(userMail=logged_in_user)
 
         # Serialize the mail template data
         mail_data = {
@@ -1745,3 +1747,190 @@ def public_rfq_chat(request, rfq_id, access_token):
 
 
 
+# view to show client detail
+def user_profile(request, client):
+    client = get_object_or_404(CustomUser, pk=client)
+
+    if request.method == "POST":
+        # Handle logo update form
+        if 'logo_update' in request.POST:
+            form = LogoUpdateForm(request.POST, request.FILES, instance=client)
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Logo updated successfully!")
+                return redirect('solicitations:user-profile', client=client.pk)
+        
+
+    form = LogoUpdateForm(instance=client)
+    context = {
+        'client': client,
+        'form':form
+    }
+    return render(request, 'solicitations/clients/user-profile.html', context)
+
+########## Account views #########################
+# Create your views here.
+def create_verification_token(user):
+    token = get_random_string(64)
+    VerificationToken.objects.create(user=user, token=token)
+    return token
+
+def send_verification_email(user, request):
+    token = create_verification_token(user)  # Generate a unique token
+    
+    # Generate the full verification link
+    verification_link = f"{settings.BASE_URL}{reverse('solicitations:verify_email', args=[token])}"
+    
+    # Get the absolute URL for the logo
+    logo_url = f"{settings.BASE_URL}/static/accounts/assets/img/logo.png"
+
+    # Render the email template with the context
+    subject = 'Verify Your Email Address'
+    html_content = render_to_string('solicitations/registration/email_verification.html', {
+        'user': user,
+        'verification_link': verification_link,
+        'logo_url': logo_url,
+    })
+
+    # Set up sender and recipient information
+    from_email = 'williamdemo01@gmail.com'
+    sender_name = 'Support'
+
+    # Create and send the email
+    email = EmailMultiAlternatives(
+        subject,
+        '',
+        f'{sender_name} <{from_email}>',
+        [user.email],
+    )
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+
+## view to log in a user
+def login_user(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            login(request, user)
+            #redirect
+            return redirect('solicitations:home')
+
+        else:
+            #redirect
+            messages.success(request,'There was an error loggin in, Try again latter!')
+            return redirect('solicitations:login-user')
+    
+    else:
+        #
+        return render(request,'solicitations/registration/login.html')
+
+## view to log out a user
+def logout_user(request):
+    logout(request)
+    return redirect('solicitations:login-user')
+
+
+    #verification view
+def verify_email(request, token):
+    # Get the verification token and associated user
+    verification_token = get_object_or_404(VerificationToken, token=token)
+    user = verification_token.user
+    user.is_email_verified = True  # Mark the email as verified
+    user.save()
+
+    # You can delete the token after verification if needed
+    verification_token.delete()
+
+    messages.success(request, "Your email has been verified! You can now log in.")
+    return redirect('solicitation:login-user')
+
+## view to register a user
+def register(request):
+    if request.method == 'POST':
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.is_email_verified = False
+            user.save()
+            send_verification_email(user, request)
+            messages.success(request, "Registration successful! Check your email to verify your account.")
+            return redirect('solicitation:login-user')
+        else:
+            print(form.errors)  # Debugging errors
+    else:
+        form = UserRegistrationForm()
+    return render(request, 'solicitations/registration/register.html', {'form': form})
+
+## view for sending envitation link
+def invite_user(request):
+    if request.method == 'POST':
+        email = request.POST.get('email').lower().strip()  # Normalize email
+
+        # 1. First check if user already exists
+        if CustomUser.objects.filter(email=email).exists():
+            messages.error(request, f"Email '{email}' is already registered.")
+            return render(request, 'solicitations/registration/invite_user.html', 
+                        {'entered_email': email})
+
+        # 2. Create new invitation (regardless of existing ones)
+        invitation = Invitation(email=email)
+        invitation.save()
+
+        # 3. Send email with new invitation
+        invite_url = request.build_absolute_uri(
+            reverse('solicitations:register_with_invitation', args=[str(invitation.token)])
+        )
+        
+        subject = 'Your New Invitation'
+        message = f'''
+        Hello,
+        
+        Here's your new registration link:
+        {invite_url}
+        
+        Expires: {invitation.expires_at.strftime('%Y-%m-%d')}
+        '''
+        
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+        
+        messages.success(request, f"New invitation sent to {email}")
+        return redirect('solicitations:invite_user')
+
+    return render(request, 'solicitations/registration/invite_user.html')
+
+def register_with_invitation(request, token):
+    # Get invitation or return 404
+    invitation = get_object_or_404(Invitation, token=token)
+    
+    # Check if invitation is valid
+    if not invitation.is_valid:
+        messages.error(request, 'This invitation link has expired or already been used.')
+        return redirect('solicitations:home')
+    
+    if request.method == 'POST':
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            # Verify the email matches the invitation
+            if form.cleaned_data['email'] != invitation.email:
+                form.add_error('email', 'Please use the email address the invitation was sent to.')
+            else:
+                form.save()
+                
+                # Mark invitation as used
+                invitation.used = True
+                invitation.save()
+                
+                messages.success(request, 'Your account has been created! You can now log in.')
+                return redirect('solicitations:login-user')
+    else:
+        # Pre-fill the email field
+        form = UserRegistrationForm(initial={'email': invitation.email})
+    
+    context = {
+        'form': form,
+        'invitation': invitation
+    }
+    return render(request, 'solicitations/registration/register_with_envitation.html', context)

@@ -21,3 +21,10 @@ class UserRegistrationForm(UserCreationForm):
             'password1': forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'}),
             'password2': forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Confirm Password'}),
         }
+
+        def save(self, commit=True):
+            user = super().save(commit=False)
+            user.user_type = 'client'
+            if commit:
+                user.save()
+            return user

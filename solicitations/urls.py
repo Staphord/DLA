@@ -1,12 +1,13 @@
 from django.urls import path
 from . import views
+from django.contrib.auth import views as auth_views
 
 app_name = 'solicitations'
 
 urlpatterns = [
     ################## HOMEPAGE URLS  ######################
     path('base/', views.base, name='base'),
-    path('',views.home, name = 'home'),
+    path('home',views.home, name = 'home'),
 
     ###################  SOLICITATIONS URLS  ###############
     path('home/',views.solicitations, name = 'solicitations'),
@@ -23,6 +24,7 @@ urlpatterns = [
     path('client-detail/<client>/', views.client_details, name='client-details'),
     path('new-client/', views.add_client, name='add-client'),
     path('delete-client/<client>/', views.delete_client, name='delete-client'),
+    path('user-profile/<client>/', views.user_profile, name='user-profile'),
 
     ###################  RFQ URLS  #########################
     path('sent-rfqs/', views.sent_rfq, name='sent-rfq'),
@@ -58,5 +60,20 @@ urlpatterns = [
     path('rfq/<str:rfq_id>/chat/new-messages/', views.get_new_messages_ajax, name='get_new_messages_ajax'),
     path('my-chats/', views.rfq_chats_list, name='rfq_chats_list'),
     path('public/rfq/<str:rfq_id>/chat/<str:access_token>/', views.public_rfq_chat, name='public_rfq_chat'),
+
+    #################### Accounts url  #######################
+    path('',views.login_user, name = 'login-user'),
+    path('logout-user/',views.logout_user, name = 'logout'),
+    path('register-user/',views.register, name = 'register'),
+
+    path('invite/', views.invite_user, name='invite_user'),
+    path('register/<uuid:token>/', views.register_with_invitation, name='register_with_invitation'),
+
+    path('verify-email/<str:token>/', views.verify_email, name='verify_email'),
+
+    path('password-reset/', auth_views.PasswordResetView.as_view(template_name='solicitations/registration/password_reset_form.html'), name='password_reset'),
+    path('password-reset/done/', auth_views.PasswordResetDoneView.as_view(template_name='solicitations/registration/password_reset_done.html'), name='password_reset_done'),
+    path('reset/<uidb64>/<token>/', auth_views.PasswordResetConfirmView.as_view(template_name='solicitations/registration/password_reset_confirm.html'), name='password_reset_confirm'), 
+    path('reset/done/', auth_views.PasswordResetCompleteView.as_view(template_name='solicitations/registration/password_reset_complete.html'), name='password_reset_complete'),
 
 ]
