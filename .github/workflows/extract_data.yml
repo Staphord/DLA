@@ -2,33 +2,88 @@ name: Extract Data Every Mid Night
 
 on:
   schedule:
-  - cron: "0 3 * * *"
-  workflow_dispatch:  # Allows manual execution
+  - cron: "0 2 * * *"
+  workflow_dispatch:
 
 jobs:
   extract_data:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
 
-    - name: Set Up Python
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: "3.x"
+        python-version: "3.10"
 
-    - name: Create and Activate Virtual Environment
+    - name: Install system dependencies
       run: |
-        python -m venv venv  # Create virtual environment
-        source venv/bin/activate  # Activate the virtual environment
+        sudo apt-get update
+        sudo apt-get install -y python3-dev libjpeg-dev zlib1g-dev libmysqlclient-dev git
 
-    - name: Install Dependencies
+    - name: Create virtual environment
       run: |
-        source venv/bin/activate  # Make sure venv is active
-        pip install -r requirements.txt  # Install dependencies
+        python -m venv venv
+        echo "VIRTUAL_ENV=$(pwd)/venv" >> $GITHUB_ENV
 
-    - name: Run Data Extraction Script
+    - name: Install Python dependencies
       run: |
-        source venv/bin/activate  # Ensure venv is active
-        python extractSolicitations.py
+        ./venv/bin/pip install --upgrade pip
+        ./venv/bin/pip install wheel
+        ./venv/bin/pip install pdfplumber beautifulsoup4 django django-q mysqlclient GitPython
+        ./venv/bin/pip install -r requirements.txt
+
+    - name: Configure Django for Remote MySQL
+      env:
+        DB_HOST: ${{ secrets.168.231.66.43 }}
+        DB_NAME: ${{ secrets.rfq }}
+        DB_USER: ${{ secrets.rfq }}
+        DB_PASSWORD: ${{ secrets.rfq@0213 }}
+      run: |
+        cat << EOF > temp_settings.py
+        from RFQ.settings import *
+
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.mysql',
+                'NAME': '${{ env.DB_NAME }}',
+                'USER': '${{ env.DB_USER }}',
+                'PASSWORD': '${{ env.DB_PASSWORD }}',
+                'HOST': '${{ env.DB_HOST }}',
+                'PORT': '3306',
+                'OPTIONS': {
+                    'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+                    'connect_timeout': 10,
+                }
+            }
+        }
+        EOF
+        mv temp_settings.py RFQ/settings.py
+
+    - name: Verify Remote MySQL Connection
+      run: |
+        ./venv/bin/python -c "
+        import MySQLdb
+        try:
+            conn = MySQLdb.connect(
+                host='${{ env.DB_HOST }}',
+                user='${{ env.DB_USER }}',
+                passwd='${{ env.DB_PASSWORD }}',
+                db='${{ env.DB_NAME }}',
+                connect_timeout=10
+            )
+            print('Remote MySQL connection successful!')
+            conn.close()
+        except Exception as e:
+            print(f'Connection failed: {e}')
+            raise
+        "
+
+    - name: Run migrations
+      run: |
+        ./venv/bin/python manage.py migrate --noinput
+
+    - name: Run extraction script
+      run: |-
+        ./venv/bin/python extractSolicitations.py
