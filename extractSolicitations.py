@@ -40,10 +40,10 @@ from django.conf import settings
 
 # Variables from Django settings
 DB_HOST = '168.231.66.43' # settings.DB_HOST
-DB_USER = settings.DB_USER
-DB_PASSWORD = settings.DB_PASSWORD
-DB_NAME = settings.DB_NAME
-DB_PORT = settings.DB_PORT
+DB_USER = 'rfq' #settings.DB_USER
+DB_PASSWORD = 'rfq@0213'  # settings.DB_PASSWORD
+DB_NAME = 'rfq' #settings.DB_NAME
+DB_PORT = 3306 #settings.DB_PORT
 
 # Configure Chrome options with SSL bypass
 chrome_options = Options()
