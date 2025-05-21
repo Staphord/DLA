@@ -39,7 +39,7 @@ django.setup()
 from django.conf import settings
 
 # Variables from Django settings
-DB_HOST = settings.DB_HOST
+DB_HOST = '168.231.66.43' # settings.DB_HOST
 DB_USER = settings.DB_USER
 DB_PASSWORD = settings.DB_PASSWORD
 DB_NAME = settings.DB_NAME
