@@ -69,9 +69,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'rfq',  # Replace with your database name
-        'USER': 'root',  # Replace with your database user
-        'PASSWORD': '',   # Replace with your database password
-        'HOST': 'localhost',           # Or the hostname of your MySQL server
+        'USER': 'rfq',  # Replace with your database user
+        'PASSWORD': 'rfq@0213',   # Replace with your database password
+        'HOST': '168.231.66.43',           # Or the hostname of your MySQL server
         'PORT': '3306',                # Default MySQL port
     }
 }
@@ -135,9 +135,9 @@ DEFAULT_FROM_EMAIL = 'williamdemo01@gmail.com'
 EMAIL_HOST_PASSWORD = 'trkpitibtavjpmpm'
 
 ### Database credentials
-DB_HOST='localhost'
-DB_USER='root'
-DB_PASSWORD=''
+DB_HOST='168.231.66.43'
+DB_USER='rfq'
+DB_PASSWORD='rfq@0213'
 DB_PORT = 3306
 DB_NAME='rfq'
 

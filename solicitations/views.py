@@ -5,25 +5,25 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
 from accounts.models import CustomUser, Invitation, VerificationToken
-from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQChat, RFQChatMessage, RFQItem, RFQItemReply, RFQReply, Solicitation,OEM,GitHubWorkflow, UserOEMCustomization
+from . models import RFQ, EmailSettings, MailTemplate, OEMUser, RFQChat, RFQChatMessage, RFQItem, RFQItemReply, RFQReply, Solicitation,OEM,GitHubWorkflow, SolicitationEmailStatus, UserOEMCustomization
 from django.contrib import messages
 import subprocess
-from . forms import EmailSettingsForm, LogoUpdateForm, RFQItemReplyForm, UserOEMCustomizationForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm
+from . forms import EmailSettingsForm, LogoUpdateForm, RFQItemReplyForm, UserOEMCustomizationForm, UserRegistrationForm,RFQReplyForm,GitHubWorkflowForm, UserUpdateForm
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.template.loader import render_to_string
+import pandas as pd
 from django.urls import reverse
-from datetime import datetime
+from datetime import datetime,timedelta,date
 from django.utils import timezone
 from git import Repo
 from ruamel.yaml import YAML
 from django.db.models import Sum
 from django.core.signing import Signer
 import base64
-from django.contrib.auth import login,authenticate,logout
-from solicitations.forms import LogoUpdateForm
-from django.utils.crypto import get_random_string
-from django.core.mail import EmailMultiAlternatives
+import traceback
+from accounts.views import register_with_invitation
+
 
 ## path to yaml file
 WORKFLOW_FILE_PATH = r"C:\Users\Staphord Bengesi\Desktop\DLA\.github\workflows\extract_data.yml"
@@ -91,25 +91,55 @@ def home(request):
 
 ## view to show all solicitations
 def solicitations(request):
-    today = datetime.today().strftime("%m-%d-%Y")  # Convert today to match database format (mm-dd-yyyy)
-    # Filter solicitations to exclude expired ones
-    solicitations = Solicitation.objects.exclude(Q(cage='-') | Q(cage='N/A')).filter(return_by_date__gte=today)
-    # Count total valid solicitations
-    total_solicitations = solicitations.count()
-    # Get replied RFQs
-    replied_rfq = RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False)
+    # Get current date as date object (not string)
+    today = timezone.now().date()
     
-    # Attach `oem_disabled` attribute to each solicitation
+    # Calculate cutoff date (7 days ago)
+    cutoff_date = today - timedelta(days=7)
+    
+    # Get all sent statuses for this user
+    sent_statuses = SolicitationEmailStatus.objects.filter(
+        user=request.user,
+        email_status='sent'
+    ).values_list('solicitation_id', flat=True)
+    
+    # Get all solicitations that meet our criteria
+    solicitations = Solicitation.objects.exclude(
+        Q(cage='-') | Q(cage='N/A') | Q(id__in=sent_statuses)
+    ).filter(
+        scraped_date__gte=cutoff_date    # Recent scrapes
+    ).order_by('-scraped_date')          # Newest first
+    
+    # Filter for non-expired solicitations
+    valid_solicitations = []
     for solicitation in solicitations:
-        oem = OEM.objects.filter(cage=solicitation.cage).first()
-        solicitation.oem_disabled = OEMUser.objects.filter(oem=oem, user=request.user, is_disabled=True).exists() if oem else False
+        try:
+            # Parse return_by_date (assuming format mm-dd-yyyy)
+            return_date = datetime.strptime(solicitation.return_by_date, "%m-%d-%Y").date()
+            if return_date >= today:
+                valid_solicitations.append(solicitation)
+        except (ValueError, AttributeError):
+            # Skip if date format is invalid
+            continue
     
-    # Get email settings for the user
+    # Add OEM disabled status for each valid solicitation
+    for solicitation in valid_solicitations:
+        oem = OEM.objects.filter(cage=solicitation.cage).first()
+        solicitation.oem_disabled = OEMUser.objects.filter(
+            oem=oem, 
+            user=request.user, 
+            is_disabled=True
+        ).exists() if oem else False
+    
+    # Pagination - 50 items per page
+    paginator = Paginator(valid_solicitations, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Get email settings
     try:
         email_settings = EmailSettings.objects.get(user=request.user)
         auto_send = email_settings.auto_send
-        
-        # Get the display values for the template
         day_choices_dict = dict(EmailSettings.DAY_CHOICES)
         send_day_display = day_choices_dict[email_settings.send_day]
         send_time_display = email_settings.send_time.strftime('%I:%M %p')
@@ -118,17 +148,18 @@ def solicitations(request):
         send_day_display = "Every day"
         send_time_display = "09:00 AM"
     
-    # Pass all context variables to the template
     context = {
-        'total_solicitations': total_solicitations, 
-        'solicitations': solicitations, 
-        'replied_rfq': replied_rfq,
+        'page_obj': page_obj,  
+        'total_solicitations': len(valid_solicitations),  # Total count
+        'replied_rfq': RFQReply.objects.filter(rfq_creator=request.user, is_viewed=False),
         'auto_send': auto_send,
         'send_day_display': send_day_display,
-        'send_time_display': send_time_display
+        'send_time_display': send_time_display,
+        'cutoff_date': cutoff_date.strftime("%Y-%m-%d")
     }
     
     return render(request, 'solicitations/solicitations.html', context)
+
 
 
 ## view to show solicitation detail
@@ -491,7 +522,6 @@ def delete_rfq(request,rfq):
 
 ## this is for displaying form for reply
 def rfq_reply_view(request):
-    user = request.user
     rfq_unique_id = request.GET.get('rfq_unique_id')
     item_index = request.GET.get('item_index', '0')
     
@@ -501,6 +531,7 @@ def rfq_reply_view(request):
         item_index = 0
         
     rfq = get_object_or_404(RFQ, unique_id=rfq_unique_id)
+    rfq_creator = rfq.created_by  # The user who created the RFQ
     
     # Get all solicitations
     all_solicitations = [rfq.solicitation]  # Start with primary
@@ -522,7 +553,7 @@ def rfq_reply_view(request):
     # Check if already replied to THIS SPECIFIC ITEM
     existing_reply = RFQItemReply.objects.filter(
         rfq=rfq, 
-        rfq_creator=user,
+        rfq_creator=rfq_creator,  # Use the RFQ creator, not request.user
         solicitation=current_solicitation
     ).first()
     
@@ -538,7 +569,7 @@ def rfq_reply_view(request):
             rfq_item_reply = RFQItemReply(
                 rfq=rfq,
                 solicitation=current_solicitation,
-                rfq_creator=user,
+                rfq_creator=rfq_creator,  # Use the RFQ creator, not request.user
                 price=form.cleaned_data.get('price')
             )
             
@@ -562,7 +593,7 @@ def rfq_reply_view(request):
                     # Sum prices from all item replies
                     from django.db.models import Sum
                     total_price = RFQItemReply.objects.filter(
-                        rfq=rfq, rfq_creator=user
+                        rfq=rfq, rfq_creator=rfq_creator  # Use rfq_creator here
                     ).aggregate(Sum('price'))['price__sum'] or 0
                 else:
                     total_price = rfq_item_reply.price
@@ -570,7 +601,7 @@ def rfq_reply_view(request):
                 # Get or create the main RFQReply
                 main_reply, created = RFQReply.objects.get_or_create(
                     rfq=rfq,
-                    rfq_creator=user,
+                    rfq_creator=rfq_creator,  # Use rfq_creator here
                     defaults={
                         'price': total_price,
                         'delivery_mode': rfq_item_reply.delivery_mode,
@@ -780,66 +811,60 @@ def delete_replied_rfq(request,rfq):
 ## view to send RFQS
 def send_rfqs(request):
     try:
-        # Parse JSON data from the request body
         data = json.loads(request.body)
-        selected_ids = data.get("selected_ids", [])  # Retrieve selected IDs from the request
+        selected_ids = data.get("selected_ids", [])
 
         if not selected_ids:
             return JsonResponse({"error": "No solicitations selected"}, status=400)
 
-        # Query the database for the selected IDs
+        # Get solicitations and verify they exist
         solicitations = Solicitation.objects.filter(id__in=selected_ids)
-
         if not solicitations.exists():
             return JsonResponse({"error": "No matching solicitations found"}, status=404)
 
-        # Serialize the solicitation data
-        solicitation_data = [
-            {
+        # Serialize data
+        solicitation_data = []
+        for sol in solicitations:
+            # Create or update email status
+            status, created = SolicitationEmailStatus.objects.get_or_create(
+                solicitation=sol,
+                user=request.user,
+                defaults={'email_status': 'processing'}
+            )
+            
+            solicitation_data.append({
                 "id": sol.id,
                 "cage": sol.cage,
                 "nomenclature": sol.nomenclature,
                 "quantity": sol.quantity,
                 "return_by_date": sol.return_by_date,
                 "NSN": sol.NSN,
-            }
-            for sol in solicitations
-        ]
+            })
 
-        # Get the logged-in user
-        logged_in_user = request.user  
-
-        # Retrieve the MailTemplate for the logged-in user
-        mail_template, created = MailTemplate.objects.get_or_create(userMail=logged_in_user)
-
-        # Serialize the mail template data
+        # Get mail template and user data
+        mail_template, created = MailTemplate.objects.get_or_create(userMail=request.user)
         mail_data = {
             "salutation": mail_template.salutation,
             "heading": mail_template.heading,
             "body": mail_template.body,
         }
 
-        # Serialize the user data
         user_data = {
-            "username": logged_in_user.username,
-            "email": logged_in_user.email,
-            "phone": getattr(logged_in_user, "phone", None),
-            "address": getattr(logged_in_user, "address", None),
-            "companyName": getattr(logged_in_user, "companyName", None),
-            "logo": logged_in_user.logo.url if hasattr(logged_in_user, "logo") and logged_in_user.logo else None,
+            "username": request.user.username,
+            "email": request.user.email,
+            "phone": getattr(request.user, "phone", None),
+            "address": getattr(request.user, "address", None),
+            "companyName": getattr(request.user, "companyName", None),
+            "logo": request.user.logo.url if hasattr(request.user, "logo") and request.user.logo else None,
         }
 
-        # Combine all data
         combined_data = {
             "user_data": user_data,
             "mail_data": mail_data,
             "solicitations": solicitation_data,
         }
 
-        # Debugging: Print combined data
-        print(f"Combined data: {json.dumps(combined_data, indent=2)}")
-
-        # Run the external script with the serialized data
+        # Run external script
         python_exec = r"C:\Users\Staphord Bengesi\Desktop\DLA\venv\Scripts\python.exe"
         script_path = os.path.join(os.getcwd(), "infoExtractorSendRfq.py")
 
@@ -854,16 +879,38 @@ def send_rfqs(request):
 
         if result.returncode != 0:
             error_message = f"Subprocess failed with error: {stderr}"
-            print(error_message)  # Log the error for debugging
+            print(error_message)
+            
+            # Update status to failed
+            for sol in solicitations:
+                status = SolicitationEmailStatus.objects.get(
+                    solicitation=sol,
+                    user=request.user
+                )
+                status.email_status = 'failed'
+                status.save()
+                
             return JsonResponse({"error": error_message}, status=500)
 
-        print(f"Subprocess output: {stdout}")  # Log subprocess output
+        # If successful, update status to sent
+        for sol in solicitations:
+            status = SolicitationEmailStatus.objects.get(
+                solicitation=sol,
+                user=request.user
+            )
+            status.email_status = 'sent'
+            status.email_sent = True
+            status.email_sent_at = timezone.now()
+            status.save()
 
-        return JsonResponse({"message": stdout, "data": solicitation_data}, status=200)
+        return JsonResponse({
+            "message": stdout, 
+            "data": solicitation_data
+        }, status=200)
 
     except Exception as e:
         error_message = f"Unexpected error: {str(e)}"
-        print(error_message)  # Log unexpected errors
+        print(error_message)
         return JsonResponse({"error": error_message}, status=500)
 
 def get_chart_data(request):
@@ -969,11 +1016,11 @@ def update_mail_preview(request):
 def active_oems(request):
     # Filter OEMs related to the user and are not disabled for that user
     oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=False)
-    print(oems)
+    #print(oems)
 
     # Filter OEMs related to the user and are disabled for that user
     disabled_oems = OEM.objects.filter(oemuser__user=request.user, oemuser__is_disabled=True)
-    print(disabled_oems)
+    #print(disabled_oems)
 
     p = Paginator(oems.order_by('-id'),25)
     page = request.GET.get('page')
@@ -1139,6 +1186,207 @@ def edit_oem(request, oem):
     
     return render(request, 'solicitations/oems/edit_oem.html', {'form': form, 'oem': oem_obj})
 
+def add_oem(request):
+    """View to handle manual OEM addition through the modal form"""
+    if request.method == 'POST':
+        # Print received data for debugging
+        print("="*50)
+        print("Received POST data for manual add:", request.POST)
+        
+        try:
+            # Extract OEM data from form
+            name = request.POST.get('name')
+            cage = request.POST.get('cage')
+            email = request.POST.get('email')
+            phone = request.POST.get('phone')
+            fax = request.POST.get('fax', '')  # Optional field
+            city = request.POST.get('city')
+            street = request.POST.get('street')
+            postal_code = request.POST.get('postal_code')
+            
+            # Print extracted values
+            print("Extracted values:")
+            print(f"Name: {name}, Cage: {cage}, Email: {email}")
+            print(f"Phone: {phone}, Fax: {fax}, City: {city}")
+            print(f"Street: {street}, Postal Code: {postal_code}")
+            
+            # Validate required fields
+            required_fields = {'name': name, 'cage': cage, 'email': email, 
+                              'phone': phone, 'city': city, 'street': street, 
+                              'postal_code': postal_code}
+            
+            missing_fields = [field for field, value in required_fields.items() if not value]
+            
+            if missing_fields:
+                error_msg = f"Missing required fields: {', '.join(missing_fields)}"
+                print("ERROR:", error_msg)
+                messages.error(request, error_msg)
+                return redirect('solicitations:active-oems')
+                
+            # Check if an OEM with the same cage code already exists
+            if OEM.objects.filter(cage=cage).exists():
+                error_msg = f"An OEM with cage code '{cage}' already exists."
+                print("WARNING:", error_msg)
+                messages.error(request, error_msg)
+                return redirect('solicitations:active-oems')
+            
+            # Create new OEM
+            new_oem = OEM(
+                name=name,
+                cage=cage,
+                email=email,
+                phone=phone,
+                fax=fax,
+                city=city,
+                street=street,
+                postal_code=postal_code
+            )
+            
+            print("Attempting to save OEM to database...")
+            new_oem.save()
+            print(f"SUCCESS: Created OEM '{name}' with ID {new_oem.id}")
+            
+            # Associate OEM with the current user
+            user_oem = OEMUser(
+                user=request.user,
+                oem=new_oem,
+                is_disabled=False
+            )
+            user_oem.save()
+            print(f"SUCCESS: Associated OEM '{name}' with user '{request.user.username}'")
+            
+            messages.success(request, f"OEM '{name}' has been added successfully and associated with your account.")
+            
+        except Exception as e:
+            # Print the full error with traceback
+            print("ERROR creating OEM:", str(e))
+            print(traceback.format_exc())
+            messages.error(request, f"Error creating OEM: {str(e)}")
+            
+        print("="*50)
+        return redirect('solicitations:active-oems')
+    
+    # If not POST, redirect to active-oems
+    return redirect('solicitations:active-oems')
+
+def import_oem(request):
+    """View to handle OEM import from Excel file"""
+    if request.method == 'POST':
+        print("="*50)
+        print("Received Excel import request")
+        
+        if 'excel_file' not in request.FILES:
+            print("ERROR: No file uploaded")
+            messages.error(request, "No file uploaded. Please select an Excel file.")
+            return redirect('solicitations:active-oems')
+            
+        excel_file = request.FILES['excel_file']
+        print(f"Received file: {excel_file.name}, size: {excel_file.size} bytes")
+        
+        # Check file extension
+        if not excel_file.name.endswith(('.xlsx', '.xls')):
+            print(f"ERROR: Invalid file format: {excel_file.name}")
+            messages.error(request, "Unsupported file format. Please upload an Excel file (.xlsx, .xls).")
+            return redirect('solicitations:active-oems')
+        
+        try:
+            # Read Excel file
+            print("Reading Excel file...")
+            df = pd.read_excel(excel_file)
+            print(f"Excel file read successfully. Found {len(df)} rows.")
+            
+            # Print the columns found
+            print(f"Columns in file: {list(df.columns)}")
+            
+            # Check required columns
+            required_columns = ['name', 'cage', 'email', 'phone', 'city', 'street', 'postal_code']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                error_msg = f"Missing required columns: {', '.join(missing_columns)}"
+                print("ERROR:", error_msg)
+                messages.error(request, error_msg)
+                return redirect('solicitations:active-oems')
+            
+            # Count successful and skipped imports
+            success_count = 0
+            skip_count = 0
+            error_count = 0
+            
+            # Process each row
+            for index, row in df.iterrows():
+                try:
+                    # Print the current row being processed (first 5 rows only)
+                    if index < 5:
+                        print(f"Processing row {index}: {row.to_dict()}")
+                    
+                    # Check for missing required values
+                    missing_values = [col for col in required_columns if pd.isna(row[col]) or row[col] == '']
+                    if missing_values:
+                        print(f"WARNING - Row {index}: Missing values for {missing_values}. Skipping.")
+                        error_count += 1
+                        continue
+                        
+                    # Check if OEM with this cage already exists
+                    cage = str(row['cage']).strip()
+                    if OEM.objects.filter(cage=cage).exists():
+                        print(f"INFO - Row {index}: OEM with cage {cage} already exists. Skipping.")
+                        skip_count += 1
+                        continue
+                    
+                    # Handle optional fax field
+                    fax = str(row.get('fax', '')) if 'fax' in df.columns and not pd.isna(row.get('fax', '')) else ''
+                    
+                    # Create new OEM
+                    new_oem = OEM(
+                        name=str(row['name']).strip(),
+                        cage=cage,
+                        email=str(row['email']).strip(),
+                        phone=str(row['phone']).strip(),
+                        fax=fax,
+                        city=str(row['city']).strip(),
+                        street=str(row['street']).strip(),
+                        postal_code=str(row['postal_code']).strip()
+                    )
+                    
+                    print(f"Saving row {index} with cage {cage}...")
+                    new_oem.save()
+                    print(f"Row {index}: Successfully saved OEM with ID {new_oem.id}")
+                    
+                    # Associate OEM with the current user
+                    user_oem = OEMUser(
+                        user=request.user,
+                        oem=new_oem,
+                        is_disabled=False
+                    )
+                    user_oem.save()
+                    print(f"Row {index}: Associated OEM with user '{request.user.username}'")
+                    
+                    success_count += 1
+                    
+                except Exception as e:
+                    print(f"ERROR - Row {index}: {str(e)}")
+                    error_count += 1
+            
+            # Show success message
+            print(f"Import complete. Success: {success_count}, Skipped: {skip_count}, Errors: {error_count}")
+            
+            if success_count > 0:
+                messages.success(request, f"Successfully imported {success_count} OEMs and associated them with your account. Skipped {skip_count} duplicate entries. Errors: {error_count}.")
+            else:
+                messages.warning(request, f"No new OEMs imported. Skipped {skip_count} duplicate entries. Errors: {error_count}.")
+                
+        except Exception as e:
+            print("ERROR processing Excel file:", str(e))
+            print(traceback.format_exc())
+            messages.error(request, f"Error processing Excel file: {str(e)}")
+        
+        print("="*50)
+        return redirect('solicitations:active-oems')
+    
+    # If not POST, redirect to active-oems
+    return redirect('solicitations:active-oems')
+        
 
 #### FUNCTIONS FOR THE ADMIN TO INTERACT WITH CRON JOB CONFIGURATIONS
 
@@ -1746,123 +1994,44 @@ def public_rfq_chat(request, rfq_id, access_token):
     return render(request, 'solicitations/chat/public_rfq_chat.html', context)
 
 
-
 # view to show client detail
 def user_profile(request, client):
-    client = get_object_or_404(CustomUser, pk=client)
-
-    if request.method == "POST":
-        # Handle logo update form
+    client_user = request.user
+    logo_form = LogoUpdateForm(instance=client_user)
+    user_form = UserUpdateForm(instance=client_user)
+    
+    if request.method == 'POST':
         if 'logo_update' in request.POST:
-            form = LogoUpdateForm(request.POST, request.FILES, instance=client)
-            if form.is_valid():
-                form.save()
-                messages.success(request, "Logo updated successfully!")
-                return redirect('solicitations:user-profile', client=client.pk)
-        
-
-    form = LogoUpdateForm(instance=client)
+            # Add debugging print statements
+            print("Processing logo update")
+            print(f"FILES: {request.FILES}")
+            
+            logo_form = LogoUpdateForm(request.POST, request.FILES, instance=client_user)
+            if logo_form.is_valid():
+                print("Logo form is valid")
+                logo_form.save()
+                messages.success(request, 'Your logo has been updated successfully!')
+                return redirect('solicitations:user-profile', client=client)
+            else:
+                # Print form errors to help debug
+                print(f"Logo form errors: {logo_form.errors}")
+                messages.error(request, 'Error updating logo. Please check the form.')
+        elif 'details_update' in request.POST:
+            user_form = UserUpdateForm(request.POST, instance=client_user)
+            if user_form.is_valid():
+                user_form.save()
+                messages.success(request, 'Your profile has been updated successfully!')
+                return redirect('solicitations:user-profile', client=client)
+            else:
+                messages.error(request, 'Error updating profile. Please check the form.')
+    
     context = {
-        'client': client,
-        'form':form
+        'client': client_user,
+        'logo_form': logo_form,
+        'user_form': user_form
     }
+    
     return render(request, 'solicitations/clients/user-profile.html', context)
-
-########## Account views #########################
-# Create your views here.
-def create_verification_token(user):
-    token = get_random_string(64)
-    VerificationToken.objects.create(user=user, token=token)
-    return token
-
-def send_verification_email(user, request):
-    token = create_verification_token(user)  # Generate a unique token
-    
-    # Generate the full verification link
-    verification_link = f"{settings.BASE_URL}{reverse('solicitations:verify_email', args=[token])}"
-    
-    # Get the absolute URL for the logo
-    logo_url = f"{settings.BASE_URL}/static/accounts/assets/img/logo.png"
-
-    # Render the email template with the context
-    subject = 'Verify Your Email Address'
-    html_content = render_to_string('solicitations/registration/email_verification.html', {
-        'user': user,
-        'verification_link': verification_link,
-        'logo_url': logo_url,
-    })
-
-    # Set up sender and recipient information
-    from_email = 'williamdemo01@gmail.com'
-    sender_name = 'Support'
-
-    # Create and send the email
-    email = EmailMultiAlternatives(
-        subject,
-        '',
-        f'{sender_name} <{from_email}>',
-        [user.email],
-    )
-    email.attach_alternative(html_content, "text/html")
-    email.send()
-
-## view to log in a user
-def login_user(request):
-    if request.method == 'POST':
-        username = request.POST['username']
-        password = request.POST['password']
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            login(request, user)
-            #redirect
-            return redirect('solicitations:home')
-
-        else:
-            #redirect
-            messages.success(request,'There was an error loggin in, Try again latter!')
-            return redirect('solicitations:login-user')
-    
-    else:
-        #
-        return render(request,'solicitations/registration/login.html')
-
-## view to log out a user
-def logout_user(request):
-    logout(request)
-    return redirect('solicitations:login-user')
-
-
-    #verification view
-def verify_email(request, token):
-    # Get the verification token and associated user
-    verification_token = get_object_or_404(VerificationToken, token=token)
-    user = verification_token.user
-    user.is_email_verified = True  # Mark the email as verified
-    user.save()
-
-    # You can delete the token after verification if needed
-    verification_token.delete()
-
-    messages.success(request, "Your email has been verified! You can now log in.")
-    return redirect('solicitation:login-user')
-
-## view to register a user
-def register(request):
-    if request.method == 'POST':
-        form = UserRegistrationForm(request.POST)
-        if form.is_valid():
-            user = form.save(commit=False)
-            user.is_email_verified = False
-            user.save()
-            send_verification_email(user, request)
-            messages.success(request, "Registration successful! Check your email to verify your account.")
-            return redirect('solicitation:login-user')
-        else:
-            print(form.errors)  # Debugging errors
-    else:
-        form = UserRegistrationForm()
-    return render(request, 'solicitations/registration/register.html', {'form': form})
 
 ## view for sending envitation link
 def invite_user(request):
@@ -1872,7 +2041,7 @@ def invite_user(request):
         # 1. First check if user already exists
         if CustomUser.objects.filter(email=email).exists():
             messages.error(request, f"Email '{email}' is already registered.")
-            return render(request, 'solicitations/registration/invite_user.html', 
+            return render(request, 'solicitations/clients/invite_user.html', 
                         {'entered_email': email})
 
         # 2. Create new invitation (regardless of existing ones)
@@ -1881,14 +2050,14 @@ def invite_user(request):
 
         # 3. Send email with new invitation
         invite_url = request.build_absolute_uri(
-            reverse('solicitations:register_with_invitation', args=[str(invitation.token)])
+            reverse('accounts:register_with_invitation', args=[str(invitation.token)])
         )
         
-        subject = 'Your New Invitation'
+        subject = 'Your Invitation'
         message = f'''
         Hello,
         
-        Here's your new registration link:
+        Here's your registration link:
         {invite_url}
         
         Expires: {invitation.expires_at.strftime('%Y-%m-%d')}
@@ -1896,41 +2065,7 @@ def invite_user(request):
         
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
         
-        messages.success(request, f"New invitation sent to {email}")
+        messages.success(request, f"Invitation sent to {email}")
         return redirect('solicitations:invite_user')
 
-    return render(request, 'solicitations/registration/invite_user.html')
-
-def register_with_invitation(request, token):
-    # Get invitation or return 404
-    invitation = get_object_or_404(Invitation, token=token)
-    
-    # Check if invitation is valid
-    if not invitation.is_valid:
-        messages.error(request, 'This invitation link has expired or already been used.')
-        return redirect('solicitations:home')
-    
-    if request.method == 'POST':
-        form = UserRegistrationForm(request.POST)
-        if form.is_valid():
-            # Verify the email matches the invitation
-            if form.cleaned_data['email'] != invitation.email:
-                form.add_error('email', 'Please use the email address the invitation was sent to.')
-            else:
-                form.save()
-                
-                # Mark invitation as used
-                invitation.used = True
-                invitation.save()
-                
-                messages.success(request, 'Your account has been created! You can now log in.')
-                return redirect('solicitations:login-user')
-    else:
-        # Pre-fill the email field
-        form = UserRegistrationForm(initial={'email': invitation.email})
-    
-    context = {
-        'form': form,
-        'invitation': invitation
-    }
-    return render(request, 'solicitations/registration/register_with_envitation.html', context)
+    return render(request, 'solicitations/clients/invite_user.html')

@@ -113,27 +113,44 @@ if len(sys.argv) > 1:
 else:
     print("No arguments provided to the script.")
 
-def generate_unique_id(oem):
+def generate_unique_id(oem, created_by_user):
     """
     Generates a unique ID for an RFQ.
 
-    Format: ABC-MM-CAGE-SEQUENCE
+    Format: ABC/MMDDYYYY/CAGE/SEQUENCE
+    Where:
+    - ABC: First 3 letters of company name (from CustomUser)
+    - MMDDYYYY: Month, Day, Year format
+    - CAGE: Company's CAGE code (from CustomUser if available, otherwise from OEM)
+    - SEQUENCE: 6-digit sequence number (000001, 000002, etc.)
     """
-    current_month = now().strftime("%m")  # Get current month as two digits
-    oem_prefix = oem.name[:3].upper() if oem.name else "OEM"  # First three letters of OEM name or "OEM" if empty
-    cage_code = oem.cage.upper()  # CAGE code
+    current_date = now().strftime("%m%d%Y")  # Format: MMDDYYYY
+    
+    # Get first 3 letters of company name from CustomUser (default to "COM" if empty or too short)
+    if created_by_user.companyName and len(created_by_user.companyName) >= 3:
+        company_prefix = created_by_user.companyName[:3].upper()
+    else:
+        company_prefix = "COM"
+    
+    # Use CAGE code from CustomUser if available, otherwise fall back to OEM cage code
+    if created_by_user.cage and created_by_user.cage.strip():
+        cage_code = created_by_user.cage.upper()
+    else:
+        cage_code = oem.cage.upper()  # Fallback to OEM cage code
 
-    # Count existing RFQs for the OEM in the current month
+    # Count existing RFQs for the user in the current month
     rfq_count = RFQ.objects.filter(
-        oem=oem,
-        sent_at__month=now().month
+        created_by=created_by_user,
+        sent_at__month=now().month,
+        sent_at__year=now().year
     ).count()
 
-    # Increment sequence number
+    # Increment sequence number and format to 6 digits
     sequence_number = rfq_count + 1
+    formatted_sequence = f"{sequence_number:06d}"  # Format as 000001, 000002, etc.
 
     # Generate the unique ID
-    unique_id = f"{oem_prefix}-{current_month}-{cage_code}-{sequence_number}"
+    unique_id = f"{company_prefix}/{current_date}/{cage_code}/{formatted_sequence}"
     return unique_id
 
 ## Connect to the MySQL database and fetch cage codes
@@ -333,7 +350,7 @@ def create_rfq(solicitation, oem, created_by):
     """
     try:
         # Generate a unique ID for the RFQ
-        unique_id = generate_unique_id(oem)
+        unique_id = generate_unique_id(oem, created_by)
 
         print(f"the generated unique_id is {unique_id}")
 
@@ -357,7 +374,7 @@ def create_consolidated_rfq(solicitations, oem, created_by):
     """
     try:
         # Generate a unique ID for the RFQ
-        unique_id = generate_unique_id(oem)
+        unique_id = generate_unique_id(oem, created_by)
         print(f"Generated consolidated unique_id is {unique_id}")
         
         # Use the first solicitation as the primary one

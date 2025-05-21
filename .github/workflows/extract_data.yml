@@ -37,9 +37,9 @@ jobs:
     - name: Configure Django for Remote MySQL
       env:
         DB_HOST: '168.231.66.43'
-        DB_NAME: 'secrets.rfq'
-        DB_USER: 'secrets.rfq'
-        DB_PASSWORD: 'secrets.rfq@0213'
+        DB_NAME: 'rfq'
+        DB_USER: 'rfq'
+        DB_PASSWORD: 'rfq@0213'
       run: |
         cat << EOF > temp_settings.py
         from RFQ.settings import *

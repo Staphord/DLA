@@ -25,6 +25,7 @@ class Solicitation(models.Model):
     phone = models.CharField(max_length=20,blank=True)
     postal_code = models.CharField(max_length=20,blank=True)
     email = models.EmailField(blank=True)
+    scraped_date = models.DateField(auto_now_add=True)
 
     def __str__(self):
         return f"Solicitation-{self.cage} ({self.nomenclature})"
@@ -187,6 +188,8 @@ class SolicitationEmailStatus(models.Model):
         ('failed', 'Failed')
     ], default='pending')
     processing_attempts = models.IntegerField(default=0)
+    rfq_created = models.BooleanField(default=False)
+    rfq = models.ForeignKey('RFQ', null=True, blank=True, on_delete=models.SET_NULL)
     
     class Meta:
         unique_together = ('solicitation', 'user')

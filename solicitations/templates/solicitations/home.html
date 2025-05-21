@@ -238,26 +238,26 @@
 <!-- Progress Modal -->
 <div class="modal fade" id="progressModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
+       <div class="modal-content">
           <div class="modal-header">
               <h5 class="modal-title" id="progressModalLabel">Processing...</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="location.reload();"></button>
           </div>
           <div class="modal-body text-center">
-              <div class="progress" id="progressBarContainer">
+               <div class="progress" id="progressBarContainer">
                   <div class="progress-bar progress-bar-striped progress-bar-animated" 
                        role="progressbar" 
                        id="progressBar" 
                        style="width: 0%;">0%</div>
-              </div>
-              <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
+              </div> 
+               <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
               {% if selected_date %}
               <p id="selectedDateDisplay">Selected date: {{ selected_date }}</p>
               {% endif %}
           </div>
-      </div>
-  </div>
-</div>
+      </div> 
+   </div>
+</div> 
 
 
 <!--MODAL SCRAP -->
@@ -331,7 +331,7 @@ function handleScrape2() {
 function scrapeSolicitations() {
   const progressBar = document.getElementById('progressBar');
   const status = document.getElementById('status');
-  const dateInput = document.getElementById('scrapeDate'); // Date input from exampleModalToggle2
+  const dateInput = document.getElementById('scrapeDate'); 
   const selectedDateElement = document.getElementById('selectedDateDisplay');
 
   // Get the date value (if available)
@@ -339,7 +339,10 @@ function scrapeSolicitations() {
 
   // Show/hide selected date based on whether scrapeDate is provided
   if (selectedDateElement) {
-    selectedDateElement.style.display = date ? 'none' : 'block';
+    selectedDateElement.style.display = date ? 'block' : 'none';
+    if (date) {
+      selectedDateElement.textContent = `Selected date: ${date}`;
+    }
   }
 
   // Reset progress bar and status
@@ -358,43 +361,47 @@ function scrapeSolicitations() {
     } else {
       clearInterval(interval); // Stop progress at 90%
     }
-  }, 3000);
+  }, 300); // Speed up the simulation a bit
 
   // Start scraping process via AJAX
   fetch("{% url 'solicitations:scrap-solicitations' %}", {
     method: "POST",
     headers: {
       "X-Requested-With": "XMLHttpRequest",
-      "Content-Type": "application/json", // Specify JSON format
-      "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value, // CSRF token
+      "Content-Type": "application/json",
+      "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
     },
-    body: date ? JSON.stringify({ date: date }) : null, // Send the date as part of the request
+    body: date ? JSON.stringify({ date: date }) : JSON.stringify({}), // Always send JSON
   })
     .then(response => {
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        return response.json().then(errorData => {
+          throw new Error(`Server error (${response.status}): ${errorData.error || 'Unknown error'}`);
+        });
       }
       return response.json();
     })
     .then(data => {
+      clearInterval(interval); // Stop the interval
+      progressBar.style.width = '100%';
+      progressBar.textContent = '100%';
+      
       if (data.success) {
-        // On success, move progress to 100%
-        progressBar.style.width = '100%';
-        progressBar.textContent = '100%';
         status.textContent = "Scraping completed successfully!";
-        location.reload();
+        setTimeout(() => {
+          location.reload();
+        }, 2000);
       } else {
-        // Handle failure
-        status.textContent = "Scraping failed.";
-        progressBar.style.width = '100%';
-        progressBar.classList.add("bg-danger"); // Change to red on failure
+        status.textContent = data.error || "Scraping completed with warnings.";
       }
     })
     .catch(error => {
-      // Handle error
-      status.textContent = `An error occurred: ${error.message}`;
+      clearInterval(interval); // Stop the interval
+      status.textContent = `Error: ${error.message}`;
       progressBar.style.width = '100%';
-      progressBar.classList.add("bg-danger"); // Change to red on error
+      progressBar.textContent = '100%';
+      progressBar.classList.add("bg-danger");
+      console.error("Scraping error:", error);
     })
     .finally(() => {
       // Close modal after a short delay
@@ -416,7 +423,7 @@ function scrapeSolicitations() {
 <div class="d-flex justify-content-center align-items-center vh-100">
   <div class="text-center">
       <div class="mb-3">YOU ARE NOT AUTHENTICATED. PLEASE LOGIN.</div>
-      <a href="{% url 'solicitations:login-user' %}" class="btn btn-primary">Login Now</a>
+      <a href="{% url 'accounts:login-user' %}" class="btn btn-primary">Login Now</a>
   </div>
 </div>
 

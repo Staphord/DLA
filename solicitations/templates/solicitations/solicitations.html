@@ -67,7 +67,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for solicitation in solicitations %}
+                            {% for solicitation in page_obj %}
                             <tr style="cursor: pointer;" 
                                 {% if solicitation.oem_disabled %}
                                     class="table-danger"  
@@ -157,7 +157,28 @@
 
                             {% endfor %}
                         </tbody>
-                    </table>                    
+                    </table>    
+                    <div class="text-center mt-3" data-aos="fade-up" data-aos-delay="300">
+    <div class="ms-1 rounded me-1 container d-flex justify-content-center pagination">
+        <ul class="pagination mb-0">  <!-- Added ul for proper list structure -->
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link text-secondary" href="?page={{page_obj.previous_page_number}}">&laquo; Previous</a>
+                </li>
+            {% endif %}
+            
+            <li class="page-item">
+                <span class="page-link text-secondary">Page {{page_obj.number}} of {{page_obj.paginator.num_pages}}</span>
+            </li>
+    
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link text-secondary" href="?page={{page_obj.next_page_number}}">Next &raquo;</a>
+                </li>
+            {% endif %}
+        </ul>
+    </div>
+</div>             
                 </div>
             </div>
         </div>
@@ -479,5 +500,4 @@
         });
     });
 </script>
-
 {% endblock content %}

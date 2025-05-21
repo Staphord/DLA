@@ -46,7 +46,7 @@ class LogoUpdateForm(forms.ModelForm):
         model = CustomUser
         fields = ['logo']
         widgets = {
-            'logo': forms.ClearableFileInput(attrs={'class': 'form-control'}),
+            'logo': forms.FileInput(attrs={'class': 'form-control'}),
         }
 
 
@@ -133,3 +133,15 @@ class RFQItemReplyForm(forms.ModelForm):
             }),
             'document': forms.ClearableFileInput(attrs={'class': 'form-control'}),
         }
+
+class UserUpdateForm(forms.ModelForm):
+    class Meta:
+        model = CustomUser
+        fields = ['first_name', 'last_name', 'email', 'phone', 'address', 
+                  'companyName', 'cage', 'fax', 'website']
+        
+    def __init__(self, *args, **kwargs):
+        super(UserUpdateForm, self).__init__(*args, **kwargs)
+        # Add Bootstrap classes to form fields
+        for field_name, field in self.fields.items():
+            field.widget.attrs['class'] = 'form-control'

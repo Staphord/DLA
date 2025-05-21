@@ -1,0 +1,114 @@
+{% extends 'accounts/baseaccount.html' %}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+  <title>RFQ || Automated Program</title>
+  <meta content="" name="description">
+  <meta content="" name="keywords">
+  <link rel="shortcut icon" href="#" type="image/x-icon">
+
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Jost:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="{% static 'solicitations/assets/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+  <link href="{% static 'solicitations/assets/css/style.css' %}" rel="stylesheet">
+</head>
+
+<body>
+
+{% block content %}
+<section class="bg-light py-5 vh-100">
+  <div class="container mt-5 pt-5">
+    <div class="row">
+      <!-- Left Column -->
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-body">
+            <form method="post">
+              {% csrf_token %}
+              <div class="bg-light p-2 mb-2 form-text rounded-2">Login to RFQ Automated Portal</div>
+              <div class="mb-3">
+                <label for="exampleInputEmail1" class="form-label">Username</label>
+                <input type="text" class="form-control" name="username">
+              </div>
+              <div class="mb-3">
+                <label for="exampleInputPassword1" class="form-label">Password</label>
+                <input type="password" class="form-control" name="password">
+              </div>
+              <button type="submit" class="btn mybg hoverbg text-white w-100 mt-1">Login</button>
+              <div class="mt-2">
+              </div> <br>
+              <div class="mt-2">
+                <div class="d-flex">
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <!-- Right Column -->
+      <div class="col-md-6 py-1">
+        <!-- First Row -->
+        <div class="row gap-2 mb-3 mx-1">
+          <div class="col-12 col-sm myhover my-border text-center my-text d-flex justify-content-center align-items-center">
+            <div class="d-block">
+              <div class="">What is RFQSYS?</div>
+              <div><i class="ri-questionnaire-line fs-3"></i></div>
+            </div>
+          </div>
+          <div class="col-12 col-sm myhover my-border my-text text-center d-flex justify-content-center align-items-center">
+            <div class="d-block text-center">
+              <div class="">How to Use</div>
+              <div><i class="ri-macbook-line fs-3"></i></div>
+            </div>
+          </div>
+        </div>
+        <!-- Second Row -->
+        <div class="row gap-2 mx-1">
+          <div class="col-12 myhover col-sm my-border text-center my-text d-flex justify-content-center align-items-center">
+            <div class="d-block">
+              <div class="">Advantages of Using RFQSYS</div>
+              <div><i class="ri-team-line fs-3"></i></div>
+            </div>
+          </div>
+          <div class="col-12 col-sm myhover my-border my-text text-center d-flex justify-content-center align-items-center">
+            <div class="d-block">
+              <div class="">Pricing</div>
+              <div><i class="ri-money-dollar-circle-line fs-3"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock content %}
+
+<footer id="footer" class="footer">
+  <div class="copyright">
+    &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+  </div>
+  <div class="credits">
+    Designed by <a href="#">Gil Tech</a>
+  </div>
+</footer><!-- End Footer -->
+
+<!-- Vendor JS Files -->
+<script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  
+</body>
+</html>
+  
+  
