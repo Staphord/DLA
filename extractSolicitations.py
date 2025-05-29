@@ -28,6 +28,7 @@ import traceback
 from urllib3.exceptions import MaxRetryError
 import tempfile
 import contextlib
+from collections import defaultdict
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1122,7 +1123,79 @@ def extract_cage_details(driver, cage_codes):
     
     return extracted_data
 
+def consolidate_duplicates(nsn_data_list):
+    """
+    Consolidate records with the same CAGE code, nomenclature, NSN, and return_by_date
+    by summing their quantities and keeping one consolidated record.
+    """
+    print("Starting consolidation process...")
+    
+    # Dictionary to group records by the consolidation key
+    consolidated_dict = defaultdict(list)
+    
+    # Group records by the consolidation criteria
+    for record in nsn_data_list:
+        # Create a key based on CAGE Code, Nomenclature, NSN, and Return By Date
+        consolidation_key = (
+            record.get('CAGE Code', '').strip(),
+            record.get('Nomenclature', '').strip(),
+            record.get('NSN', '').strip(),
+            record.get('Return By Date', '').strip()
+        )
+        consolidated_dict[consolidation_key].append(record)
+    
+    # Process consolidated groups
+    consolidated_list = []
+    
+    for key, records in consolidated_dict.items():
+        if len(records) == 1:
+            # No duplicates, keep the original record
+            consolidated_list.append(records[0])
+        else:
+            # Multiple records found, consolidate them
+            cage_code, nomenclature, nsn, return_by_date = key
+            print(f"Consolidating {len(records)} records for CAGE: {cage_code}, NSN: {nsn}, Nomenclature: {nomenclature}")
+            
+            # Take the first record as base and sum quantities
+            base_record = records[0].copy()
+            total_quantity = 0
+            
+            # Collect all part numbers (remove duplicates)
+            all_part_numbers = set()
+            
+            for record in records:
+                # Sum quantities (handle None values)
+                quantity = record.get('Quantity', 0)
+                if quantity is not None and isinstance(quantity, (int, float)):
+                    total_quantity += quantity
+                elif quantity is not None:
+                    try:
+                        total_quantity += int(quantity)
+                    except (ValueError, TypeError):
+                        print(f"Warning: Could not convert quantity '{quantity}' to number")
+                
+                # Collect part numbers
+                part_number = record.get('Part Number', '').strip()
+                if part_number and part_number != 'N/A':
+                    all_part_numbers.add(part_number)
+            
+            # Update the base record with consolidated data
+            base_record['Quantity'] = total_quantity
+            
+            # Combine part numbers (remove duplicates)
+            if all_part_numbers:
+                base_record['Part Number'] = ', '.join(sorted(all_part_numbers))
+            
+            consolidated_list.append(base_record)
+            
+            print(f"Consolidated to 1 record with total quantity: {total_quantity}")
+    
+    print(f"Consolidation complete: {len(nsn_data_list)} original records -> {len(consolidated_list)} consolidated records")
+    return consolidated_list
+
 def process_row_data(row_data_list):
+    temp_nsn_data_list = []
+    
     for row_data in row_data_list:
         try:
             check_for_hang()
@@ -1163,12 +1236,14 @@ def process_row_data(row_data_list):
                     'Part Number': part_number if part_number else 'N/A',
                     'Unit': unit
                 }
-                nsn_data_list.append(nsn_entry)
+                temp_nsn_data_list.append(nsn_entry)
 
         except Exception as e:
             print(f"Error processing row data: {e}")
 
-    return nsn_data_list
+    # Consolidate duplicates before returning
+    consolidated_data = consolidate_duplicates(temp_nsn_data_list)
+    return consolidated_data
 
 def save_to_db(data_list, cage_details_list):
     sql_query = """
@@ -1200,16 +1275,16 @@ def save_to_db(data_list, cage_details_list):
                     city = cage_details.get('City', 'N/A')
                     postal_code = cage_details.get('Postal Code', 'N/A')
                     phone = cage_details.get('Phone', 'N/A')
-                    fax = cage_details.get('Fax', 'N/A')
+                    fax = cage_details.get('Fax', '-')
                     email = cage_details.get('Email', 'N/A')
                 else:
-                    organization_name = 'N/A'
-                    street_name = 'N/A'
-                    city = 'N/A'
-                    postal_code = 'N/A'
-                    phone = 'N/A'
-                    fax = 'N/A'
-                    email = 'N/A'
+                    organization_name = '-'
+                    street_name = '-'
+                    city = '-'
+                    postal_code = '-'
+                    phone = '-'
+                    fax = '-'
+                    email = '-'
 
                 cursor.execute(sql_query, (
                     data.get('CAGE Code', 'N/A'),
@@ -1227,82 +1302,12 @@ def save_to_db(data_list, cage_details_list):
                     fax,
                     email,
                     data.get('Part Number', 'N/A'),
-                    data.get('Unit', 'N/A'),
+                    data.get('Unit', 'EA (EACH)'),
                     datetime.date.today() 
                 ))
                 db_connection.commit()
-            except MySQLdb.Error as e:
-                print(f"Database error: {e}")
-                db_connection.rollback()
-    
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
-    finally:
-        try:
-            db_connection.close()
-        except:
-            pass
-        
-    sql_query = """
-    INSERT INTO solicitations_solicitation 
-    (cage, nsn, nomenclature, status, quantity, issued_date, return_by_date, 
-     organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit, scraped_date)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    
-    try:
-        db_connection = MySQLdb.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            passwd=DB_PASSWORD,
-            db=DB_NAME,
-            port=DB_PORT,
-            cursorclass=DictCursor
-        )
-        cursor = db_connection.cursor()
-
-        for data in data_list:
-            try:
-                cage_code = data.get('CAGE Code', 'N/A')
-                cage_details = next((item for item in cage_details_list if item['CAGE Code'] == cage_code), None)
-
-                if cage_details:
-                    organization_name = cage_details.get('Organization Name', 'N/A')
-                    street_name = cage_details.get('Street Name', 'N/A')
-                    city = cage_details.get('City', 'N/A')
-                    postal_code = cage_details.get('Postal Code', 'N/A')
-                    phone = cage_details.get('Phone', 'N/A')
-                    fax = cage_details.get('Fax', 'N/A')
-                    email = cage_details.get('Email', 'N/A')
-                else:
-                    organization_name = 'N/A'
-                    street_name = 'N/A'
-                    city = 'N/A'
-                    postal_code = 'N/A'
-                    phone = 'N/A'
-                    fax = 'N/A'
-                    email = 'N/A'
-
-                cursor.execute(sql_query, (
-                    data.get('CAGE Code', 'N/A'),
-                    data.get('NSN', 'N/A'),
-                    data.get('Nomenclature', 'N/A'),
-                    data.get('Status', 'N/A'),
-                    data.get('Quantity', 0),
-                    data.get('Issued Date', 'N/A'),
-                    data.get('Return By Date', 'N/A'),
-                    organization_name,
-                    street_name,
-                    city,
-                    postal_code,
-                    phone,
-                    fax,
-                    email,
-                    data.get('Part Number', 'N/A'),
-                    data.get('Unit', 'N/A'),
-                    datetime.date.today() 
-                ))
-                db_connection.commit()
+                print(f"Saved consolidated record: CAGE {cage_code}, NSN {data.get('NSN', 'N/A')}, Quantity {data.get('Quantity', 0)}")
+                
             except MySQLdb.Error as e:
                 print(f"Database error: {e}")
                 db_connection.rollback()

@@ -132,7 +132,7 @@ def solicitations(request):
         ).exists() if oem else False
     
     # Pagination - 50 items per page
-    paginator = Paginator(valid_solicitations, 25)
+    paginator = Paginator(valid_solicitations, 5)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
