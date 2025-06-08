@@ -50,7 +50,7 @@ DB_PORT = 3306 #settings.DB_PORT
 chrome_options = Options()
 chrome_options.add_experimental_option("detach", True)
 chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--headless")
+#chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-software-rasterizer")
 chrome_options.add_argument("--enable-logging")
 chrome_options.add_argument("--v=1")
@@ -906,43 +906,198 @@ def extract_data_from_page(driver, wait):
         except Exception as e:
             print(f"Error processing row: {e}")
 
+def check_if_single_page(driver):
+    """Check if there's only one page of results."""
+    try:
+        # Look for pagination elements
+        pagination_elements = driver.find_elements(By.XPATH, "//tr[@class='pagination']")
+        if not pagination_elements:
+            print("No pagination row found - single page")
+            return True
+        
+        # Check for any page links (Page$2, Page$3, etc.)
+        page_links = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/a[contains(@href, 'Page')]")
+        if not page_links:
+            print("No page links found - single page")
+            return True
+            
+        # Check for ellipsis links
+        ellipsis_links = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/a[text()='...']")
+        
+        # If we have page links or ellipsis, it's multi-page
+        if page_links or ellipsis_links:
+            print(f"Found {len(page_links)} page links and {len(ellipsis_links)} ellipsis links - multiple pages")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error checking pagination: {e}")
+        return True  # Assume single page if we can't determine
+
+def get_pagination_info(driver):
+    """Get information about current pagination state for debugging."""
+    try:
+        pagination_row = driver.find_element(By.XPATH, "//tr[@class='pagination']/td/table/tbody/tr")
+        
+        # Get all td elements in pagination
+        pagination_cells = pagination_row.find_elements(By.XPATH, ".//td")
+        
+        print("=== PAGINATION DEBUG INFO ===")
+        for i, cell in enumerate(pagination_cells):
+            cell_html = cell.get_attribute('innerHTML')
+            print(f"Cell {i}: {cell_html}")
+        
+        # Get current page (span element)
+        current_page_spans = pagination_row.find_elements(By.XPATH, ".//td/span")
+        if current_page_spans:
+            print(f"Current page indicators: {[span.text for span in current_page_spans]}")
+        
+        # Get clickable page links
+        page_links = pagination_row.find_elements(By.XPATH, ".//td/a[contains(@href, 'Page')]")
+        if page_links:
+            print(f"Available page links: {[link.text for link in page_links]}")
+            print(f"Page link hrefs: {[link.get_attribute('href') for link in page_links]}")
+        
+        # Get ellipsis links
+        ellipsis_links = pagination_row.find_elements(By.XPATH, ".//td/a[text()='...']")
+        if ellipsis_links:
+            print(f"Ellipsis links: {[link.get_attribute('href') for link in ellipsis_links]}")
+        
+        print("=== END PAGINATION DEBUG ===")
+        
+    except Exception as e:
+        print(f"Error getting pagination info: {e}")
+
 @retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
 def handle_pagination(driver, wait):
-    """Handle pagination and extract data from all pages."""
+    """Handle pagination with proper chunked pagination support (pages 1-10, 11-20, etc.)"""
     page_number = 1
+    
+    # First, extract data from the initial page (page 1)
+    print(f"Processing page {page_number}...")
+    extract_data_from_page(driver, wait)
+    
     while True:
         try:
             check_for_hang()
             if not check_driver_health(driver):
                 raise WebDriverException("Driver connection lost")
-                
-            pagination_xpath = "//tr[@class='pagination']/td/table/tbody/tr"
-            pagination_row = wait.until(EC.presence_of_element_located((By.XPATH, pagination_xpath)))
             
-            page_links = pagination_row.find_elements(By.XPATH, ".//td/a[text() and not(contains(text(), 'Next')) and not(contains(text(), 'Previous'))]")
-            
-            if page_number > len(page_links):
-                print(f"Page {page_number} exceeds available pages. Stopping.")
+            # Check if pagination exists at all
+            try:
+                pagination_xpath = "//tr[@class='pagination']/td/table/tbody/tr"
+                pagination_row = wait.until(EC.presence_of_element_located((By.XPATH, pagination_xpath)))
+            except:
+                print("No pagination found. Only one page exists.")
                 break
             
-            print(f"Processing page {page_number}...")
+            # Calculate the next page number
+            next_page_number = page_number + 1
+            print(f"Looking for page {next_page_number}...")
             
-            page_link = page_links[page_number - 1]
-            href_value = page_link.get_attribute("href")
+            # Try to find the next page link in current pagination chunk
+            next_page_link = None
             
-            if href_value and "__doPostBack" in href_value:
-                script = href_value.split('javascript:')[1]
-                driver.execute_script(f"javascript:{script}")
-                wait.until(EC.presence_of_element_located((By.XPATH, "//tr[@class='pagination']")))
-                extract_data_from_page(driver, wait)
-                page_number += 1
-                cleanup_resources(driver)  # Periodic cleanup
-            else:
-                print(f"Invalid pagination link at page {page_number}. Skipping...")
+            # Look for the direct page number link first
+            try:
+                next_page_link = pagination_row.find_element(
+                    By.XPATH, f".//td/a[@href and contains(@href, 'Page${next_page_number}')]"
+                )
+                print(f"Found direct link for page {next_page_number}")
+            except:
+                print(f"Direct link for page {next_page_number} not found in current chunk")
+            
+            # If direct page link not found, check if we need to click "..." to load next chunk
+            if not next_page_link:
+                try:
+                    # Look for "..." link that loads the next chunk
+                    # The "..." link contains the first page number of the next chunk
+                    # For example: Page$11, Page$21, Page$31, etc.
+                    
+                    # Calculate which chunk we need
+                    target_chunk_start = ((next_page_number - 1) // 10) * 10 + 1
+                    if target_chunk_start > next_page_number:
+                        target_chunk_start -= 10
+                    
+                    # If we're not in the right chunk, look for the "..." link
+                    if target_chunk_start != 1 and target_chunk_start % 10 == 1:
+                        ellipsis_link = pagination_row.find_element(
+                            By.XPATH, f".//td/a[@href and contains(@href, 'Page${target_chunk_start}') and text()='...']"
+                        )
+                        print(f"Found ellipsis link for chunk starting at page {target_chunk_start}")
+                        
+                        # Click the ellipsis to load the new chunk
+                        href_value = ellipsis_link.get_attribute("href")
+                        if "__doPostBack" in href_value:
+                            script = href_value.split('javascript:')[1]
+                            driver.execute_script(f"javascript:{script}")
+                            
+                            # Wait for the new pagination chunk to load
+                            wait.until(EC.presence_of_element_located((By.XPATH, pagination_xpath)))
+                            time.sleep(1)  # Brief pause for pagination to update
+                            
+                            # Now try to find the direct page link again
+                            pagination_row = driver.find_element(By.XPATH, pagination_xpath)
+                            next_page_link = pagination_row.find_element(
+                                By.XPATH, f".//td/a[@href and contains(@href, 'Page${next_page_number}')]"
+                            )
+                            print(f"Found page {next_page_number} link after loading new chunk")
+                        
+                except Exception as e:
+                    print(f"Could not find ellipsis link: {e}")
+            
+            # If we still don't have a next page link, we've reached the end
+            if not next_page_link:
+                print(f"No link found for page {next_page_number}. Reached end of pagination.")
+                break
+            
+            # Click the next page link
+            try:
+                href_value = next_page_link.get_attribute("href")
+                if "__doPostBack" in href_value:
+                    script = href_value.split('javascript:')[1]
+                    driver.execute_script(f"javascript:{script}")
+                    
+                    # Wait for the new page to load
+                    wait.until(EC.presence_of_element_located((By.XPATH, "//tr[contains(@class, 'BgWhite') or contains(@class, 'BgSilver')]")))
+                    time.sleep(1)  # Brief pause for page content to load
+                    
+                    page_number = next_page_number
+                    print(f"Successfully moved to page {page_number}")
+                    print(f"Processing page {page_number}...")
+                    extract_data_from_page(driver, wait)
+                    cleanup_resources(driver)  # Periodic cleanup
+                    
+                else:
+                    print(f"Invalid href for page {next_page_number}: {href_value}")
+                    break
+                    
+            except Exception as e:
+                print(f"Error clicking page {next_page_number}: {e}")
                 break
 
         except Exception as e:
-            print(f"Error on page {page_number}: {e}")
+            print(f"Error during pagination at page {page_number}: {e}")
+            
+            # Try to determine if we've reached the end by checking current page indicator
+            try:
+                # Look for current page span (non-clickable)
+                current_page_spans = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/span")
+                if current_page_spans:
+                    current_page_text = current_page_spans[-1].text.strip()
+                    print(f"Current page indicator: {current_page_text}")
+                
+                # Check if there are any more clickable page links
+                remaining_links = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/a[contains(@href, 'Page')]")
+                if not remaining_links:
+                    print("No more page links found. Reached end of pagination.")
+                    break
+                    
+            except Exception as check_error:
+                print(f"Error checking pagination state: {check_error}")
+            
+            print("Stopping pagination due to error.")
             break
 
 @retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
@@ -1334,7 +1489,7 @@ def main():
             click_element(wait, "butAgree")
             click_element(wait, "ctl00_cph1_lnkRfqDatesRecent")
 
-            # Date selection logic
+            # Date selection logic - MODIFIED TO USE category=issue
             table_xpath = "//table[@title='RFQ Download Files' and @summary='Table contains links to RFQ files']"
             table = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
 
@@ -1350,12 +1505,29 @@ def main():
                 if date_links:
                     date_to_send = formated_date if formated_date else date_links[0].text.strip()
                     
-                    for link in date_links:
-                        if formated_date and link.text.strip() == formated_date:
-                            link.click()
-                            break
+                    # Find the target date link
+                    target_link = None
+                    if formated_date:
+                        for link in date_links:
+                            if link.text.strip() == formated_date:
+                                target_link = link
+                                break
                     else:
-                        date_links[0].click()
+                        target_link = date_links[0]
+                    
+                    if target_link:
+                        # Get the original URL and modify it to use category=issue instead of category=post
+                        original_url = target_link.get_attribute('href')
+                        modified_url = original_url.replace('category=post', 'category=issue')
+                        
+                        print(f"Original URL: {original_url}")
+                        print(f"Modified URL: {modified_url}")
+                        
+                        # Navigate to the modified URL instead of clicking the link
+                        driver.get(modified_url)
+                    else:
+                        print(f"Date {formated_date} not found in available dates")
+                        return
                     
                     try:
                         response = requests.post(
@@ -1373,9 +1545,19 @@ def main():
             else:
                 print("Post Date column not found")
 
-            # Main workflow
-            extract_data_from_page(driver, wait)
-            handle_pagination(driver, wait)
+            # FIXED: Main workflow with improved pagination
+            # Check for pagination and handle accordingly
+            if check_if_single_page(driver):
+                print("Single page detected, extracting data from single page...")
+                extract_data_from_page(driver, wait)
+            else:
+                print("Multiple pages detected, starting pagination...")
+                # handle_pagination already extracts data from all pages including page 1
+                handle_pagination(driver, wait)
+            
+            print(f"Total records extracted from all pages: {len(row_data_list)}")
+            
+            # Process NSN links (this will process all data collected from all pages)
             cage_codes = process_nsn_links(driver)
             cage_details_list = extract_cage_details(driver, cage_codes)
             processed_data = process_row_data(row_data_list)
