@@ -21,6 +21,8 @@ class CustomUser(AbstractUser):
     fax = models.CharField(max_length=20, blank=True, null=True)
     cage = models.CharField(max_length=10, blank=True, null=True)
     website = models.CharField(max_length=100, blank=True, null=True)
+    title = models.CharField(max_length=100, blank=True, null=True)
+
 
     def __str__(self):
         return self.username

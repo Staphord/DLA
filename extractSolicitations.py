@@ -88,443 +88,54 @@ TIMEOUT_THRESHOLD = 300  # 5 minutes
 
 # Unit code to description mapping
 UNIT_MAPPING = {
-    'AB': 'BULK PACK',
-    'AC': 'ACRE',
-    'AD': 'DRAM (MINIM)',
-    'AJ': 'COP',
-    'AL': 'ACCESS LINES',
-    'AM': 'AMPOULE',
-    'AO': 'APOTHECARY OUNCE',
-    'AP': 'APOTHECARY POUND',
-    'AR': 'SUPPOSITORY',
-    'AS': 'APOTHECARY SCRUPLE',
-    'AT': 'ASSORTMENT',
-    'AV': 'CAPSULE',
-    'AW': 'POWDER-FILLED VIALS',
-    'AX': 'TWENTY',
-    'AY': 'ASSEMBLY',
-    'B0': 'BRITISH THERMAL UNITS (BTU\'S) PER CUBIC FOOT',
-    'B1': 'BARREL, LIQUID',
-    'B2': 'BARREL, DRY',
-    'B3': 'BATTING POUND',
-    'B4': 'BARREL, IMPERIAL',
-    'B5': 'BILLET',
-    'B6': 'BUN',
-    'B7': 'CYCLE',
-    'B8': 'BOARD',
-    'B9': 'BATT',
-    'BA': 'BALL',
-    'BB': 'BASS BOX',
-    'BC': 'BUCKET',
-    'BD': 'BUNDLE',
-    'BE': 'BALE',
-    'BF': 'BOARD FOOT',
-    'BG': 'BAG',
-    'BH': 'BRUSH',
-    'BI': 'BELT',
-    'BJ': 'BAND',
-    'BK': 'BOOK',
-    'BL': 'BARREL',
-    'BM': 'BEAM',
-    'BN': 'BULK',
-    'BO': 'BOLT',
-    'BP': '100 BOARD FEET',
-    'BQ': 'BRIQUET',
-    'BR': 'BAR',
-    'BS': 'BASKET',
-    'BT': 'BOTTLE',
-    'BU': 'BUSHEL (32 DRY QUARTS)',
-    'BV': 'BUSHEL, DRY IMPERIAL',
-    'BW': 'BASE WEIGHT',
-    'BX': 'BOX',
-    'BY': 'BUNKS',
-    'BZ': 'BLOCK',
-    'C0': 'CALLS',
-    'C1': 'COMPOSITE PRODUCT POUNDS (TOTAL WEIGHT)',
-    'C2': 'SQUARE CENTIMETER',
-    'C3': 'COMBO',
-    'C4': 'CARLOAD',
-    'C5': 'COST',
-    'C6': 'CELL',
-    'C7': 'CARSET',
-    'C8': 'CUBIC DECIMETER',
-    'C9': 'COIL GROUP',
-    'CA': 'CARTRIDGE',
-    'CB': 'CARBOY',
-    'CC': 'CUBIC CENTIMETER',
-    'CD': 'CUBIC YARD',
-    'CE': 'CONE',
-    'CF': 'CUBIC FOOT',
-    'CG': 'CENTIGRAM',
-    'CH': 'CHAINS (LAND SURVEY)',
-    'CI': 'CUBIC INCH',
-    'CK': 'CAKE',
-    'CL': 'COIL',
-    'CM': 'CENTIMETER',
-    'CN': 'CAN',
-    'CO': 'CONTAINER',
-    'CP': 'CRATE',
-    'CQ': 'CARD',
-    'CR': 'CONNECTOR',
-    'CS': 'CASE',
-    'CT': 'CARTON',
-    'CU': 'CURIE',
-    'CV': 'COVER',
-    'CW': 'HUNDRED WEIGHT (LONG)',
-    'CX': 'CASSETTE',
-    'CY': 'CYLINDER',
-    'CZ': 'CUBIC METER',
-    'DA': 'DAYS',
-    'DB': 'DECIBELS',
-    'DC': 'DECAGRAM',
-    'DE': 'DECIMETER',
-    'DF': 'FAHRENHEIT',
-    'DG': 'DECIGRAM',
-    'DI': 'DISPENSER',
-    'DK': 'KELVIN',
-    'DL': 'DECILITER',
-    'DM': 'DRAM',
-    'DO': 'DOLLARS, U.S.',
-    'DP': 'DOZEN PAIR',
-    'DQ': 'DATA RECORD',
-    'DR': 'DRUM',
-    'DS': 'DISPLAY',
-    'DT': 'DRY TON',
-    'DU': 'DYNE',
-    'DW': 'PENNYWEIGHT',
-    'DX': 'CALENDAR DAYS (NUMBER OF)',
-    'DY': 'DIRECTORY BOOKS',
-    'DZ': 'DOZEN',
-    'E1': 'HECTOMETER',
-    'EA': 'EACH',
-    'EB': 'ELECTRONIC MAIL BOXES',
-    'EE': 'EMPLOYEES',
-    'EH': 'KNOTS',
-    'EJ': 'LOCATIONS',
-    'EP': 'ELEVEN PACK',
-    'EQ': 'EQUIVALENT GALLONS',
-    'EV': 'ENVELOPE',
-    'EX': 'EXPOSURE',
-    'F4': 'MINIM',
-    'F6': 'PRICE PER SHARE',
-    'FA': 'FATHOM',
-    'FB': 'FIELDS',
-    'FD': 'FOLD',
-    'FE': 'TRACK FOOT',
-    'FF': 'HUNDRED CUBIC METERS',
-    'FG': 'TRANSDERMAL PATCH',
-    'FJ': 'SIZING FACTOR',
-    'FK': 'FIBERS',
-    'FL': 'FLAKE TON',
-    'FM': 'MILLION CUBIC FEET',
-    'FO': 'FLUID OUNCE',
-    'FR': 'FRAME',
-    'FT': 'FOOT',
-    'FU': 'FURLONG',
-    'FV': 'FIVE',
-    'FY': 'FIFTY',
-    'GB': 'U.S. GALLONS PER MINUTE',
-    'GG': 'GREAT GROSS',
-    'GI': 'GILL',
-    'GL': 'GALLON',
-    'GM': 'GRAM',
-    'GN': 'GRAIN',
-    'GP': 'GROUP',
-    'GR': 'GROSS',
-    'GT': 'THOUSAND GALLONS PER DAY',
-    'GX': 'APOTHECARY GRAIN',
-    'H2': 'HALF LITER',
-    'H4': 'HECTOLITER',
-    'HA': 'HUNDRED CUBIC FEET',
-    'HB': 'HOSPITAL BEDS',
-    'HC': 'HUNDRED COUNT',
-    'HD': 'HUNDRED',
-    'HF': 'HUNDRED FEET',
-    'HG': 'HECTOGRAM',
-    'HH': 'HOGSHEAD',
-    'HI': 'HUNDRED SHEETS',
-    'HK': 'HANK',
-    'HL': 'HUNDRED FEET - LINEAR',
-    'HO': 'HUNDRED TROY OUNCES',
-    'HP': 'HUNDRED POUNDS',
-    'HQ': 'HECTARE',
-    'HR': 'HOUR',
-    'HS': 'HUNDRED SQUARE FEET',
-    'HT': 'HALF HOUR',
-    'HW': 'HUNDRED WEIGHT - SHORT (HUNDRED WEIGHT)',
-    'HX': 'HUNDRED BOXES',
-    'HY': 'HUNDRED YARDS',
-    'HZ': 'HALF DOZEN',
-    'I1': 'PERSONS, CAPACITY',
-    'IG': 'IMPERIAL GALLON',
-    'IH': 'INHALER',
-    'IM': 'IMPRESSIONS',
-    'IN': 'INCH',
-    'IP': 'INSURANCE POLICY',
-    'IS': 'STOPS',
-    'IU': 'INTERNATIONAL UNIT',
-    'JB': 'JOB',
-    'JG': 'JUG',
-    'JO': 'JOINT',
-    'JR': 'JAR',
-    'JU': 'JUMBO',
-    'K2': 'SQUARE KILOMETER',
-    'K6': 'KILOLITER',
-    'K7': 'KILOWATT',
-    'KC': 'KILOCURIE',
-    'KE': 'KEG',
-    'KF': 'KILOPACKETS',
-    'KG': 'KILOGRAM',
-    'KH': 'HUNDRED KILOGRAMS',
-    'KK': '100 KILOGRAMS',
-    'KM': 'KILOMETER',
-    'KR': 'KARAT (CARAT)',
-    'KT': 'KIT',
-    'KU': 'TASK',
-    'KV': 'KILOVOLTS',
-    'KZ': 'KILOWATT-HOUR',
-    'L5': 'LITERS AT 15 DEGREES CELSIUS',
-    'LB': 'POUND (AVOIRDUPOIS)',
-    'LE': 'LITE',
-    'LF': 'LINEAR FOOT',
-    'LG': 'LENGTH',
-    'LI': 'LITER',
-    'LJ': 'LARGE SPRAY',
-    'LK': 'LINK',
-    'LM': 'LINEAR METER',
-    'LN': 'LINEAR INCH',
-    'LO': 'LONG TON',
-    'LR': 'LAYER(S)',
-    'LS': 'LUMP SUM',
-    'LT': 'LOT',
-    'LY': 'LINEAR YARD',
-    'M0': 'MAGNETIC TAPES',
-    'M2': 'SQUARE MILE',
-    'M3': 'MAT',
-    'M5': 'MICROGRAM',
-    'M6': 'METRIC TON',
-    'MA': 'METRIC NET TON',
-    'MB': 'BRITISH THERMAL UNITS (BTUS) PER HOUR',
-    'MC': 'THOUSAND CUBIC FEET',
-    'MD': 'AIR DRY METRIC TON',
-    'ME': 'MEAL',
-    'MF': 'THOUSAND FEET',
-    'MG': 'MILLIGRAM',
-    'MH': 'METRIC',
-    'MI': 'MILE',
-    'MJ': 'METRIC GROSS TON',
-    'MK': 'METRIC LONG TON',
-    'ML': 'MILLILITER',
-    'MM': 'MILLIMETER',
-    'MO': 'MONTHS',
-    'MQ': '1000 METERS',
-    'MR': 'METER',
-    'MS': 'SQUARE MILLIMETER',
-    'MT': 'MINUTES',
-    'MX': 'THOUSAND',
-    'MZ': 'MIXED',
-    'N2': 'NUMBER OF LINES',
-    'N7': 'PARTS',
-    'N9': 'CARTRIDGE NEEDLE',
-    'NA': 'MILLIGRAMS PER KILOGRAM',
-    'NB': 'BARGE',
-    'NC': 'CAR',
-    'ND': 'NET BARRELS',
-    'NE': 'NET LITERS',
-    'NF': 'MESSAGES',
-    'NG': 'NET GALLONS',
-    'NI': 'NET IMPERIAL GALLONS',
-    'NJ': 'NUMBER OF SCREENS',
-    'NK': 'NIGHTS',
-    'NL': 'LOAD',
-    'NM': 'NAUTICAL MILE',
-    'NN': 'TRAIN',
-    'NS': 'SHORT TON',
-    'NT': 'TRAILER',
-    'NV': 'VEHICLE',
-    'NX': 'PARTS PER THOUSAND',
-    'OA': 'PANEL',
-    'OC': 'BILLBOARD',
-    'OL': 'OUTLET',
-    'OP': 'TWO PACK',
-    'OT': 'OUTFIT',
-    'OU': 'OPERATING UNIT',
-    'OZ': 'OUNCE - AV',
-    'P0': 'PAGES - ELECTRONIC',
-    'P1': 'PERCENT',
-    'P2': 'POUNDS PER FOOT',
-    'P3': 'THREE PACK',
-    'P4': 'FOUR-PACK',
-    'P5': 'FIVE-PACK',
-    'P6': 'SIX PACK',
-    'P7': 'SEVEN PACK',
-    'P8': 'EIGHT-PACK',
-    'P9': 'NINE PACK',
-    'PA': 'PAGE',
-    'PB': 'PAIR INCHES',
-    'PC': 'PIECE',
-    'PD': 'PAD',
-    'PE': 'POUNDS EQUIVALENT',
-    'PF': 'PALLET (LIFT)',
-    'PG': 'PACKAGE',
-    'PH': 'PACK (PAK)',
-    'PI': 'PILLOW',
-    'PJ': 'PALLET/UNIT LOAD',
-    'PK': 'PECK, DRY U.S.',
-    'PL': 'PAIL',
-    'PM': 'PLATE',
-    'PN': 'PERSON',
-    'PO': 'POUNDS GROSS',
-    'PP': 'PINT, IMPERIAL',
-    'PQ': 'PECK DRY IMPERIAL',
-    'PR': 'PAIR',
-    'PS': 'POUNDS NET',
-    'PT': 'PINT',
-    'PU': 'MASS POUNDS',
-    'PV': 'HALF PINT',
-    'PX': 'PELLET',
-    'PY': 'PITCH',
-    'PZ': 'PACKET',
-    'QC': 'CHANNEL',
-    'QE': 'PHOTOGRAPHS',
-    'QF': 'QUARTER',
-    'QI': 'QUART, IMPERIAL',
-    'QK': 'QUARTER KILOGRAM',
-    'QR': 'QUIRE',
-    'QS': 'QUART, DRY U.S.',
-    'QT': 'QUART',
-    'QU': 'QUARTER DOZEN',
-    'R4': 'CALORIE',
-    'R5': 'THOUSANDS OF DOLLARS',
-    'R9': 'THOUSAND CUBIC METERS',
-    'RA': 'RATION',
-    'RB': 'RADIAN',
-    'RC': 'ROD (AREA) - 16.25 SQUARE YARDS',
-    'RD': 'ROUND',
-    'RG': 'RING',
-    'RH': 'RUNNING OR OPERATING HOURS',
-    'RK': 'ROLL-METRIC MEASURE',
-    'RL': 'REEL',
-    'RM': 'REAM',
-    'RN': 'REAM-METRIC MEASURE',
-    'RO': 'ROLL',
-    'RP': 'POUNDS PER REAM',
-    'RR': 'RACK',
-    'RS': 'RESETS',
-    'RT': 'REVENUE TON MILES',
-    'RU': 'RUN',
-    'RX': 'THOUSAND ROUNDS',
-    'S5': 'SIXTY-FOURTHS OF AN INCH',
-    'S6': 'SESSIONS',
-    'S7': 'STORAGE UNITS',
-    'S8': 'SHELF PACKAGE',
-    'S9': 'SLIP SHEET',
-    'SA': 'SANDWICH',
-    'SB': 'SHIPMENT',
-    'SC': 'SECONDS',
-    'SD': 'SKID',
-    'SE': 'SET',
-    'SF': 'SQUARE FOOT',
-    'SG': 'SEGMENT',
-    'SH': 'SHEET',
-    'SI': 'SQUARE INCH',
-    'SJ': 'SACK',
-    'SK': 'SKEIN',
-    'SL': 'SPOOL',
-    'SM': 'SQUARE METER',
-    'SN': 'SECTION (640 ACRES OR ONE SQUARE MILE)',
-    'SO': 'SHOT',
-    'SP': 'STRIP',
-    'SQ': 'SQUARE',
-    'SR': 'SPLIT TANKTRUCK',
-    'SS': 'SHEET-METRIC MEASURE',
-    'ST': 'SEAT',
-    'SU': 'SQUARE ROD',
-    'SV': 'SERVICE',
-    'SW': 'STANDARD ADVERTISING UNITS (SAUS)',
-    'SX': 'STICK',
-    'SY': 'SQUARE YARD',
-    'SZ': 'SYRINGE',
-    'T1': 'THOUSAND POUNDS GROSS',
-    'T2': 'TEASPOON',
-    'T3': 'THOUSAND PIECES',
-    'T4': 'THOUSAND BAGS',
-    'T5': 'THOUSAND CASINGS',
-    'T6': 'THOUSAND GALLONS',
-    'T7': 'THOUSAND IMPRESSIONS',
-    'T8': 'THOUSAND LINEAR INCHES',
-    'T9': 'THOUSAND KILOWATT HOURS/MEGAWATT-HOUR',
-    'TA': 'TENTH CUBIC FOOT',
-    'TB': 'TABLESPOON',
-    'TC': 'TRUCKLOAD',
-    'TD': 'TWENTY-FOUR',
-    'TE': 'TEN',
-    'TF': 'TWENTY-FIVE',
-    'TG': 'GROSS TON',
-    'TH': 'THOUSAND KILOGRAMS',
-    'TI': 'THOUSAND SQUARE INCHES',
-    'TJ': 'THOUSAND SQ. CENTIMETERS',
-    'TK': 'TANK',
-    'TL': 'THOUSAND LINEAR METERS',
-    'TM': 'THOUSAND FEET (BOARD)',
-    'TN': 'NET TON (2,000 POUNDS)',
-    'TO': 'TROY OUNCE',
-    'TP': 'TROY POUND',
-    'TQ': 'THOUSAND FEET',
-    'TR': 'TEN SQUARE FEET',
-    'TS': 'THIRTY-SIX',
-    'TT': 'TABLET',
-    'TU': 'TUBE',
-    'TV': 'TEN-PACK',
-    'TW': 'THOUSAND SHEETS',
-    'TX': 'THOUSAND LINEAR YARDS',
-    'TY': 'TRAY',
-    'TZ': 'THOUSAND SQUARE FEET',
-    'U1': 'TREATMENTS',
-    'U5': 'TWO HUNDRED FIFTY',
-    'U6': 'U.S. GALLONS AT 60 DEGREES FAHRENHEIT',
-    'UH': 'TEN THOUSAND YARDS',
-    'UL': 'UNITLESS',
-    'UM': 'MILLION UNITS',
-    'UN': 'UNIT',
-    'UP': 'TROCHE',
-    'UQ': 'WAFER',
-    'US': 'UNITED STATES PHARMACOPOEIA (USP)UNIT',
-    'V1': 'FLAT',
-    'V2': 'POUCH',
-    'VC': 'FIVE HUNDRED',
-    'VI': 'VIAL',
-    'VS': 'VISIT',
-    'VT': 'VOLT',
-    'W2': 'WET KILO',
-    'WB': 'WET POUND',
-    'WD': 'WORK DAYS',
-    'WE': 'WET TON',
-    'WG': 'WINE GALLON',
-    'WH': 'WHEEL',
-    'WK': 'WEEK',
-    'WR': 'WRAP',
-    'WT': 'WATT',
-    'X2': 'BUNCH',
-    'X3': 'CLOVE',
-    'X4': 'DROP',
-    'X5': 'HEAD',
-    'X6': 'HEART',
-    'X7': 'LEAF',
-    'X8': 'LOAF',
-    'X9': 'PORTION',
-    'Y1': 'SLICE',
-    'Y4': 'TUB',
-    'YD': 'YARD',
-    'YL': '100 LINEAR YARDS',
-    'YR': 'YEARS',
-    'YS': 'SLEEVE',
-    'YT': 'BYTES',
-    'Z1': 'LIFT VAN',
-    'Z2': 'CHEST',
-    'Z3': 'CASK',
-    'Z5': 'LUG',
-    'ZF': 'MILLION BTUS/DEKATHERM'
+    'AB': 'BULK PACK','AC': 'ACRE','AD': 'DRAM (MINIM)','AJ': 'COP','AL': 'ACCESS LINES','AM': 'AMPOULE','AO': 'APOTHECARY OUNCE','AP': 'APOTHECARY POUND',
+    'AR': 'SUPPOSITORY','AS': 'APOTHECARY SCRUPLE','AT': 'ASSORTMENT','AV': 'CAPSULE','AW': 'POWDER-FILLED VIALS','AX': 'TWENTY','AY': 'ASSEMBLY','B0': 'BRITISH THERMAL UNITS (BTU\'S) PER CUBIC FOOT',
+    'B1': 'BARREL, LIQUID','B2': 'BARREL, DRY','B3': 'BATTING POUND','B4': 'BARREL, IMPERIAL','B5': 'BILLET','B6': 'BUN','B7': 'CYCLE','B8': 'BOARD','B9': 'BATT',
+    'BA': 'BALL','BB': 'BASS BOX','BC': 'BUCKET','BD': 'BUNDLE','BE': 'BALE','BF': 'BOARD FOOT','BG': 'BAG','BH': 'BRUSH','BI': 'BELT','BJ': 'BAND','BK': 'BOOK',
+    'BL': 'BARREL','BM': 'BEAM','BN': 'BULK','BO': 'BOLT','BP': '100 BOARD FEET','BQ': 'BRIQUET','BR': 'BAR','BS': 'BASKET','BT': 'BOTTLE','BU': 'BUSHEL (32 DRY QUARTS)',
+    'BV': 'BUSHEL, DRY IMPERIAL','BW': 'BASE WEIGHT','BX': 'BOX','BY': 'BUNKS','BZ': 'BLOCK','C0': 'CALLS','C1': 'COMPOSITE PRODUCT POUNDS (TOTAL WEIGHT)',
+    'C2': 'SQUARE CENTIMETER','C3': 'COMBO','C4': 'CARLOAD','C5': 'COST','C6': 'CELL','C7': 'CARSET','C8': 'CUBIC DECIMETER','C9': 'COIL GROUP','CA': 'CARTRIDGE','CB': 'CARBOY',
+    'CC': 'CUBIC CENTIMETER','CD': 'CUBIC YARD','CE': 'CONE','CF': 'CUBIC FOOT','CG': 'CENTIGRAM','CH': 'CHAINS (LAND SURVEY)','CI': 'CUBIC INCH','CK': 'CAKE','CL': 'COIL',
+    'CM': 'CENTIMETER','CN': 'CAN','CO': 'CONTAINER','CP': 'CRATE','CQ': 'CARD','CR': 'CONNECTOR','CS': 'CASE','CT': 'CARTON','CU': 'CURIE','CV': 'COVER','CW': 'HUNDRED WEIGHT (LONG)','CX': 'CASSETTE',
+    'CY': 'CYLINDER','CZ': 'CUBIC METER','DA': 'DAYS','DB': 'DECIBELS','DC': 'DECAGRAM','DE': 'DECIMETER','DF': 'FAHRENHEIT','DG': 'DECIGRAM','DI': 'DISPENSER','DK': 'KELVIN','DL': 'DECILITER',
+    'DM': 'DRAM','DO': 'DOLLARS, U.S.','DP': 'DOZEN PAIR','DQ': 'DATA RECORD','DR': 'DRUM','DS': 'DISPLAY','DT': 'DRY TON','DU': 'DYNE','DW': 'PENNYWEIGHT','DX': 'CALENDAR DAYS (NUMBER OF)','DY': 'DIRECTORY BOOKS',
+    'DZ': 'DOZEN','E1': 'HECTOMETER','EA': 'EACH','EB': 'ELECTRONIC MAIL BOXES','EE': 'EMPLOYEES','EH': 'KNOTS','EJ': 'LOCATIONS','EP': 'ELEVEN PACK','EQ': 'EQUIVALENT GALLONS','EV': 'ENVELOPE',
+    'EX': 'EXPOSURE','F4': 'MINIM','F6': 'PRICE PER SHARE','FA': 'FATHOM','FB': 'FIELDS','FD': 'FOLD','FE': 'TRACK FOOT','FF': 'HUNDRED CUBIC METERS','FG': 'TRANSDERMAL PATCH','FJ': 'SIZING FACTOR',
+    'FK': 'FIBERS','FL': 'FLAKE TON','FM': 'MILLION CUBIC FEET','FO': 'FLUID OUNCE','FR': 'FRAME','FT': 'FOOT','FU': 'FURLONG','FV': 'FIVE','FY': 'FIFTY','GB': 'U.S. GALLONS PER MINUTE',
+    'GG': 'GREAT GROSS','GI': 'GILL','GL': 'GALLON','GM': 'GRAM','GN': 'GRAIN','GP': 'GROUP','GR': 'GROSS','GT': 'THOUSAND GALLONS PER DAY','GX': 'APOTHECARY GRAIN','H2': 'HALF LITER',
+    'H4': 'HECTOLITER','HA': 'HUNDRED CUBIC FEET','HB': 'HOSPITAL BEDS','HC': 'HUNDRED COUNT','HD': 'HUNDRED','HF': 'HUNDRED FEET','HG': 'HECTOGRAM','HH': 'HOGSHEAD','HI': 'HUNDRED SHEETS',
+    'HK': 'HANK','HL': 'HUNDRED FEET - LINEAR','HO': 'HUNDRED TROY OUNCES','HP': 'HUNDRED POUNDS','HQ': 'HECTARE','HR': 'HOUR','HS': 'HUNDRED SQUARE FEET','HT': 'HALF HOUR','HW': 'HUNDRED WEIGHT - SHORT (HUNDRED WEIGHT)',
+    'HX': 'HUNDRED BOXES','HY': 'HUNDRED YARDS','HZ': 'HALF DOZEN','I1': 'PERSONS, CAPACITY','IG': 'IMPERIAL GALLON','IH': 'INHALER','IM': 'IMPRESSIONS','IN': 'INCH',
+    'IP': 'INSURANCE POLICY','IS': 'STOPS','IU': 'INTERNATIONAL UNIT','JB': 'JOB','JG': 'JUG','JO': 'JOINT','JR': 'JAR','JU': 'JUMBO','K2': 'SQUARE KILOMETER','K6': 'KILOLITER',
+    'K7': 'KILOWATT','KC': 'KILOCURIE','KE': 'KEG','KF': 'KILOPACKETS','KG': 'KILOGRAM','KH': 'HUNDRED KILOGRAMS','KK': '100 KILOGRAMS','KM': 'KILOMETER',
+    'KR': 'KARAT (CARAT)','KT': 'KIT','KU': 'TASK','KV': 'KILOVOLTS','KZ': 'KILOWATT-HOUR','L5': 'LITERS AT 15 DEGREES CELSIUS','LB': 'POUND (AVOIRDUPOIS)','LE': 'LITE',
+    'LF': 'LINEAR FOOT','LG': 'LENGTH','LI': 'LITER','LJ': 'LARGE SPRAY','LK': 'LINK','LM': 'LINEAR METER','LN': 'LINEAR INCH','LO': 'LONG TON','LR': 'LAYER(S)','LS': 'LUMP SUM','LT': 'LOT',
+    'LY': 'LINEAR YARD','M0': 'MAGNETIC TAPES','M2': 'SQUARE MILE','M3': 'MAT','M5': 'MICROGRAM','M6': 'METRIC TON','MA': 'METRIC NET TON','MB': 'BRITISH THERMAL UNITS (BTUS) PER HOUR',
+    'MC': 'THOUSAND CUBIC FEET','MD': 'AIR DRY METRIC TON','ME': 'MEAL','MF': 'THOUSAND FEET','MG': 'MILLIGRAM','MH': 'METRIC','MI': 'MILE','MJ': 'METRIC GROSS TON','MK': 'METRIC LONG TON',
+    'ML': 'MILLILITER','MM': 'MILLIMETER','MO': 'MONTHS','MQ': '1000 METERS','MR': 'METER','MS': 'SQUARE MILLIMETER','MT': 'MINUTES','MX': 'THOUSAND','MZ': 'MIXED','N2': 'NUMBER OF LINES',
+    'N7': 'PARTS','N9': 'CARTRIDGE NEEDLE','NA': 'MILLIGRAMS PER KILOGRAM','NB': 'BARGE','NC': 'CAR','ND': 'NET BARRELS','NE': 'NET LITERS','NF': 'MESSAGES','NG': 'NET GALLONS',
+    'NI': 'NET IMPERIAL GALLONS','NJ': 'NUMBER OF SCREENS','NK': 'NIGHTS','NL': 'LOAD','NM': 'NAUTICAL MILE','NN': 'TRAIN','NS': 'SHORT TON','NT': 'TRAILER','NV': 'VEHICLE',
+    'NX': 'PARTS PER THOUSAND','OA': 'PANEL','OC': 'BILLBOARD','OL': 'OUTLET','OP': 'TWO PACK','OT': 'OUTFIT','OU': 'OPERATING UNIT','OZ': 'OUNCE - AV','P0': 'PAGES - ELECTRONIC',
+    'P1': 'PERCENT','P2': 'POUNDS PER FOOT','P3': 'THREE PACK','P4': 'FOUR-PACK','P5': 'FIVE-PACK','P6': 'SIX PACK','P7': 'SEVEN PACK','P8': 'EIGHT-PACK','P9': 'NINE PACK',
+    'PA': 'PAGE','PB': 'PAIR INCHES','PC': 'PIECE','PD': 'PAD','PE': 'POUNDS EQUIVALENT','PF': 'PALLET (LIFT)','PG': 'PACKAGE','PH': 'PACK (PAK)','PI': 'PILLOW','PJ': 'PALLET/UNIT LOAD',
+    'PK': 'PECK, DRY U.S.','PL': 'PAIL','PM': 'PLATE','PN': 'PERSON','PO': 'POUNDS GROSS','PP': 'PINT, IMPERIAL','PQ': 'PECK DRY IMPERIAL','PR': 'PAIR','PS': 'POUNDS NET',
+    'PT': 'PINT','PU': 'MASS POUNDS','PV': 'HALF PINT','PX': 'PELLET','PY': 'PITCH','PZ': 'PACKET','QC': 'CHANNEL','QE': 'PHOTOGRAPHS','QF': 'QUARTER','QI': 'QUART, IMPERIAL',
+    'QK': 'QUARTER KILOGRAM','QR': 'QUIRE','QS': 'QUART, DRY U.S.','QT': 'QUART','QU': 'QUARTER DOZEN','R4': 'CALORIE','R5': 'THOUSANDS OF DOLLARS','R9': 'THOUSAND CUBIC METERS',
+    'RA': 'RATION','RB': 'RADIAN','RC': 'ROD (AREA) - 16.25 SQUARE YARDS','RD': 'ROUND','RG': 'RING','RH': 'RUNNING OR OPERATING HOURS','RK': 'ROLL-METRIC MEASURE','RL': 'REEL',
+    'RM': 'REAM','RN': 'REAM-METRIC MEASURE','RO': 'ROLL','RP': 'POUNDS PER REAM','RR': 'RACK','RS': 'RESETS','RT': 'REVENUE TON MILES','RU': 'RUN','RX': 'THOUSAND ROUNDS',
+    'S5': 'SIXTY-FOURTHS OF AN INCH','S6': 'SESSIONS','S7': 'STORAGE UNITS','S8': 'SHELF PACKAGE','S9': 'SLIP SHEET','SA': 'SANDWICH','SB': 'SHIPMENT','SC': 'SECONDS','SD': 'SKID',
+    'SE': 'SET','SF': 'SQUARE FOOT','SG': 'SEGMENT','SH': 'SHEET','SI': 'SQUARE INCH','SJ': 'SACK','SK': 'SKEIN','SL': 'SPOOL','SM': 'SQUARE METER','SN': 'SECTION (640 ACRES OR ONE SQUARE MILE)','SO': 'SHOT',
+    'SP': 'STRIP','SQ': 'SQUARE','SR': 'SPLIT TANKTRUCK','SS': 'SHEET-METRIC MEASURE','ST': 'SEAT','SU': 'SQUARE ROD','SV': 'SERVICE','SW': 'STANDARD ADVERTISING UNITS (SAUS)',
+    'SX': 'STICK','SY': 'SQUARE YARD','SZ': 'SYRINGE','T1': 'THOUSAND POUNDS GROSS','T2': 'TEASPOON','T3': 'THOUSAND PIECES','T4': 'THOUSAND BAGS','T5': 'THOUSAND CASINGS',
+    'T6': 'THOUSAND GALLONS','T7': 'THOUSAND IMPRESSIONS','T8': 'THOUSAND LINEAR INCHES','T9': 'THOUSAND KILOWATT HOURS/MEGAWATT-HOUR','TA': 'TENTH CUBIC FOOT','TB': 'TABLESPOON',
+    'TC': 'TRUCKLOAD','TD': 'TWENTY-FOUR','TE': 'TEN','TF': 'TWENTY-FIVE','TG': 'GROSS TON','TH': 'THOUSAND KILOGRAMS','TI': 'THOUSAND SQUARE INCHES','TJ': 'THOUSAND SQ. CENTIMETERS','TK': 'TANK',
+    'TL': 'THOUSAND LINEAR METERS','TM': 'THOUSAND FEET (BOARD)','TN': 'NET TON (2,000 POUNDS)','TO': 'TROY OUNCE','TP': 'TROY POUND','TQ': 'THOUSAND FEET','TR': 'TEN SQUARE FEET',
+    'TS': 'THIRTY-SIX','TT': 'TABLET','TU': 'TUBE','TV': 'TEN-PACK','TW': 'THOUSAND SHEETS','TX': 'THOUSAND LINEAR YARDS','TY': 'TRAY','TZ': 'THOUSAND SQUARE FEET','U1': 'TREATMENTS',
+    'U5': 'TWO HUNDRED FIFTY','U6': 'U.S. GALLONS AT 60 DEGREES FAHRENHEIT','UH': 'TEN THOUSAND YARDS','UL': 'UNITLESS','UM': 'MILLION UNITS','UN': 'UNIT','UP': 'TROCHE',
+    'UQ': 'WAFER','US': 'UNITED STATES PHARMACOPOEIA (USP)UNIT','V1': 'FLAT','V2': 'POUCH','VC': 'FIVE HUNDRED','VI': 'VIAL','VS': 'VISIT','VT': 'VOLT','W2': 'WET KILO',
+    'WB': 'WET POUND','WD': 'WORK DAYS','WE': 'WET TON','WG': 'WINE GALLON','WH': 'WHEEL','WK': 'WEEK','WR': 'WRAP','WT': 'WATT','X2': 'BUNCH','X3': 'CLOVE','X4': 'DROP',
+    'X5': 'HEAD','X6': 'HEART','X7': 'LEAF','X8': 'LOAF','X9': 'PORTION','Y1': 'SLICE','Y4': 'TUB','YD': 'YARD','YL': '100 LINEAR YARDS','YR': 'YEARS','YS': 'SLEEVE','YT': 'BYTES',
+    'Z1': 'LIFT VAN','Z2': 'CHEST','Z3': 'CASK','Z5': 'LUG','ZF': 'MILLION BTUS/DEKATHERM'
 }
 
 def check_for_hang():
@@ -674,8 +285,14 @@ def click_element(wait, locator, by=By.ID):
 
 @retry(max_attempts=3, delay=5)
 def extract_unit_from_pdf(pdf_url, driver):
-    """Direct PDF extraction from downloaded content"""
+    """Direct PDF extraction from downloaded content - now extracts unit and additional fields"""
     unit = "N/A"
+    inspection_point = ""
+    acceptance_point = ""
+    deliver_fob = ""
+    deliver_days = ""
+    buyer_info = ""
+    
     print(f"\nExtracting from: {pdf_url}")
     
     try:
@@ -852,7 +469,7 @@ def extract_unit_from_pdf(pdf_url, driver):
                 
             except Exception as e:
                 print(f"Selenium download failed: {str(e)}")
-                return unit
+                return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
             finally:
                 driver.close()
                 driver.switch_to.window(original_window)
@@ -860,38 +477,40 @@ def extract_unit_from_pdf(pdf_url, driver):
         # If we still don't have valid PDF content, give up
         if pdf_content is None or not b'%PDF' in pdf_content[:1024]:
             print("Unable to download valid PDF content. Giving up.")
-            return unit
+            return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
 
         # Process PDF content
         try:
             with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
-                # Rest of your PDF processing code remains the same
+                full_text = ""
+                
+                # Extract text from all pages and combine
                 for i, page in enumerate(pdf.pages[:15]):  # Check first 15 pages
-                    text = page.extract_text() or ""
+                    page_text = page.extract_text() or ""
+                    full_text += page_text + "\n"
                     
+                    # Original unit extraction logic for each page
                     # Pattern 1: ITEM NO. SUPPLIES/SERVICES QUANTITY UNIT UNIT PRICE AMOUNT
                     pattern1 = re.compile(
                         r"^\d+\s+\d{4}-\d{2}-\d{3}-\d{4}\s+\d+\.\d{3}\s+([A-Z]{2})\s+\$",
                         re.MULTILINE
                     )
-                    match1 = pattern1.search(text)
+                    match1 = pattern1.search(page_text)
                     if match1:
                         unit = match1.group(1).upper()
                         print(f"Found unit via Pattern1 on page {i+1}: {unit}")
-                        return unit
                     
                     # Pattern 2: CLIN PR PRLI UI QUANTITY UNIT PRICE TOTAL PRICE
                     pattern2 = re.compile(
                         r"^\d+\s+\d+\s+\d+\s+([A-Z]{2})\s+[\d,]+\.\d{3}",
                         re.MULTILINE
                     )
-                    match2 = pattern2.search(text)
+                    match2 = pattern2.search(page_text)
                     if match2:
                         unit = match2.group(1).upper()
                         print(f"Found unit via Pattern2 (UI) on page {i+1}: {unit}")
-                        return unit
                     
-                    # Enhanced fallback patterns
+                    # Enhanced fallback patterns for unit
                     fallback_patterns = [
                         r"QTY:\s*\d+\s+([A-Z]{2})\b",
                         r"UNIT\s*[:=]\s*([A-Z]{2})\b",
@@ -901,15 +520,14 @@ def extract_unit_from_pdf(pdf_url, driver):
                     ]
                     
                     for pattern in fallback_patterns:
-                        matches = re.finditer(pattern, text, re.IGNORECASE)
+                        matches = re.finditer(pattern, page_text, re.IGNORECASE)
                         for match in matches:
                             unit_candidate = match.group(1) if match.lastindex else match.group(0)
                             if unit_candidate.upper() in ['EA', 'BX', 'PK', 'FT', 'YD', 'GAL', 'LB', 'PG']:
                                 unit = unit_candidate.upper()
                                 print(f"Found unit on page {i+1} via fallback pattern: {unit}")
-                                return unit
                     
-                    # Table extraction fallback
+                    # Table extraction fallback for unit
                     tables = page.extract_tables()
                     for table in tables:
                         if len(table) > 1:
@@ -927,7 +545,332 @@ def extract_unit_from_pdf(pdf_url, driver):
                                     if unit_candidate in ['EA', 'BX', 'PK', 'FT', 'YD', 'GAL', 'LB', 'PG']:
                                         unit = unit_candidate
                                         print(f"Found unit in table on page {i+1}: {unit}")
-                                        return unit
+
+                # Extract additional fields from the combined text
+                print("Extracting additional fields...")
+                
+                # Extract INSPECTION POINT
+                inspection_patterns = [
+                    r"INSPECTION\s+POINT\s*:\s*([^\n\r]+)",
+                    r"INSPECTION\s+POINT\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
+                    r"INSPECTION\s+POINT\s*:\s*([^:]+?)(?=\s*(?:ACCEPTANCE|FOB|DELIVERY|$))"
+                ]
+                
+                for pattern in inspection_patterns:
+                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        inspection_point = match.group(1).strip()
+                        print(f"Found inspection point: {inspection_point}")
+                        break
+                
+                # Extract ACCEPTANCE POINT
+                acceptance_patterns = [
+                    r"ACCEPTANCE\s+POINT\s*:\s*([^\n\r]+)",
+                    r"ACCEPTANCE\s+POINT\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
+                    r"ACCEPTANCE\s+POINT\s*:\s*([^:]+?)(?=\s*(?:INSPECTION|FOB|DELIVERY|$))"
+                ]
+                
+                for pattern in acceptance_patterns:
+                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        acceptance_point = match.group(1).strip()
+                        print(f"Found acceptance point: {acceptance_point}")
+                        break
+                
+                # Extract FOB / DELIVER FOB
+                fob_patterns = [
+                    r"DELIVER\s+FOB\s*:\s*([^\n\r]+)",
+                    r"FOB\s*:\s*([^\n\r]+)",
+                    r"DELIVER\s+FOB\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
+                    r"FOB\s*:\s*([^:]+?)(?=\s*(?:DELIVERY|INSPECTION|ACCEPTANCE|$))"
+                ]
+                
+                for pattern in fob_patterns:
+                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        deliver_fob = match.group(1).strip()
+                        print(f"Found deliver FOB: {deliver_fob}")
+                        break
+                
+                # Extract DELIVERY DAYS / DELIVERY DATE
+                delivery_patterns = [
+                    r"DELIVERY\s*\(IN\s+DAYS\)\s*:\s*(\d+)",
+                    r"DELIVERY\s+DATE\s*:\s*([^\n\r]+)",
+                    r"DELIVERY\s*:\s*(\d+)\s*DAYS?",
+                    r"DELIVERY\s+DAYS?\s*:\s*(\d+)",
+                    r"DELIVERY\s+DATE\s*:\s*([^:]+?)(?=\s*(?:FOB|INSPECTION|ACCEPTANCE|$))"
+                ]
+                
+                for pattern in delivery_patterns:
+                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        deliver_days = match.group(1).strip()
+                        print(f"Found delivery days/date: {deliver_days}")
+                        break
+                
+                # Enhanced BUYER INFORMATION extraction with all patterns
+                # All patterns for buyer information - UNIVERSAL patterns that capture ALL formats
+                buyer_line_patterns = [
+                    # UNIVERSAL PATTERNS - "Buyer: Name Code" format - Captures ANY name format
+                    # Pattern A1: Buyer: Name Code Tel: phone Fax: fax ... Email: email
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern A2: Buyer: Name Code Tel: phone Email: email (no fax)
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern A3: Buyer: Name Code Tel: phone Fax: fax (email found later)
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
+                    
+                    # Pattern A4: Buyer: Name Code Tel: phone (no fax, email found later)
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)",
+                    
+                    # Pattern A5: More flexible Tel pattern for DSN numbers
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([A-Z0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern A6: Very flexible - handle any spacing/line breaks
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([^\s\n\r]+)",
+                    
+                    # FALLBACK PATTERNS with shorter codes (3+ characters)
+                    # Pattern B1: Buyer: Name Code Tel: phone Fax: fax ... Email: email
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern B2: Buyer: Name Code Tel: phone Email: email (no fax)
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern B3: Buyer: Name Code Tel: phone Fax: fax (email found later)
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
+                    
+                    # Pattern B4: Buyer: Name Code Tel: phone (no fax, email found later)
+                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)",
+                    
+                    # EXISTING PATTERNS - "Name: ... Buyer Code:" format
+                    # Pattern 1: All on one line (original format)
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Fax:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern 2: Handle line breaks between components (more flexible)
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+).*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern 3: Very flexible - capture across multiple lines with any intervening text, including DSN numbers
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+).*?Email:\s*([A-Za-z0-9\.\@\-\_]+)",
+                    
+                    # Pattern 4: Handle the exact format we see with line breaks and DSN tel numbers
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                    
+                    # Pattern 5: More lenient Tel matching for DSN numbers
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([A-Z0-9\-]+).*?Email:\s*([A-Za-z0-9\.\@\-\_]+)",
+                    
+                    # Pattern 6: Very broad Tel pattern to catch all variations
+                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([^\s\n\r]+).*?Email:\s*([^\s\n\r]+)"
+                ]
+                
+                # The buyer info is after the address in the ISSUED BY section, so we need broader patterns
+                print("Searching for ISSUED BY section with buyer information...")
+                
+                # Try multiple approaches to find the complete ISSUED BY section
+                issued_by_patterns = [
+                    # Pattern 1: From "5. ISSUED BY" to "8. TO:" - this should capture the full section
+                    r"5\.\s*ISSUED\s+BY(.*?)(?=8\.\s*TO:)",
+                    # Pattern 2: From "ISSUED BY" to "TO:" (more flexible)
+                    r"ISSUED\s+BY(.*?)(?=\d+\.\s*TO:)",
+                    # Pattern 3: From "5. ISSUED BY" to any section starting with 7, 8, 9, or 10
+                    r"5\.\s*ISSUED\s+BY(.*?)(?=\d+\.\s*(?:TO|DELIVER|DESTINATION|PLEASE))",
+                    # Pattern 4: Very broad - from ISSUED BY until we hit a numbered section
+                    r"ISSUED\s+BY(.*?)(?=\d+\.\s*[A-Z])",
+                    # Pattern 5: Capture a large chunk after ISSUED BY
+                    r"ISSUED\s+BY([^$]{1,3000})",
+                    # Pattern 6: From 5. ISSUED BY to end of that logical section
+                    r"5\.\s*ISSUED\s+BY(.*?)(?=\n\s*\d+\.|\n\s*$|$)"
+                ]
+                
+                for i, pattern in enumerate(issued_by_patterns):
+                    issued_by_match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+                    if issued_by_match:
+                        issued_by_text = issued_by_match.group(1).strip()
+                        print(f"ISSUED BY pattern {i+1} found section:")
+                        print(f"Section length: {len(issued_by_text)} characters")
+                        print(f"Section text: {issued_by_text}")
+                        
+                        # Look for buyer information in this complete section
+                        buyer_found = False
+                        for j, buyer_pattern in enumerate(buyer_line_patterns):
+                            buyer_match = re.search(buyer_pattern, issued_by_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+                            if buyer_match:
+                                print(f"Found buyer pattern {j+1} in ISSUED BY section: {buyer_match.groups()}")
+                                groups = buyer_match.groups()
+                                
+                                if j < 10:  # New "Buyer: Name Code" patterns (patterns 0-9)
+                                    name = groups[0].strip()
+                                    buyer_code = groups[1].strip()
+                                    tel = groups[2].strip()
+                                    
+                                    buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
+                                    
+                                    # Handle different group counts for new patterns
+                                    if len(groups) == 5:  # Has fax and email (patterns 0, 6)
+                                        fax = groups[3].strip()
+                                        email = groups[4].strip()
+                                        buyer_info += f" Fax: {fax} Email: {email}"
+                                    elif len(groups) == 4 and j in [1, 4, 7]:  # Patterns with email, no fax
+                                        email = groups[3].strip()
+                                        buyer_info += f" Email: {email}"
+                                    elif len(groups) == 4 and j in [2, 8]:  # Patterns with fax, no email in pattern
+                                        fax = groups[3].strip()
+                                        buyer_info += f" Fax: {fax}"
+                                        # Try to find email separately in the same section
+                                        email_match = re.search(r"Email:\s*([^\s\n\r]+)", issued_by_text, re.IGNORECASE)
+                                        if email_match:
+                                            buyer_info += f" Email: {email_match.group(1).strip()}"
+                                    elif len(groups) == 3:  # Patterns with only name, code, tel
+                                        # Try to find fax and email separately
+                                        fax_match = re.search(r"Fax:\s*([0-9\-]+)", issued_by_text, re.IGNORECASE)
+                                        email_match = re.search(r"Email:\s*([^\s\n\r]+)", issued_by_text, re.IGNORECASE)
+                                        if fax_match:
+                                            buyer_info += f" Fax: {fax_match.group(1).strip()}"
+                                        if email_match:
+                                            buyer_info += f" Email: {email_match.group(1).strip()}"
+                                    
+                                else:  # Existing "Name: ... Buyer Code:" patterns (patterns 10+)
+                                    name = groups[0].strip()
+                                    buyer_code = groups[1].strip()
+                                    tel = groups[2].strip()
+                                    
+                                    buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
+                                    
+                                    if len(groups) == 5 and groups[3] and groups[4]:  # Has fax
+                                        fax = groups[3].strip()
+                                        email = groups[4].strip()
+                                        buyer_info += f" Fax: {fax} Email: {email}"
+                                    elif len(groups) == 4:  # No fax, last group is email
+                                        email = groups[3].strip()
+                                        buyer_info += f" Email: {email}"
+                                    elif len(groups) == 5 and not groups[3]:  # No fax, email is in groups[4]
+                                        email = groups[4].strip()
+                                        buyer_info += f" Email: {email}"
+                                
+                                print(f"Successfully extracted buyer info: {buyer_info}")
+                                buyer_found = True
+                                break
+                        
+                        # If patterns didn't work, try to construct from individual components we know exist
+                        if not buyer_found:
+                            print("Pattern matching failed, trying to extract individual components...")
+                            
+                            # Extract components individually from this section with improved patterns
+                            name_match = re.search(r"Name:\s*([^:]+?)(?=\s+Buyer\s+Code:)", issued_by_text, re.IGNORECASE)
+                            code_match = re.search(r"Buyer\s+Code:\s*([A-Z0-9]+)", issued_by_text, re.IGNORECASE)
+                            # More flexible Tel pattern that includes DSN
+                            tel_match = re.search(r"Tel:\s*([A-Z0-9\-]+)", issued_by_text, re.IGNORECASE)
+                            fax_match = re.search(r"Fax:\s*([0-9\-]+)", issued_by_text, re.IGNORECASE)
+                            email_match = re.search(r"Email:\s*([A-Za-z0-9\.\@\-\_]+)", issued_by_text, re.IGNORECASE)
+                            
+                            # Also try the "Buyer: Name Code" format for individual components
+                            if not name_match or not code_match:
+                                # Try with longer codes first, then shorter
+                                buyer_match = re.search(r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})", issued_by_text, re.IGNORECASE)
+                                if not buyer_match:
+                                    buyer_match = re.search(r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})", issued_by_text, re.IGNORECASE)
+                                
+                                if buyer_match:
+                                    name_match = type('Match', (), {'group': lambda x: buyer_match.group(1)})()
+                                    code_match = type('Match', (), {'group': lambda x: buyer_match.group(2)})()
+                            
+                            print(f"Individual components found:")
+                            print(f"  Name: {name_match.group(1) if name_match else 'None'}")
+                            print(f"  Code: {code_match.group(1) if code_match else 'None'}")
+                            print(f"  Tel: {tel_match.group(1) if tel_match else 'None'}")
+                            print(f"  Fax: {fax_match.group(1) if fax_match else 'None'}")
+                            print(f"  Email: {email_match.group(1) if email_match else 'None'}")
+                            
+                            if name_match and code_match and tel_match and email_match:
+                                buyer_info = f"Name: {name_match.group(1).strip()} Buyer Code: {code_match.group(1).strip()} Tel: {tel_match.group(1).strip()}"
+                                if fax_match:
+                                    buyer_info += f" Fax: {fax_match.group(1).strip()}"
+                                buyer_info += f" Email: {email_match.group(1).strip()}"
+                                print(f"Successfully constructed buyer info from components: {buyer_info}")
+                                buyer_found = True
+                        
+                        # If we found buyer info, break out of the ISSUED BY pattern loop
+                        if buyer_found:
+                            break
+                        else:
+                            print(f"No buyer patterns matched in this ISSUED BY section")
+                            # Show what buyer-related keywords we can find
+                            keywords_found = []
+                            for keyword in ['name:', 'buyer', 'tel:', 'email:', 'code']:
+                                if keyword in issued_by_text.lower():
+                                    keywords_found.append(keyword)
+                            print(f"Found these buyer keywords: {keywords_found}")
+                    else:
+                        print(f"ISSUED BY pattern {i+1} did not match")
+                
+                # If still no buyer info found, try searching anywhere in the text
+                if not buyer_info:
+                    print("Trying to find buyer info anywhere in the PDF text...")
+                    
+                    # Search for each component separately to see what we can find
+                    name_anywhere = re.search(r"Name:\s*([^:]+?)(?=\s+Buyer|$)", full_text, re.IGNORECASE)
+                    buyer_anywhere = re.search(r"Buyer\s+Code:\s*([A-Z0-9]+)", full_text, re.IGNORECASE)
+                    tel_anywhere = re.search(r"Tel:\s*([0-9\-\s]+)", full_text, re.IGNORECASE)
+                    email_anywhere = re.search(r"Email:\s*([^\s\n\r]+)", full_text, re.IGNORECASE)
+                    
+                    print(f"Name found anywhere: {name_anywhere.group(1) if name_anywhere else 'None'}")
+                    print(f"Buyer Code found anywhere: {buyer_anywhere.group(1) if buyer_anywhere else 'None'}")
+                    print(f"Tel found anywhere: {tel_anywhere.group(1) if tel_anywhere else 'None'}")
+                    print(f"Email found anywhere: {email_anywhere.group(1) if email_anywhere else 'None'}")
+                    
+                    # Search for the complete buyer line anywhere in the text
+                    anywhere_patterns = [
+                        # UNIVERSAL: Add "Buyer: Name Code" patterns for searching anywhere - Captures ANY name
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)",
+                        
+                        # FALLBACK with shorter codes
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
+                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)",
+                        
+                        # EXISTING: Keep all your existing patterns
+                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Fax:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s+([A-Z0-9]+)\s+Tel:\s+([0-9\-]+)\s+Fax:\s+([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s+([A-Z0-9]+)\s+Tel:\s+([0-9\-]+)\s+Email:\s*([^\s\n\r]+)"
+                    ]
+                    
+                    for k, pattern in enumerate(anywhere_patterns):
+                        match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            print(f"Found buyer pattern {k+1} anywhere in text: {match.groups()}")
+                            groups = match.groups()
+                            
+                            if k < 8:  # New "Buyer: Name Code" patterns
+                                name = groups[0].strip()
+                                buyer_code = groups[1].strip()
+                                tel = groups[2].strip()
+                                buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
+                                
+                                if len(groups) == 5:  # Has fax and email
+                                    fax = groups[3].strip()
+                                    email = groups[4].strip()
+                                    buyer_info += f" Fax: {fax} Email: {email}"
+                                elif len(groups) == 4 and k in [1, 5]:  # Has email, no fax
+                                    email = groups[3].strip()
+                                    buyer_info += f" Email: {email}"
+                                elif len(groups) == 4 and k in [2, 6]:  # Has fax, no email
+                                    fax = groups[3].strip()
+                                    buyer_info += f" Fax: {fax}"
+                            else:  # Existing "Name: ... Buyer Code:" patterns
+                                buyer_info = f"Name: {groups[0].strip()} Buyer Code: {groups[1].strip()} Tel: {groups[2].strip()}"
+                                if len(groups) == 5:  # Has fax
+                                    buyer_info += f" Fax: {groups[3].strip()} Email: {groups[4].strip()}"
+                                else:  # No fax
+                                    buyer_info += f" Email: {groups[3].strip()}"
+                            
+                            print(f"Extracted buyer info from anywhere: {buyer_info}")
+                            break
 
         except Exception as e:
             print(f"PDF processing error: {str(e)}")
@@ -937,7 +880,7 @@ def extract_unit_from_pdf(pdf_url, driver):
         print(f"Critical error in extract_unit_from_pdf: {str(e)}")
         traceback.print_exc()
         
-    return unit
+    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
 
 @retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
 def extract_data_from_page(driver, wait):
@@ -1004,7 +947,7 @@ def handle_pagination(driver, wait):
 
 @retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
 def process_nsn_links(driver):
-    """Visit NSN links and extract CAGE data, part numbers, and UNIT values."""
+    """Visit NSN links and extract CAGE data, part numbers, UNIT values, and additional PDF fields."""
     cage_codes = []
     
     for row_data in row_data_list:
@@ -1048,15 +991,34 @@ def process_nsn_links(driver):
                 )
                 pdf_url = pdf_link.get_attribute("href")
                 
-                unit_value = extract_unit_from_pdf(pdf_url, driver=driver)
+                # Extract unit and additional fields from PDF
+                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info = extract_unit_from_pdf(pdf_url, driver=driver)
+                
                 row_data['unit'] = unit_value
-                print(f"Extracted UNIT value for NSN {row_data['nsn']}: {unit_value}")
+                row_data['inspection_point'] = inspection_point
+                row_data['acceptance_point'] = acceptance_point
+                row_data['deliver_fob'] = deliver_fob
+                row_data['deliver_days'] = deliver_days
+                row_data['buyer_info'] = buyer_info
+                
+                print(f"Extracted data for NSN {row_data['nsn']}:")
+                print(f"  UNIT: {unit_value}")
+                print(f"  INSPECTION POINT: {inspection_point}")
+                print(f"  ACCEPTANCE POINT: {acceptance_point}")
+                print(f"  DELIVER FOB: {deliver_fob}")
+                print(f"  DELIVER DAYS: {deliver_days}")
+                print(f"  BUYER INFO: {buyer_info}")
                 
             except Exception as e:
                 print(f"Error processing NSN details: {e}")
                 row_data['cages'] = '-'
                 row_data['part_numbers'] = '-'
                 row_data['unit'] = 'N/A'
+                row_data['inspection_point'] = ''
+                row_data['acceptance_point'] = ''
+                row_data['deliver_fob'] = ''
+                row_data['deliver_days'] = ''
+                row_data['buyer_info'] = ''
             
             finally:
                 if len(driver.window_handles) > 1:
@@ -1211,6 +1173,13 @@ def process_row_data(row_data_list):
             unit_description = UNIT_MAPPING.get(unit_code, f'{unit_code} (Unknown)')
             unit = f"{unit_code} ({unit_description})" if unit_code != 'N/A' else 'N/A'
 
+            # Get additional fields
+            inspection_point = row_data.get('inspection_point', '')
+            acceptance_point = row_data.get('acceptance_point', '')
+            deliver_fob = row_data.get('deliver_fob', '')
+            deliver_days = row_data.get('deliver_days', '')
+            buyer_info = row_data.get('buyer_info', '')
+
             raw_quantity = row_data.get('quantity', '0')
             quantity = extract_quantity(raw_quantity)
 
@@ -1234,7 +1203,12 @@ def process_row_data(row_data_list):
                     'Return By Date': return_by_date,
                     'CAGE Code': cage if cage else 'N/A',
                     'Part Number': part_number if part_number else 'N/A',
-                    'Unit': unit
+                    'Unit': unit,
+                    'Inspection Point': inspection_point,
+                    'Acceptance Point': acceptance_point,
+                    'Deliver FOB': deliver_fob,
+                    'Deliver Days': deliver_days,
+                    'Buyer Info': buyer_info
                 }
                 temp_nsn_data_list.append(nsn_entry)
 
@@ -1248,9 +1222,10 @@ def process_row_data(row_data_list):
 def save_to_db(data_list, cage_details_list):
     sql_query = """
     INSERT INTO solicitations_solicitation 
-    (cage, nsn, nomenclature, status, quantity, issued_date, return_by_date, 
-     organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit, scraped_date)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    (cage, nsn, nomenclature, solicitation, status, quantity, issued_date, return_by_date, 
+     organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit, 
+     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, scraped_date)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     
     try:
@@ -1290,6 +1265,7 @@ def save_to_db(data_list, cage_details_list):
                     data.get('CAGE Code', 'N/A'),
                     data.get('NSN', 'N/A'),
                     data.get('Nomenclature', 'N/A'),
+                    data.get('Solicitation', 'N/A'),
                     data.get('Status', 'N/A'),
                     data.get('Quantity', 0),
                     data.get('Issued Date', 'N/A'),
@@ -1303,6 +1279,11 @@ def save_to_db(data_list, cage_details_list):
                     email,
                     data.get('Part Number', 'N/A'),
                     data.get('Unit', 'EA (EACH)'),
+                    data.get('Inspection Point', ''),
+                    data.get('Acceptance Point', ''),
+                    data.get('Deliver FOB', ''),
+                    data.get('Deliver Days', ''),
+                    data.get('Buyer Info', ''),
                     datetime.date.today() 
                 ))
                 db_connection.commit()
