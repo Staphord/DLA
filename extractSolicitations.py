@@ -50,7 +50,7 @@ DB_PORT = 3306 #settings.DB_PORT
 chrome_options = Options()
 chrome_options.add_experimental_option("detach", True)
 chrome_options.add_argument("--disable-gpu")
-#chrome_options.add_argument("--headless")
+chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-software-rasterizer")
 chrome_options.add_argument("--enable-logging")
 chrome_options.add_argument("--v=1")
@@ -1479,9 +1479,9 @@ def main():
             print("WELCOME TO RFQ AUTOMATED PROGRAM")
             print('--------------------------------------------------------------------------')
 
-            # Handle date argument
+            # Handle date argument - get from command line or use None to default to first date
             formated_date = sys.argv[1] if len(sys.argv) > 1 else None
-            print(f"Scraping for date {formated_date}" if formated_date else "No scrape date provided")
+            print(f"Requested date: {formated_date}" if formated_date else "No date specified - will use first available date")
 
             wait = WebDriverWait(driver, 60)
 
@@ -1489,7 +1489,7 @@ def main():
             click_element(wait, "butAgree")
             click_element(wait, "ctl00_cph1_lnkRfqDatesRecent")
 
-            # Date selection logic - MODIFIED TO USE category=issue
+            # Date selection logic - IMPROVED
             table_xpath = "//table[@title='RFQ Download Files' and @summary='Table contains links to RFQ files']"
             table = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
 
@@ -1503,61 +1503,85 @@ def main():
                 date_links = table.find_elements(By.XPATH, f".//tbody/tr/td[{post_date_index}]//a")
                 
                 if date_links:
-                    date_to_send = formated_date if formated_date else date_links[0].text.strip()
+                    # Get the first available date as default
+                    first_available_date = date_links[0].text.strip()
+                    print(f"First available date: {first_available_date}")
                     
-                    # Find the target date link
-                    target_link = None
+                    # Determine which date to use
                     if formated_date:
+                        # User specified a date, try to find it
+                        target_link = None
                         for link in date_links:
                             if link.text.strip() == formated_date:
                                 target_link = link
                                 break
+                        
+                        if target_link:
+                            date_to_send = formated_date
+                            print(f"Found requested date: {formated_date}")
+                        else:
+                            print(f"Requested date '{formated_date}' not found in available dates")
+                            print("Available dates:")
+                            for link in date_links:
+                                print(f"  - {link.text.strip()}")
+                            print(f"Defaulting to first available date: {first_available_date}")
+                            target_link = date_links[0]
+                            date_to_send = first_available_date
                     else:
+                        # No date specified, use first available date
                         target_link = date_links[0]
+                        date_to_send = first_available_date
+                        print(f"Using first available date: {date_to_send}")
                     
+                    # Click the target link
                     if target_link:
-                        # Get the original URL and modify it to use category=issue instead of category=post
-                        original_url = target_link.get_attribute('href')
-                        modified_url = original_url.replace('category=post', 'category=issue')
+                        print(f"Clicking date link for: {date_to_send}")
+                        target_link.click()
                         
-                        print(f"Original URL: {original_url}")
-                        print(f"Modified URL: {modified_url}")
-                        
-                        # Navigate to the modified URL instead of clicking the link
-                        driver.get(modified_url)
+                        # Wait for the page to load
+                        time.sleep(2)
                     else:
-                        print(f"Date {formated_date} not found in available dates")
+                        print("No valid date link found")
                         return
                     
+                    # Send date to Django API
                     try:
                         response = requests.post(
                             'http://localhost:8000/solicitations/',
-                            json={'selected_date': date_to_send, 'is_user_input': bool(formated_date)},
+                            json={
+                                'selected_date': date_to_send, 
+                                'is_user_input': bool(formated_date)  # True if user specified, False if defaulted
+                            },
                             headers={'Content-Type': 'application/json'},
                             timeout=10
                         )
                         if response.status_code == 200:
-                            print(f"Sent date to Django: {date_to_send}")
+                            print(f"Successfully sent date to Django: {date_to_send}")
+                        else:
+                            print(f"Django API responded with status {response.status_code}")
                     except requests.exceptions.RequestException as e:
-                        print(f"Error sending date: {e}")
+                        print(f"Error sending date to Django API: {e}")
                 else:
-                    print("No date links found")
+                    print("No date links found in the table")
+                    return
             else:
-                print("Post Date column not found")
+                print("Post Date column not found in table headers")
+                return
 
-            # FIXED: Main workflow with improved pagination
+            # Continue with the rest of your workflow...
+            # (The rest of your main() function remains the same)
+            
             # Check for pagination and handle accordingly
             if check_if_single_page(driver):
                 print("Single page detected, extracting data from single page...")
                 extract_data_from_page(driver, wait)
             else:
                 print("Multiple pages detected, starting pagination...")
-                # handle_pagination already extracts data from all pages including page 1
                 handle_pagination(driver, wait)
             
             print(f"Total records extracted from all pages: {len(row_data_list)}")
             
-            # Process NSN links (this will process all data collected from all pages)
+            # Process NSN links
             cage_codes = process_nsn_links(driver)
             cage_details_list = extract_cage_details(driver, cage_codes)
             processed_data = process_row_data(row_data_list)
