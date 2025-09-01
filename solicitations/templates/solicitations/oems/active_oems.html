@@ -7,8 +7,8 @@
 <section class="vh-100">
     <div class="d-flex justify-content-between">
         <div class="">
-            <a href="{% url 'solicitations:active-oems' %}" class="btn mybg hoverbg text-white position-relative">Active Oems</a>
-            <a href="{% url 'solicitations:disabled-oems' %}" class="btn btn-secondary text-white position-relative">Disabled Oems</a>
+            <a href="{% url 'solicitations:active-oems' %}" class="btn mybg hoverbg text-white position-relative">Active OEMS</a>
+            <a href="{% url 'solicitations:disabled-oems' %}" class="btn btn-secondary text-white position-relative">Disabled OEMS</a> 
             
             <div class="mt-3">
                 Total Active OEMS <span class="badge bg-dark text-white">{{total_oems}}</span>
@@ -37,79 +37,218 @@
         </div>
     </div>
 
+    <!-- Bulk Actions Bar -->
+    <div id="bulkActionsBar" class="alert alert-primary d-flex justify-content-between align-items-center mt-3" style="display: none;">
+        <div>
+            <i class="bi bi-check-square me-2"></i>
+            <span id="selectedCount">0</span> OEM(s) selected
+            <span id="selectedFromTotal" class="text-muted ms-2"></span>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllOems()">
+                <i class="bi bi-check-all me-1"></i>Select All ({{total_oems}})
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+                <i class="bi bi-x-square me-1"></i>Clear Selection
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="bulkDeleteOems()">
+                <i class="bi bi-trash me-1"></i>Delete Selected
+            </button>
+        </div>
+    </div>
+
     <div class="my-4">
         <div class="card">
             <div class="card-body my-3">
-                <table class="table table-sm table-hover">
-                    <thead class="table-light">
-                      <th class="text-secondary">Cage Code</th>
-                      <th class="text-secondary">Name</th>
-                      <th class="text-secondary">City</th>
-                      <th class="text-secondary">Phone</th>
-                      <th class="text-secondary text-center">Actions</th>
-                    </thead>
-                    <tbody>
-                        {% for oem in oem %}
-                        <tr onclick="location.href='{% url 'solicitations:oem-detail' oem.id %}';">
-                            <td>{{oem.cage}}</td>
-                            <td>{{oem.name|title}}</td>
-                            <td>{{oem.city|title}}</td>
-                            <td>{{oem.phone}}</td>
-                            <td>
-                                <div class="dropdown text-center">
-                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
-                                    <i class="bi bi-caret-down-fill"></i>
-                                </a>
-                              
-                                <ul class="dropdown-menu">
-                                  <li><a class="dropdown-item" href="{% url 'solicitations:oem-detail' oem.id %}">View More</a></li>
-                                  <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#disableOem-{{oem.id}}" onclick="event.stopPropagation();">Disable</a></li>
-                                </ul>
-                              </div>
-                            </td>
-                          </tr>
+<table class="table table-sm table-hover">
+    <thead class="table-light">
+      <th class="text-secondary">
+        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()" class="form-check-input">
+      </th>
+      <th class="text-secondary">Cage Code</th>
+      <th class="text-secondary">Name</th>
+      <th class="text-secondary">City</th>
+      <th class="text-secondary">Phone</th>
+      <th class="text-secondary text-center">Actions</th>
+    </thead>
+    <tbody>
+        {% for oem in oem %}
+        <tr onclick="handleRowClick(event, {{oem.id}})" 
+            {% if oem.data_source == 'manual' or oem.data_source == 'import' %}class=""{% endif %}>
+            <td onclick="event.stopPropagation();">
+                <input type="checkbox" class="form-check-input oem-checkbox" 
+                       value="{{oem.id}}" onchange="updateBulkActions()">
+            </td>
+            <td>
+                {% if oem.data_source == 'manual' or oem.data_source == 'import' %}
+                    <i class="bi bi-pin-angle me-2" title="Manually added/imported"></i>
+                {% endif %}
+                {{oem.cage}}
+            </td>
+            <td>
+                {{oem.display_name|title}}
+            </td>
+            <td>{{oem.display_city|title}}</td>
+            <td>{{oem.display_phone}}</td>
+            <td>
+                <div class="dropdown text-center">
+                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
+                    <i class="bi bi-caret-down-fill"></i>
+                </a>
+              
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item" href="{% url 'solicitations:oem-detail' oem.id %}">
+                    <i class="bi bi-eye me-1"></i>View More</a></li>
+                  <li><a class="dropdown-item" href="{% url 'solicitations:edit-oem' oem.id %}">
+                    <i class="bi bi-pencil me-1"></i>Customize</a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item text-warning" href="#" data-bs-toggle="modal" data-bs-target="#disableOem-{{oem.id}}" onclick="event.stopPropagation();">
+                    <i class="bi bi-x-circle me-1"></i>Disable</a></li>
+                  <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteOem-{{oem.id}}" onclick="event.stopPropagation();">
+                    <i class="bi bi-trash me-1"></i>Delete</a></li>
+                </ul>
+              </div>
+            </td>
+          </tr>
 
-                          <!--Disable OEM Modal -->
-                            <div class="modal fade" id="disableOem-{{oem.id}}" data-bs-backdrop="static" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-                                <div class="modal-dialog">
-                                <div class="modal-content">
-                                    <div class="modal-header">
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                    <p>Are you sure you want to disable this OEM?</p>
-                                    <form id="disable-oem-form" method="POST" action="{% url 'solicitations:disable-oem' %}">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="oem" id="oem-id-{{oem.id}}" value="{{oem.id}}">
-                                        <div class="mb-3">
-                                        <label for="message-text" class="col-form-label">Reason:</label>
-                                        <textarea class="form-control" name="reason" id="message-text" required></textarea>
-                                        </div>
-                                        <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
-                                        <button type="submit" class="btn btn-danger">Yes, Disable</button>
-                                        </div>
-                                    </form>
-                                    </div>
-                                </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    </tbody>
-                  </table>
-                  <div class="text-center" data-aos="fade-up" data-aos-delay="300">
-                    <div class="ms-1 rounded me-1 container mt-3 d-flex justify-content-center pagination">
-                        {% if oem.has_previous %}
-                          <li><a class="page-link text-secondary" href="?page={{oem.previous_page_number}}">&laquo Previous</a></li>
-                        {% endif %}
-                        
-                        <li class="page-item page-link text-secondary">page {{oem.number}} of {{oem.paginator.num_pages}}</li>
-                
-                        {% if oem.has_next %}
-                          <li><a class="page-link text-secondary" href="?page={{oem.next_page_number}}">next &raquo</a></li>
-                        {% endif %}
-                      </div>
-                  </div>
+          <!--Disable OEM Modal -->
+            <div class="modal fade" id="disableOem-{{oem.id}}" data-bs-backdrop="static" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                    <h5 class="modal-title">Disable OEM</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>This will disable {{oem.display_name}}.</strong>
+                    </div>
+                    <p>Are you sure you want to disable this OEM from your list?</p>
+                    <form id="disable-oem-form" method="POST" action="{% url 'solicitations:disable-oem' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="oem" id="oem-id-{{oem.id}}" value="{{oem.id}}">
+                        <div class="mb-3">
+                        <label for="message-text" class="col-form-label">Reason:</label>
+                        <textarea class="form-control" name="reason" id="message-text" required placeholder="Enter reason for disabling this OEM..."></textarea>
+                        </div>
+                        <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i> No, Cancel</button>
+                        <button type="submit" class="btn btn-secondary"><i class="bi bi-lock"></i> Yes, Disable</button>
+                        </div>
+                    </form>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+          <!--Delete OEM Modal -->
+            <div class="modal fade" id="deleteOem-{{oem.id}}" data-bs-backdrop="static" tabindex="-1" aria-labelledby="deleteOemLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                    <h5 class="modal-title" id="deleteOemLabel">Delete OEM</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>This will permanently delete {{oem.display_name}} from your account.</strong>
+                    </div>
+                    <p><strong>Warning:</strong> This action cannot be undone. The OEM and all your customizations will be permanently removed from your account.</p>
+                    <p>Consider disabling the OEM instead if you might need it later.</p>
+                    <form method="POST" action="{% url 'solicitations:delete-oem' oem.id %}">
+                        {% csrf_token %}
+                        <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i>Yes, Delete Permanently
+                        </button>
+                        </div>
+                    </form>
+                    </div>
+                </div>
+                </div>
+            </div>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- ========== PAGINATION SECTION ========== -->
+{% if oem and oem.paginator.num_pages > 1 %}
+<div class="text-center mt-4 mb-2">
+    <div class="text-muted small mb-2">
+        Page {{ oem.number }} of {{ oem.paginator.num_pages }} 
+        (Showing {{ oem.start_index }}-{{ oem.end_index }} of {{ oem.paginator.count }} items)
+    </div>
+    
+    <div class="ms-1 rounded me-1 container d-flex justify-content-center pagination">
+        <ul class="pagination mb-0">
+            <!-- Previous button -->
+            {% if oem.has_previous %}
+                <li class="page-item">
+                    <a class="page-link text-secondary" href="?page={{ oem.previous_page_number }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">&laquo; Previous</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link text-muted">&laquo; Previous</span>
+                </li>
+            {% endif %}
+            
+            <!-- First page -->
+            {% if oem.number > 3 %}
+                <li class="page-item">
+                    <a class="page-link text-secondary" href="?page=1{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">1</a>
+                </li>
+                {% if oem.number > 4 %}
+                    <li class="page-item disabled">
+                        <span class="page-link text-muted">...</span>
+                    </li>
+                {% endif %}
+            {% endif %}
+            
+            <!-- Pages around current page -->
+            {% for num in oem.paginator.page_range %}
+                {% if num >= oem.number|add:'-2' and num <= oem.number|add:'2' %}
+                    {% if num == oem.number %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ num }}</span>
+                        </li>
+                    {% else %}
+                        <li class="page-item">
+                            <a class="page-link text-secondary" href="?page={{ num }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">{{ num }}</a>
+                        </li>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Last page -->
+            {% if oem.number < oem.paginator.num_pages|add:'-2' %}
+                {% if oem.number < oem.paginator.num_pages|add:'-3' %}
+                    <li class="page-item disabled">
+                        <span class="page-link text-muted">...</span>
+                    </li>
+                {% endif %}
+                <li class="page-item">
+                    <a class="page-link text-secondary" href="?page={{ oem.paginator.num_pages }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">{{ oem.paginator.num_pages }}</a>
+                </li>
+            {% endif %}
+            
+            <!-- Next button -->
+            {% if oem.has_next %}
+                <li class="page-item">
+                    <a class="page-link text-secondary" href="?page={{ oem.next_page_number }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">Next &raquo;</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link text-muted">Next &raquo;</span>
+                </li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+{% endif %}
+
             </div>
         </div>
     </div>
@@ -129,45 +268,53 @@
                         {% csrf_token %}
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="oem-name" class="form-label">Name</label>
+                                <label for="oem-name" class="form-label">Name <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="oem-name" name="name" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="oem-cage" class="form-label">Cage Code</label>
+                                <label for="oem-cage" class="form-label">Cage Code <span class="text-danger">*</span></label>
                                 <input type="text" class="form-control" id="oem-cage" name="cage" maxlength="5" required>
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="oem-email" class="form-label">Email</label>
-                                <input type="email" class="form-control" id="oem-email" name="email" required>
+                                <label for="oem-phone" class="form-label">Phone</label>
+                                <input type="text" class="form-control" id="oem-phone" name="phone" maxlength="14" placeholder="Optional - defaults to '-'">
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label for="oem-phone" class="form-label">Phone</label>
-                                <input type="text" class="form-control" id="oem-phone" name="phone" maxlength="14" required>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="oem-fax" class="form-label">Fax (Optional)</label>
-                            <input type="text" class="form-control" id="oem-fax" name="fax" maxlength="20">
+                                <label for="oem-email" class="form-label">Email(s) <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="oem-email" name="email" required 
+                                       placeholder="e.g., email1@domain.com; email2@domain.com">
+                                <small class="text-muted">Separate multiple emails with semicolons (;) or commas (,)</small>
+                            </div> 
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="oem-city" class="form-label">City</label>
-                                <input type="text" class="form-control" id="oem-city" name="city" required>
+                                <label for="oem-fax" class="form-label">Fax</label>
+                                <input type="text" class="form-control" id="oem-fax" name="fax" placeholder="Optional - defaults to '-'">
                             </div>
                             <div class="col-md-6 mb-3">
+                                <label for="oem-poc" class="form-label">Point of Contact</label>
+                                <input type="text" class="form-control" id="oem-poc" name="poc" placeholder="Optional - defaults to '-'">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
                                 <label for="oem-street" class="form-label">Street</label>
-                                <input type="text" class="form-control" id="oem-street" name="street" required>
+                                <input type="text" class="form-control" id="oem-street" name="street" placeholder="Optional - defaults to '-'">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="oem-city" class="form-label">City</label>
+                                <input type="text" class="form-control" id="oem-city" name="city" placeholder="Optional - defaults to '-'">
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label for="oem-postal-code" class="form-label">Postal Code</label>
-                            <input type="text" class="form-control" id="oem-postal-code" name="postal_code" required>
+                            <label for="oem-postal-code" class="form-label">Zip Code</label>
+                            <input type="text" class="form-control" id="oem-postal-code" name="postal_code" placeholder="Optional - defaults to '-'">
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Save OEM</button>
+                            <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i> Cancel</button>
+                            <button type="submit" class="btn btn-secondary"><i class="bi bi-save"></i> Save OEM</button>
                         </div>
                     </form>
                         </div>
@@ -176,6 +323,95 @@
             </div>
         </div>
     </div>
+
+    <!-- Duplicate OEM Override Modal (Manual Add) -->
+    {% if request.session.show_duplicate_modal %}
+    <div class="modal fade" id="duplicateOemModal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="duplicateModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="duplicateModalLabel">OEM Already in Your List</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>You already have this OEM in your list!</strong>
+                    </div>
+                    
+                    <p>An OEM with cage code <strong>"{{ request.session.duplicate_oem_data.cage }}"</strong> already exists in your list.</p>
+                    <p>Existing OEM: <strong>{{ request.session.duplicate_oem_data.existing_oem_name }}</strong></p>
+                    <p>Do you want to update your personal data for this OEM?</p>
+                    
+                    <div class="alert alert-info">
+                        <small><i class="bi bi-info-circle me-1"></i>This will only update your personal view of this OEM's data.</small>
+                    </div>
+                    
+                    <form method="POST" action="{% url 'solicitations:add-oem' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="override_existing" value="true">
+                        <input type="hidden" name="name" value="{{ request.session.duplicate_oem_data.name }}">
+                        <input type="hidden" name="cage" value="{{ request.session.duplicate_oem_data.cage }}">
+                        <input type="hidden" name="email" value="{{ request.session.duplicate_oem_data.email }}">
+                        <input type="hidden" name="phone" value="{{ request.session.duplicate_oem_data.phone }}">
+                        <input type="hidden" name="fax" value="{{ request.session.duplicate_oem_data.fax }}">
+                        <input type="hidden" name="city" value="{{ request.session.duplicate_oem_data.city }}">
+                        <input type="hidden" name="street" value="{{ request.session.duplicate_oem_data.street }}">
+                        <input type="hidden" name="postal_code" value="{{ request.session.duplicate_oem_data.postal_code }}">
+                        <input type="hidden" name="poc" value="{{ request.session.duplicate_oem_data.poc }}">
+                        
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-arrow-repeat me-1"></i>Yes, Update My Data
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Import Duplicate Override Modal -->
+    {% if request.session.show_import_duplicate_modal %}
+    <div class="modal fade" id="importDuplicateModal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="importDuplicateLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importDuplicateLabel">Duplicate OEMs Found in Excel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Duplicate cage codes found in your Excel file!</strong>
+                    </div>
+                    
+                    <p>Some OEMs in your Excel file already exist in your list.</p>
+                    <p><strong>What would you like to do?</strong></p>
+                    
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-arrow-repeat text-secondary me-1"></i><strong>Override:</strong> Update your personal data with new data from Excel</li>
+                        <li><i class="bi bi-x-circle text-secondary me-1"></i><strong>Cancel:</strong> Skip duplicates and only import new OEMs</li>
+                    </ul>
+                                        
+                    <form method="POST" action="{% url 'solicitations:import-oem' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="override_duplicates" value="true">
+                        
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i> Cancel</button>
+                            <button type="submit" class="btn btn-secondary text-white">
+                                <i class="bi bi-save"></i> Yes, Update My Data
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Import OEM Modal -->
     <div class="modal fade" id="importOemModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="importOemModalLabel" aria-hidden="true">
@@ -192,22 +428,32 @@
                             <label for="excel-file" class="form-label">Select Excel File</label>
                             <input type="file" class="form-control" id="excel-file" name="excel_file" accept=".xlsx, .xls" required>
                         </div>
-                        <div class="alert alert-info">
-                            <p class="mb-1"><strong>Note:</strong> The Excel file should have the following columns:</p>
-                            <ul class="mb-0">
-                                <li>name</li>
-                                <li>cage</li>
-                                <li>email</li>
-                                <li>phone</li>
-                                <li>fax (optional)</li>
-                                <li>city</li>
-                                <li>street</li>
-                                <li>postal_code</li>
+                        <div class="alert alert-light border">
+                            <p class="mb-1"><strong>Required columns:</strong></p>
+                            <ul class="mb-2">
+                                <li><strong>Name</strong> (required)</li>
+                                <li><strong>Cage</strong> (required)</li> 
+                                <li><strong>Email</strong> (required - supports multiple emails separated by semicolons or commas)</li>
                             </ul>
+                            <p class="mb-1"><strong>Optional columns:</strong></p>
+                            <ul class="mb-2">
+                                <li>Phone</li>
+                                <li>Fax</li>
+                                <li>Street</li> 
+                                <li>City</li>
+                                <li>Zip Code</li>
+                                <li>POC</li>
+                            </ul>
+                            <p class="mb-0"><small class="text-muted">
+                                - Empty or missing optional fields will default to "-"<br>
+                                - Rows with invalid emails will be skipped<br>
+                                - Multiple emails can be separated by semicolons (;) or commas (,)<br>
+                                - Unknown columns will be ignored
+                            </small></p>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Import</button>
+                            <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i> Cancel</button>
+                            <button type="submit" class="btn btn-secondary"><i class="bi bi-cloud-download"></i> Import</button>
                         </div>
                     </form>
                 </div>
@@ -215,4 +461,655 @@
         </div>
     </div>
 </section>
+
+<!-- Bulk Delete Confirmation Modal -->
+<div class="modal fade" id="bulkDeleteModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkDeleteModalLabel">Delete Multiple OEMs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>This will permanently delete <span id="bulkDeleteCount">0</span> OEM(s) from your account.</strong>
+                </div>
+                <p><strong>Warning:</strong> This action cannot be undone. The selected OEMs and all your customizations will be permanently removed from your account.</p>
+                <p>Consider disabling the OEMs instead if you might need them later.</p>
+                
+                <div id="bulkDeleteList" class="bg-light p-3 rounded mb-3" style="max-height: 200px; overflow-y: auto;">
+                    <!-- Selected OEMs will be listed here -->
+                </div>
+                
+                <form id="bulkDeleteForm" method="POST" action="{% url 'solicitations:bulk-delete-oems' %}">
+                    {% csrf_token %}
+                    <input type="hidden" id="bulkDeleteIds" name="oem_ids" value="">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i> Cancel</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i>Yes, Delete All Selected
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Select All OEMs Confirmation Modal -->
+<div class="modal fade" id="selectAllOemsModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="selectAllModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="selectAllModalLabel">Select All OEMs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    <strong>This will select all {{total_oems}} OEMs across all pages.</strong>
+                </div>
+                <p>You are about to select all OEMs in your list, including those on other pages. This action will prepare them for bulk operations like deletion.</p>
+                <p><strong>Note:</strong> You can still deselect individual OEMs or clear the selection if needed.</p>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmSelectAllOems()">
+                        <i class="bi bi-check-all me-1"></i>Yes, Select All {{total_oems}} OEMs
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container - Fixed positioning -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="toast align-items-center text-white border-0 {% if message.tags == 'success' %}bg-success{% elif message.tags == 'error' %}bg-danger{% elif message.tags == 'warning' %}bg-warning text-dark{% else %}bg-info{% endif %}" 
+                 role="alert" aria-live="assertive" aria-atomic="true" id="toast-{{ forloop.counter }}">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        {% if message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'error' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {% if 'safe' in message.extra_tags %}
+                            {{ message|safe }}
+                        {% else %}
+                            {{ message }}
+                        {% endif %}
+                    </div>
+                    <button type="button" class="btn-close {% if message.tags == 'warning' %}btn-close-dark{% else %}btn-close-white{% endif %} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+<script>
+// Global variables for bulk actions
+let selectedOems = new Set();
+let oemData = {};
+let allOemsSelected = false;
+let totalOems = {{total_oems}};
+
+// Store OEM data for bulk operations
+{% for oem in oem %}
+oemData[{{oem.id}}] = {
+    'name': '{{oem.display_name|escapejs}}',
+    'cage': '{{oem.cage|escapejs}}'
+};
+{% endfor %}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Restore selection state from sessionStorage
+    restoreSelectionState();
+    
+    // Show manual add duplicate modal if session flag is set
+    {% if request.session.show_duplicate_modal %}
+        const duplicateModal = new bootstrap.Modal(document.getElementById('duplicateOemModal'));
+        duplicateModal.show();
+        
+        // Clear session flag when modal is closed
+        document.getElementById('duplicateOemModal').addEventListener('hidden.bs.modal', function() {
+            fetch('{% url "solicitations:clear-duplicate-flag" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                },
+            });
+        });
+    {% endif %}
+    
+    // Show import duplicate modal if session flag is set
+    {% if request.session.show_import_duplicate_modal %}
+        const importDuplicateModal = new bootstrap.Modal(document.getElementById('importDuplicateModal'));
+        importDuplicateModal.show();
+        
+        // Clear session flag when modal is closed
+        document.getElementById('importDuplicateModal').addEventListener('hidden.bs.modal', function() {
+            // Clear the session flag by making a request to clear it
+            fetch('{% url "solicitations:active-oems" %}', {
+                method: 'GET',
+            }).then(function() {
+                // Session will be cleared by the view on next page load
+                console.log('Modal closed, session will be cleared on next request');
+            });
+        });
+    {% endif %}
+
+    // Toast functionality
+    // Debug: Check if Bootstrap is loaded
+    if (typeof bootstrap === 'undefined') {
+        console.error('Bootstrap JavaScript is not loaded!');
+        // Fallback: Show a simple alert
+        {% if messages %}
+            {% for message in messages %}
+                alert('{{ message.tags|title }}: {{ message|escapejs }}');
+            {% endfor %}
+        {% endif %}
+        return;
+    }
+    
+    // Initialize and show all toasts
+    const toastElements = document.querySelectorAll('.toast');
+    console.log('Found', toastElements.length, 'toast elements');
+    
+    if (toastElements.length > 0) {
+        toastElements.forEach(function(toastElement, index) {
+            try {
+                const toast = new bootstrap.Toast(toastElement, {
+                    autohide: true,
+                    delay: 5000  // 5 seconds for better readability
+                });
+                
+                console.log('Showing toast', index + 1);
+                toast.show();
+                
+            } catch (error) {
+                console.error('Error showing toast:', error);
+                // Fallback to alert
+                const message = toastElement.querySelector('.toast-body').textContent;
+                alert(message);
+            }
+        });
+    } else {
+        console.log('No toast elements found');
+    }
+});
+
+// Save selection state to sessionStorage
+function saveSelectionState() {
+    const selectionData = {
+        selectedOems: Array.from(selectedOems),
+        allOemsSelected: allOemsSelected
+    };
+    sessionStorage.setItem('oemSelection', JSON.stringify(selectionData));
+}
+
+// Restore selection state from sessionStorage
+function restoreSelectionState() {
+    const savedData = sessionStorage.getItem('oemSelection');
+    if (savedData) {
+        try {
+            const selectionData = JSON.parse(savedData);
+            selectedOems = new Set(selectionData.selectedOems);
+            allOemsSelected = selectionData.allOemsSelected || false;
+            
+            // Update checkboxes on current page
+            document.querySelectorAll('.oem-checkbox').forEach(checkbox => {
+                if (selectedOems.has(parseInt(checkbox.value))) {
+                    checkbox.checked = true;
+                }
+            });
+            
+            updateBulkActions();
+        } catch (e) {
+            console.error('Error restoring selection state:', e);
+        }
+    }
+}
+
+// Bulk Actions Functions
+function handleRowClick(event, oemId) {
+    // Only navigate if not clicking on checkbox or dropdown
+    if (!event.target.matches('input[type="checkbox"]') && 
+        !event.target.closest('.dropdown') && 
+        !event.target.closest('.form-check-input')) {
+        window.location.href = '/solicitations/oem-detail/' + oemId;
+    }
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.oem-checkbox');
+    
+    if (selectAllCheckbox.checked && allOemsSelected) {
+        // Clear all selection
+        clearSelection();
+        return;
+    }
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        if (selectAllCheckbox.checked) {
+            selectedOems.add(parseInt(checkbox.value));
+        } else {
+            selectedOems.delete(parseInt(checkbox.value));
+        }
+    });
+    
+    // Reset allOemsSelected if unchecking
+    if (!selectAllCheckbox.checked) {
+        allOemsSelected = false;
+    }
+    
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.oem-checkbox:checked');
+    const bulkActionsBar = document.getElementById('bulkActionsBar');
+    const selectedCount = document.getElementById('selectedCount');
+    const selectedFromTotal = document.getElementById('selectedFromTotal');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    
+    // Update selected OEMs set for current page
+    document.querySelectorAll('.oem-checkbox').forEach(checkbox => {
+        if (checkbox.checked) {
+            selectedOems.add(parseInt(checkbox.value));
+        } else {
+            selectedOems.delete(parseInt(checkbox.value));
+        }
+    });
+    
+    // Show/hide bulk actions bar
+    if (selectedOems.size > 0 || allOemsSelected) {
+        bulkActionsBar.style.display = 'block';
+        if (allOemsSelected) {
+            selectedCount.textContent = totalOems;
+            selectedFromTotal.textContent = '(All OEMs selected)';
+        } else {
+            selectedCount.textContent = selectedOems.size;
+            selectedFromTotal.textContent = `(from ${totalOems} total)`;
+        }
+    } else {
+        bulkActionsBar.style.display = 'none';
+    }
+    
+    // Update select all checkbox state
+    const totalCheckboxes = document.querySelectorAll('.oem-checkbox').length;
+    const checkedOnPage = document.querySelectorAll('.oem-checkbox:checked').length;
+    
+    if (allOemsSelected) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = true;
+    } else if (selectedOems.size === 0) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = false;
+    } else if (checkedOnPage === totalCheckboxes && selectedOems.size === totalOems) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = true;
+    } else {
+        selectAllCheckbox.indeterminate = true;
+    }
+    
+    saveSelectionState();
+}
+
+function selectAllOems() {
+    // Show confirmation modal for selecting all OEMs
+    const selectAllModal = new bootstrap.Modal(document.getElementById('selectAllOemsModal'));
+    selectAllModal.show();
+}
+
+function confirmSelectAllOems() {
+    // Close the modal first
+    const selectAllModal = bootstrap.Modal.getInstance(document.getElementById('selectAllOemsModal'));
+    selectAllModal.hide();
+    
+    // Select all OEMs across all pages
+    allOemsSelected = true;
+    
+    // Also check all checkboxes on current page
+    document.querySelectorAll('.oem-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+        selectedOems.add(parseInt(checkbox.value));
+    });
+    document.getElementById('selectAllCheckbox').checked = true;
+    
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.oem-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('selectAllCheckbox').checked = false;
+    document.getElementById('selectAllCheckbox').indeterminate = false;
+    selectedOems.clear();
+    allOemsSelected = false;
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function bulkDeleteOems() {
+    if (selectedOems.size === 0 && !allOemsSelected) {
+        alert('Please select OEMs to delete.');
+        return;
+    }
+    
+    const deleteCount = allOemsSelected ? totalOems : selectedOems.size;
+    
+    // Update modal content
+    document.getElementById('bulkDeleteCount').textContent = deleteCount;
+    
+    if (allOemsSelected) {
+        document.getElementById('bulkDeleteIds').value = 'all';
+        
+        // Show message for all OEMs
+        const bulkDeleteList = document.getElementById('bulkDeleteList');
+        bulkDeleteList.innerHTML = '<div class="text-center"><i class="bi bi-building me-2"></i><strong>All ' + totalOems + ' OEMs will be deleted</strong></div>';
+    } else {
+        document.getElementById('bulkDeleteIds').value = Array.from(selectedOems).join(',');
+        
+        // Create list of selected OEMs
+        const bulkDeleteList = document.getElementById('bulkDeleteList');
+        bulkDeleteList.innerHTML = '';
+        
+        selectedOems.forEach(oemId => {
+            if (oemData[oemId]) {
+                const oemInfo = document.createElement('div');
+                oemInfo.className = 'mb-1';
+                oemInfo.innerHTML = `<i class="bi bi-building me-2"></i><strong>${oemData[oemId].name}</strong> (${oemData[oemId].cage})`;
+                bulkDeleteList.appendChild(oemInfo);
+            }
+        });
+    }
+    
+    // Show modal
+    const bulkDeleteModal = new bootstrap.Modal(document.getElementById('bulkDeleteModal'));
+    bulkDeleteModal.show();
+}
+
+// Handle form submission for bulk delete
+document.getElementById('bulkDeleteForm').addEventListener('submit', function() {
+    // Clear selection after successful submission
+    clearSelection();
+    sessionStorage.removeItem('oemSelection');
+});
+
+// Handle page navigation while preserving selection
+window.addEventListener('beforeunload', function() {
+    saveSelectionState();
+});
+</script>
+
+<style>
+/* Pagination styling - matching filtered_solicitation.html */
+.pagination {
+    justify-content: center;
+}
+
+.pagination .page-link {
+    color: #6c757d;
+    border-color: #dee2e6;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    color: white;
+    font-weight: 500;
+}
+
+.pagination .page-link:hover:not(.disabled) {
+    color: var(--bs-primary, #0d6efd);
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    transform: translateY(-1px);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: #6c757d;
+    background-color: #fff;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+}
+
+.pagination .page-link:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Toast Styling */
+.toast-container {
+    z-index: 1055 !important;
+}
+
+.toast {
+    min-width: 300px;
+    max-width: 450px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    margin-bottom: 0.5rem;
+    border-radius: 0.5rem;
+}
+
+.toast-body {
+    font-weight: 500;
+    padding: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    line-height: 1.4;
+}
+
+.toast-body i {
+    font-size: 1.1rem;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+}
+
+/* Handle HTML content in warning toasts (for download links) */
+.toast-body a {
+    color: inherit;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.toast-body a:hover {
+    opacity: 0.8;
+}
+
+/* Ensure toast colors work */
+.toast.bg-success {
+    background-color: #198754 !important;
+    border: 1px solid #146c43;
+}
+
+.toast.bg-danger {
+    background-color: #dc3545 !important;
+    border: 1px solid #b02a37;
+}
+
+.toast.bg-info {
+    background-color: #0dcaf0 !important;
+    border: 1px solid #0aa2c0;
+}
+
+.toast.bg-warning {
+    background-color: #ffc107 !important;
+    border: 1px solid #ffa000;
+    color: #000 !important;
+}
+
+.toast.bg-warning .toast-body {
+    color: #000 !important;
+}
+
+.toast.bg-warning .toast-body a {
+    color: #000 !important;
+    font-weight: 700;
+}
+
+/* Animation for toast appearance */
+.toast.showing {
+    opacity: 1;
+}
+
+.toast.show {
+    opacity: 1;
+}
+
+/* Close button styling */
+.btn-close-white {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.btn-close-dark {
+    filter: none;
+}
+
+/* Bulk Actions Bar Styling */
+#bulkActionsBar {
+    border-left: 4px solid #0d6efd;
+    background-color: #e7f3ff;
+    border-color: #b8daff;
+    animation: slideDown 0.3s ease-in-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#bulkActionsBar .btn {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Responsive toast container */
+@media (max-width: 576px) {
+    .toast-container {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%); 
+        padding: 1rem; 
+    }
+    
+    .toast {
+        min-width: 280px;
+        max-width: 320px;
+    }
+    
+    /* Stack bulk action buttons on mobile */
+    #bulkActionsBar .d-flex {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    
+    #bulkActionsBar .d-flex .d-flex {
+        flex-direction: row;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+}
+
+/* Modal improvements */
+.modal-header .modal-title {
+    font-weight: 600;
+}
+
+.alert-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.alert-info {
+    border-left: 4px solid #0dcaf0;
+}
+
+.list-unstyled li {
+    margin-bottom: 0.5rem;
+}
+
+/* Custom styling for user-specific features */
+.bi-pencil-square {
+    color: #0dcaf0 !important;
+    font-size: 0.9rem;
+}
+
+.dropdown-divider {
+    margin: 0.25rem 0;
+}
+
+.dropdown-item.text-danger:hover {
+    background-color: #f8d7da;
+    color: #721c24 !important;
+}
+
+.alert-info {
+    background-color: #cff4fc;
+    border-color: #9eeaf9;
+    color: #055160;
+}
+
+.alert-light {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    color: #495057;
+}
+
+/* Checkbox styling improvements */
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Indeterminate checkbox styling */
+.form-check-input:indeterminate {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e");
+}
+
+/* Table row hover effect */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.075);
+}
+
+/* Selected row styling */
+.table tbody tr:has(.form-check-input:checked) {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+</style>
+
 {% endblock content %}

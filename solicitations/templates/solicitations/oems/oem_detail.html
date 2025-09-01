@@ -1,99 +1,196 @@
 {% extends 'solicitations/base.html' %}
 {% load static %}
+
 {% block content %}
-<section class="vh-100">
+<section class="mt-5">
     <div class="d-flex justify-content-between">
         <div class="">
-            OEM Detail For <span class="badge bg-light text-dark">
-                {% if oem_data %}
-                    {{oem_data.name}}
-                {% else %}
-                    {{oem.name}}
-                {% endif %}
-            </span>
+            Detail for OEM with CAGE Code <span class="badge bg-light text-dark">{{oem_data.cage}}</span>
+            {% if is_disabled %}
+                <span class="badge bg-warning text-dark ms-2">
+                    <i class="bi bi-lock me-1"></i>Disabled
+                </span>
+            {% endif %}
         </div>
         <div class="d-flex gap-3">
-            <a href="{% url 'solicitations:active-oems' %}" class="btn bg-secondary text-white"><i class="bi bi-arrow-left"></i> Back</a>
-            <a href="{% url 'solicitations:edit-oem' oem.id %}" class="btn bg-info text-white"><i class="bi bi-pencil"></i> Edit</a>
+            <a href="{% url 'solicitations:active-oems' %}" class="btn bg-secondary text-white">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
         </div>
     </div>
-    <div class="mt-5">
-        <div class="">
-            Data...
+
+    {% if is_disabled %}
+        <div class="alert alert-warning mt-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>This OEM is currently disabled in your list.</strong> 
+            You can view its details but it won't appear in your active OEM list or be available for RFQs.
         </div>
-        <div class="mt-2">
-            <div class="card">
-                <div class="card-body my-3">
-                    <div class="row my-2">
-                        <div class="col-md-4">
-                            Name: 
-                            {% if oem_data %}
-                                {{oem_data.name|title}}
-                            {% else %}
-                                {{oem.name|title}}
-                            {% endif %}
+    {% endif %}
+
+    <div class="mt-5">
+        <div>
+            <div class="">
+                OEM Data...
+            </div>
+            <div class="mt-2">
+                <div class="card">
+                    <div class="card-body my-3">
+                        <!-- First Row -->
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                CAGE Code: {{oem_data.cage}}
+                            </div>
+                            <div class="col-md-4">
+                                Company Name: {{oem_data.name|title}}
+                            </div>
+                            <div class="col-md-4">
+                                Email: {{oem_data.email|lower}}
+                            </div>
                         </div>
-                        <div class="col-md-4">
-                            Cage Code: {{oem.cage}}
+                        <hr>
+                        
+                        <!-- Second Row -->
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Phone: {{oem_data.phone}}
+                            </div>
+                            <div class="col-md-4">
+                                Fax: {{oem_data.fax}}
+                            </div>
+                            <div class="col-md-4">
+                                Point of Contact: {{oem_data.poc}}
+                            </div>
                         </div>
-                        <div class="col-md-4">
-                            Email: 
-                            {% if oem_data %}
-                                {{oem_data.email|lower}}
-                            {% else %}
-                                {{oem.email|lower}}
-                            {% endif %}
+                        <hr>
+                        
+                        <!-- Third Row -->
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Street: {{oem_data.street|title}}
+                            </div>
+                            <div class="col-md-4">
+                                City: {{oem_data.city|title}}
+                            </div>
+                            <div class="col-md-4">
+                                Postal Code: {{oem_data.postal_code}}
+                            </div>
+                        </div>
+                        <hr>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons Section -->
+        <div class="my-2">
+            <div class="">
+                Actions...
+            </div>
+            <div class="mt-2">
+                <div class="card">
+                    <div class="card-body my-3">
+                        <div class="d-flex justify-content-end gap-2 my-2">
+                            <div class="">
+                                <a href="{% url 'solicitations:edit-oem' oem.id %}" class="btn btn-secondary {% if is_disabled %}disabled{% endif %}">
+                                    <i class="bi bi-pencil me-1"></i>
+                                    {% if oem_data.has_customizations %}
+                                        Update Customization
+                                    {% else %}
+                                        Customize This OEM
+                                    {% endif %}
+                                </a>
+                            </div>
+                            <div class="">
+                                {% if is_disabled %}
+                                    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#enableOemModal">
+                                        <i class="bi bi-check-circle me-1"></i>Enable OEM
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#disableOemModal">
+                                        <i class="bi bi-x-circle me-1"></i>Disable OEM
+                                    </button>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
-                    <hr>
-                    <div class="row my-2">
-                        <div class="col-md-4">
-                            Phone: 
-                            {% if oem_data %}
-                                {{oem_data.phone}}
-                            {% else %}
-                                {{oem.phone}}
-                            {% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            Fax: 
-                            {% if oem_data %}
-                                {{oem_data.fax}}
-                            {% else %}
-                                {{oem.fax}}
-                            {% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            City: 
-                            {% if oem_data %}
-                                {{oem_data.city|title}}
-                            {% else %}
-                                {{oem.city|title}}
-                            {% endif %}
-                        </div>
+                </div>
+                
+                <!-- Rating Section -->
+                <div class="text-center">
+                    <span class="text-center mt-2">
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                        <i class="bi bi-star-fill text-warning"></i>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disable OEM Modal -->
+    <div class="modal fade" id="disableOemModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="disableOemModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="disableOemModalLabel">Disable OEM</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>This will disable {{oem_data.name}}.</strong>
                     </div>
-                    <hr>
-                    <div class="row my-2">
-                        <div class="col-md-4">
-                            Street: 
-                            {% if oem_data %}
-                                {{oem_data.street|title}}
-                            {% else %}
-                                {{oem.street|title}}
-                            {% endif %}
+                    <p>Are you sure you want to disable this OEM from your list?</p>
+                    <form method="POST" action="{% url 'solicitations:disable-oem' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="oem" value="{{oem.id}}">
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Reason for disabling:</label>
+                            <textarea class="form-control" name="reason" id="reason" rows="3" required 
+                                      placeholder="Enter reason for disabling this OEM..."></textarea>
                         </div>
-                        <div class="col-md-4">
-                            Postal Code: 
-                            {% if oem_data %}
-                                {{oem_data.postal_code}}
-                            {% else %}
-                                {{oem.postal_code}}
-                            {% endif %}
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-x-circle me-1"></i>Yes, Disable
+                            </button>
                         </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Enable OEM Modal -->
+    <div class="modal fade" id="enableOemModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="enableOemModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="enableOemModalLabel">Enable OEM</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>This will enable {{oem_data.name}}.</strong>
                     </div>
+                    <p>Are you sure you want to enable this OEM in your list?</p>
+                    <form method="POST" action="{% url 'solicitations:enable-oem' oem=user_oem.id %}">
+                        {% csrf_token %}
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancel</button>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-check-circle me-1"></i>Yes, Enable
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 </section>
+
 {% endblock content %}

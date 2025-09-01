@@ -11,7 +11,14 @@ class SolicitationsConfig(AppConfig):
             # Only run when the main Django process is running (not for every import)
             if not any(cmd in sys.argv[0] for cmd in ['pytest', 'test', 'shell']):
                 try:
-                    from .tasks import setup_email_schedule
-                    setup_email_schedule()
+                    # Import and call the sync-only version during app startup
+                    from .tasks import setup_email_schedule_sync_only
+                    setup_email_schedule_sync_only()
                 except Exception as e:
                     print(f"Error setting up email schedule: {e}")
+                
+                # Import signals for real-time log broadcasting
+                try:
+                    from . import signals
+                except Exception as e:
+                    print(f"Error importing signals: {e}")

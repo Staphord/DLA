@@ -1,33 +1,6 @@
 {% extends 'accounts/baseaccount.html' %}
 {% load static %}
 
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-  <meta charset="utf-8">
-  <meta content="width=device-width, initial-scale=1.0" name="viewport">
-
-  <title>RFQ || Automated Program</title>
-  <meta content="" name="description">
-  <meta content="" name="keywords">
-  <link rel="shortcut icon" href="#" type="image/x-icon">
-
-
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Jost:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
-
-  <!-- Vendor CSS Files -->
-  <link href="{% static 'solicitations/assets/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
-  <link href="{% static 'solicitations/assets/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
-  <link href="{% static 'solicitations/assets/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
-
-  <!-- Template Main CSS File -->
-  <link href="{% static 'solicitations/assets/css/style.css' %}" rel="stylesheet">
-</head>
-
-<body>
-
 {% block content %}
 <section class="bg-light py-5 vh-100">
   <div class="container mt-5 pt-5">
@@ -40,15 +13,21 @@
               {% csrf_token %}
               <div class="bg-light p-2 mb-2 form-text rounded-2">Login to RFQ Automated Portal</div>
               <div class="mb-3">
-                <label for="exampleInputEmail1" class="form-label">Username</label>
-                <input type="text" class="form-control" name="username">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" name="username" id="username">
               </div>
               <div class="mb-3">
-                <label for="exampleInputPassword1" class="form-label">Password</label>
-                <input type="password" class="form-control" name="password">
+                <label for="password" class="form-label">Password</label>
+                <div class="input-group">
+                  <input type="password" class="form-control" name="password" id="password">
+                  <button class="btn btn-secondary password-toggle-btn" type="button" style="z-index: 10; position: relative;">
+                    <i class="bi bi-eye" style="pointer-events: none;"></i>
+                  </button>
+                </div>
               </div>
               <button type="submit" class="btn mybg hoverbg text-white w-100 mt-1">Login</button>
               <div class="mt-2">
+               <a href='{% url 'password_reset' %}' class=''>Forgot Password?</a>      
               </div> <br>
               <div class="mt-2">
                 <div class="d-flex">
@@ -94,21 +73,140 @@
     </div>
   </div>
 </section>
-{% endblock content %}
-
-<footer id="footer" class="footer">
-  <div class="copyright">
-    &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
-  </div>
-  <div class="credits">
-    Designed by <a href="#">Gil Tech</a>
-  </div>
-</footer><!-- End Footer -->
 
 <!-- Vendor JS Files -->
 <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
-  
-</body>
-</html>
-  
-  
+
+<script>
+// Password toggle functionality
+function togglePassword(fieldId, button) {
+    console.log('togglePassword called!');
+    
+    const passwordField = document.getElementById(fieldId);
+    const icon = button.querySelector('i');
+    
+    if (!passwordField || !icon) {
+        console.error('Missing elements:', { passwordField, icon });
+        return;
+    }
+    
+    if (passwordField.type === 'password') {
+        passwordField.type = 'text';
+        icon.classList.remove('bi-eye');
+        icon.classList.add('bi-eye-slash');
+        button.setAttribute('title', 'Hide password');
+        console.log('Password shown');
+    } else {
+        passwordField.type = 'password';
+        icon.classList.remove('bi-eye-slash');
+        icon.classList.add('bi-eye');
+        button.setAttribute('title', 'Show password');
+        console.log('Password hidden');
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Setting up password toggle...');
+    
+    // Find button and add event listener
+    const button = document.querySelector('.password-toggle-btn');
+    
+    if (button) {
+        console.log('Button found, adding click handler');
+        
+        // Remove any existing listeners and add new one
+        button.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Button clicked!');
+            togglePassword('password', this);
+            return false;
+        };
+        
+        // Also try with addEventListener as backup
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('addEventListener triggered');
+            togglePassword('password', this);
+        }, true);
+        
+        // Set initial state
+        button.setAttribute('title', 'Show password');
+        button.style.cursor = 'pointer';
+        
+        console.log('Password toggle setup complete');
+    } else {
+        console.error('Toggle button not found');
+    }
+});
+</script>
+
+<style>
+/* Password toggle button styling */
+.password-toggle-btn {
+    border-left: 0 !important;
+    cursor: pointer !important;
+    z-index: 10;
+    position: relative;
+    min-width: 40px;
+    padding: 0.375rem 0.75rem;
+}
+
+.password-toggle-btn:hover {
+    background-color: #f8f9fa !important;
+    border-color: #adb5bd !important;
+}
+
+.password-toggle-btn:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+.password-toggle-btn i {
+    pointer-events: none;
+    font-size: 1rem;
+}
+
+.input-group .btn-outline-secondary,
+.input-group .btn-secondary {
+    border-left: 0;
+    cursor: pointer;
+}
+
+.input-group .form-control:focus + .btn-outline-secondary,
+.input-group .form-control:focus + .btn-secondary,
+.input-group .form-control:focus + .password-toggle-btn {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Ensure password fields have proper styling */
+.input-group .form-control {
+    border-right: 0;
+}
+
+.input-group .form-control:focus {
+    border-right: 0;
+    box-shadow: none;
+}
+
+/* Hover effect for toggle button */
+.input-group .btn-outline-secondary:hover,
+.input-group .btn-secondary:hover {
+    
+}
+
+/* Fix for input group border alignment */
+.input-group .form-control:not(:last-child) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.input-group .btn:not(:first-child) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+</style>
+{% endblock content %}
+

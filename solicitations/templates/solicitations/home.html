@@ -24,18 +24,17 @@
     </div>
     {% endif %}
   </div>
-</div><!-- End Page Title -->
+</div>
 
 <section class="section dashboard">
   
   {% if user.user_type == "admin" %}
   <div class="row">
-    <!-- Solicitation Card -->
     <div class="col-xxl-4 col-md-4">
       <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
           <div class="card info-card revenue-card myhover">
               <div class="card-body rounded-3">
-                <h5 class="card-title">Solicitations <span class="text-muted">| All</span></h5>
+                <h5 class="card-title">Unsent Solicitations <span class="text-muted">| All</span></h5>
                 <div class="d-flex align-items-center">
                     <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
                       <i class="bi bi-files my-text"></i>
@@ -47,14 +46,13 @@
               </div>
           </div>
       </a>
-    </div><!-- End Solicitation Card -->
+    </div>
 
-    <!-- Procurement Card -->
     <div class="col-xxl-4 col-md-4">
       <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
         <div class="card info-card revenue-card myhover">
           <div class="card-body rounded-3">
-            <h5 class="card-title">Procurements <span class="text-muted">| All</span></h5>
+            <h5 class="card-title">Sent RFQs <span class="text-muted">| All</span></h5>
             <div class="d-flex align-items-center">
                 <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
                   <i class="bi bi-truck my-text"></i>
@@ -68,9 +66,7 @@
         </div>
       </a>
     </div>
-    <!-- End Procurement Card -->
 
-    <!-- Users Card -->
     <div class="col-xxl-4 col-md-4">
       <a href="{% url 'solicitations:clients' %}" class="text-decoration-none">
         <div class="card info-card revenue-card myhover">
@@ -87,16 +83,15 @@
           </div>
         </div>
       </a>
-    </div><!-- End Users Card -->
+    </div>
   </div>
   {% else %}
   <div class="row">
-    <!-- Solicitation Card -->
     <div class="col-md-6">
       <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
           <div class="card info-card revenue-card myhover">
               <div class="card-body rounded-3">
-                <h5 class="card-title">Solicitations <span class="text-muted">| All</span></h5>
+                <h5 class="card-title">Unsent Solicitations <span class="text-muted">| All</span></h5>
                 <div class="d-flex align-items-center">
                     <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
                       <i class="bi bi-files my-text"></i>
@@ -108,14 +103,14 @@
               </div>
           </div>
       </a>
-    </div><!-- End Solicitation Card -->
+    </div>
 
     <!-- Procurement Card -->
       <div class="col-md-6">
         <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
         <div class="card info-card revenue-card myhover">
           <div class="card-body rounded-3">
-            <h5 class="card-title">Procurements <span class="text-muted">| All</span></h5>
+            <h5 class="card-title">Sent RFQs <span class="text-muted">| All</span></h5>
             <div class="d-flex align-items-center">
                 <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
                   <i class="bi bi-truck my-text"></i>
@@ -134,130 +129,139 @@
   {% endif%}
     
 
-  <div class="row">
-
-    <div class="col-lg-6">
-      <div class="card">
-        <div class="card-body">
-          <h5 class="card-title">OEMs Status Chart</h5>
-    
-          <!-- Line Chart -->
-          <canvas id="lineChart" style="max-height: 260px;"></canvas>
-          <script>
-            document.addEventListener("DOMContentLoaded", () => {
-              // Fetch dynamic data from the Django backend
-              fetch('http://localhost:8000/solicitations/get-oem-status-data/')
-                .then(response => response.json())
-                .then(data => {
-                  // Extract dynamic data
-                  const dynamicData = [data.active, data.disabled];
-    
-                  // Create the chart using the dynamic data
-                  new Chart(document.querySelector('#lineChart'), {
-                    type: 'bar',  
-                    data: {
-                      labels: ['Active', 'Disabled'],
-                      datasets: [{
-                        label: 'Number',
-                        data: dynamicData,  // Use the dynamic data
-                        fill: false,
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: [
-                            'rgb(54, 162, 235)',  // Accepted color
-                            'rgb(104, 99, 200)'   // Sent color
-                          ],
-                        tension: 0.1
-                      }]
-                    },
-                    options: {
-                      scales: {
-                        y: {
-                          beginAtZero: true
-                        }
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card h-100"> <!-- Added h-100 class -->
+      <div class="card-body d-flex flex-column"> <!-- Added d-flex flex-column -->
+        <h5 class="card-title">OEMs Status Chart</h5>
+  
+        <!-- Line Chart -->
+        <div class="flex-grow-1 d-flex align-items-center justify-content-center"> <!-- Chart container -->
+          <canvas id="lineChart" style="max-height: 260px; max-width: 100%;"></canvas>
+        </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", () => {
+            // Fetch dynamic data from the Django backend
+            fetch('http://localhost:8000/solicitations/get-oem-status-data/')
+              .then(response => response.json())
+              .then(data => {
+                // Extract dynamic data
+                const dynamicData = [data.active, data.disabled];
+  
+                // Create the chart using the dynamic data
+                new Chart(document.querySelector('#lineChart'), {
+                  type: 'bar',  
+                  data: {
+                    labels: ['Active', 'Disabled'],
+                    datasets: [{
+                      label: 'Number',
+                      data: dynamicData,  // Use the dynamic data
+                      fill: false,
+                      borderColor: 'rgb(75, 192, 192)',
+                      backgroundColor: [
+                          'rgb(54, 162, 235)',  // Active color
+                          'rgb(104, 99, 200)'   // Disabled color
+                        ],
+                      tension: 0.1
+                    }]
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: true, // Keep aspect ratio
+                    aspectRatio: 2, // Set aspect ratio for consistency
+                    scales: {
+                      y: {
+                        beginAtZero: true
                       }
                     }
-                  });
-                })
-                .catch(error => {
-                  console.error('Error fetching dynamic data:', error);
+                  }
                 });
-            });
-          </script>
-          <!-- End Line Chart -->
-        </div>
-      </div>
-    </div>
-    
-      <div class="col-lg-6">
-        <div class="card">
-          <div class="card-body">
-            <h5 class="card-title">RFQ Status Info</h5>
-      
-            <!-- Doughnut Chart -->
-            <canvas id="doughnutChart" style="max-height: 260px;"></canvas>
-            <script>
-              document.addEventListener("DOMContentLoaded", () => {
-                // Fetch dynamic data from Django view
-                fetch('http://localhost:8000/solicitations/get-chart-data/')
-                  .then(response => response.json())
-                  .then(data => {
-                    // Extract dynamic data
-                    const dynamicData = [data.solicitations, data.replied, data.sent];
-      
-                    // Create the chart using the dynamic data
-                    new Chart(document.querySelector('#doughnutChart'), {
-                      type: 'doughnut',
-                      data: {
-                        labels: ['Scraped solicitations', 'Replied', 'Sent'],
-                        datasets: [{
-                          label: 'Procurement',
-                          data: dynamicData,  // Use the dynamic data
-                          backgroundColor: [
-                            'rgb(255, 99, 132)',  // Accepted color
-                            'rgb(54, 162, 235)',  // Replied color
-                            'rgb(104, 99, 200)'   // Sent color
-                          ],
-                          hoverOffset: 4
-                        }]
-                      }
-                    });
-                  })
-                  .catch(error => {
-                    console.error('Error fetching dynamic data:', error);
-                  });
+              })
+              .catch(error => {
+                console.error('Error fetching dynamic data:', error);
               });
-            </script>
-            <!-- End Doughnut Chart -->
-          </div>
-        </div>
+          });
+        </script>
+        <!-- End Line Chart -->
       </div>
-      
     </div>
+  </div>
+  
+  <div class="col-lg-6">
+    <div class="card h-100"> <!-- Added h-100 class -->
+      <div class="card-body d-flex flex-column"> <!-- Added d-flex flex-column -->
+        <h5 class="card-title">Solicitations and RFQs Status Info</h5>
+    
+        <!-- Doughnut Chart -->
+        <div class="flex-grow-1 d-flex align-items-center justify-content-center"> <!-- Chart container -->
+          <canvas id="doughnutChart" style="max-height: 260px; max-width: 100%;"></canvas>
+        </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", () => {
+            // Fetch dynamic data from Django view
+            fetch('http://localhost:8000/solicitations/get-chart-data/')
+              .then(response => response.json())
+              .then(data => {
+                // Extract dynamic data
+                const dynamicData = [data.solicitations, data.sent];
+    
+                // Create the chart using the dynamic data
+                new Chart(document.querySelector('#doughnutChart'), {
+                  type: 'doughnut',
+                  data: {
+                    labels: ['Unsent solicitations', 'Sent RFQs'],
+                    datasets: [{
+                      label: 'Data',
+                      data: dynamicData,  // Use the dynamic data
+                      backgroundColor: [
+                        'rgb(255, 99, 132)',  // Scraped color
+                        'rgb(54, 162, 235)'   // Sent color
+                      ],
+                      hoverOffset: 4
+                    }]
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: true, // Keep aspect ratio
+                    aspectRatio: 1, // Square aspect ratio for doughnut
+                  }
+                });
+              })
+              .catch(error => {
+                console.error('Error fetching dynamic data:', error);
+              });
+          });
+        </script>
+        <!-- End Doughnut Chart -->
+      </div>
+    </div>
+  </div>
+</div>
 </section>
 
 <!-- Progress Modal -->
 <div class="modal fade" id="progressModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-       <div class="modal-content">
+      <div class="modal-content">
           <div class="modal-header">
               <h5 class="modal-title" id="progressModalLabel">Processing...</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="location.reload();"></button>
           </div>
           <div class="modal-body text-center">
-               <div class="progress" id="progressBarContainer">
+              <div class="progress" id="progressBarContainer">
                   <div class="progress-bar progress-bar-striped progress-bar-animated" 
                        role="progressbar" 
                        id="progressBar" 
                        style="width: 0%;">0%</div>
-              </div> 
-               <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
+              </div>
+              <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
               {% if selected_date %}
               <p id="selectedDateDisplay">Selected date: {{ selected_date }}</p>
               {% endif %}
           </div>
-      </div> 
-   </div>
-</div> 
+      </div>
+  </div>
+</div>
 
 
 <!--MODAL SCRAP -->
@@ -412,11 +416,10 @@ function scrapeSolicitations() {
         progressBar.textContent = '';
         progressBar.classList.remove("bg-danger"); // Reset color in case of error
         status.textContent = '';
-      }, 2000);
+      }, 10000);
     });
 }
 </script>
-
 
 
 {% else %}

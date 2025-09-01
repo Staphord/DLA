@@ -6,8 +6,10 @@ from django.urls import reverse
 from django.utils.crypto import get_random_string
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail, get_connection
+from django.contrib.auth.views import (PasswordResetView, PasswordResetDoneView, PasswordResetConfirmView, PasswordResetCompleteView)
 
+from accounts.forms import CustomPasswordResetForm
 from accounts.models import CustomUser, Invitation, VerificationToken
 from solicitations.forms import UserRegistrationForm
 
@@ -26,7 +28,7 @@ def login_user(request):
         else:
             #redirect
             messages.success(request,'There was an error loggin in, Try again latter!')
-            return redirect('accounts:login-user')
+            return redirect('login-user')
     
     else:
         #
@@ -35,7 +37,7 @@ def login_user(request):
 ## view to log out a user
 def logout_user(request):
     logout(request)
-    return redirect('accounts:login-user')
+    return redirect('login-user')
 
 def create_verification_token(user):
     token = get_random_string(64)
@@ -46,7 +48,7 @@ def send_verification_email(user, request):
     token = create_verification_token(user)  # Generate a unique token
     
     # Generate the full verification link
-    verification_link = f"{settings.BASE_URL}{reverse('accounts:verify_email', args=[token])}"
+    verification_link = f"{settings.BASE_URL}{reverse('verify_email', args=[token])}"
     
     # Get the absolute URL for the logo
     logo_url = f"{settings.BASE_URL}/static/accounts/assets/img/logo.png"
@@ -87,7 +89,7 @@ def verify_email(request, token):
     verification_token.delete()
 
     messages.success(request, "Your email has been verified! You can now log in.")
-    return redirect('accounts:login-user')
+    return redirect('login-user')
 
 ## view to register a user
 def register(request):
@@ -99,7 +101,7 @@ def register(request):
             user.save()
             send_verification_email(user, request)
             messages.success(request, "Registration successful! Check your email to verify your account.")
-            return redirect('accounts:login-user')
+            return redirect('login-user')
         else:
             print(form.errors)  # Debugging errors
     else:
@@ -113,7 +115,7 @@ def register_with_invitation(request, token):
     # Check if invitation is valid
     if not invitation.is_valid:
         messages.error(request, 'This invitation link has expired or already been used.')
-        return redirect('accounts:login-user')
+        return redirect('login-user')
     
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
@@ -129,7 +131,7 @@ def register_with_invitation(request, token):
                 invitation.save()
                 
                 messages.success(request, 'Your account has been created! You can now log in.')
-                return redirect('accounts:login-user')
+                return redirect('login-user')
     else:
         # Pre-fill the email field
         form = UserRegistrationForm(initial={'email': invitation.email})
@@ -139,3 +141,18 @@ def register_with_invitation(request, token):
         'invitation': invitation
     }
     return render(request, 'accounts/register_with_envitation.html', context)
+
+class CustomPasswordResetView(PasswordResetView):
+    template_name = 'accounts/password_reset_form.html'
+    form_class = CustomPasswordResetForm
+    success_url = '/password-reset/done/'
+
+class CustomPasswordResetDoneView(PasswordResetDoneView):
+    template_name = 'accounts/password_reset_done.html'
+
+class CustomPasswordResetConfirmView(PasswordResetConfirmView):
+    template_name = 'accounts/password_reset_confirm.html'
+    success_url = '/reset/done/'
+
+class CustomPasswordResetCompleteView(PasswordResetCompleteView):
+    template_name = 'accounts/password_reset_complete.html'

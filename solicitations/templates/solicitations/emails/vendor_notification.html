@@ -95,36 +95,7 @@
             <p>Hello {{ recipient_name }},</p>
             
             <p>You have received a new message regarding <strong>RFQ-{{ rfq_id }}</strong>:</p>
-            
-            <div class="rfq-details">
-                <h3>RFQ Items:</h3>
-                
-                {% if items and items|length > 1 %}
-                    <!-- Display multiple items as a table -->
-                    <table class="item-table">
-                        <tr>
-                            <th>Part Number</th>
-                            <th>Nomenclature</th>
-                            <th>Quantity</th>
-                            <th>Unit</th>
-                        </tr>
-                        {% for item in items %}
-                        <tr>
-                            <td>{{ item.part_number }}</td>
-                            <td>{{ item.nomenclature }}</td>
-                            <td>{{ item.quantity }}</td>
-                            <td>{{ item.unit }}</td>
-                        </tr>
-                        {% endfor %}
-                    </table>
-                {% else %}
-                    <!-- Fallback to single item display (backward compatibility) -->
-                    <p><strong>Item:</strong> {{ rfq_nomenclature }}</p>
-                    <p><strong>Quantity:</strong> {{ quantity }}</p>
-                    <p><strong>Part Number:</strong> {{ part_number }}</p>
-                {% endif %}
-            </div>
-            
+                        
             <div class="message-preview">
                 <p><strong>Message:</strong></p>
                 <p>{{ message_preview }}</p>
@@ -133,7 +104,7 @@
             <p>To view the complete message history and reply, please click the button below:</p>
             
             <a href="{{ chat_url }}" class="button">View and Reply to Message</a>
-            
+                        
             <p>
                 Thank you,<br>
             </p>

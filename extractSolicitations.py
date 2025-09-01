@@ -29,6 +29,13 @@ from urllib3.exceptions import MaxRetryError
 import tempfile
 import contextlib
 from collections import defaultdict
+import concurrent.futures
+import threading
+import asyncio
+import aiohttp
+import gc
+from functools import lru_cache
+import pickle
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -40,36 +47,77 @@ django.setup()
 from django.conf import settings
 
 # Variables from Django settings
-DB_HOST = '168.231.66.43' # settings.DB_HOST
-DB_USER = 'rfq' #settings.DB_USER
-DB_PASSWORD = 'rfq@0213'  # settings.DB_PASSWORD
-DB_NAME = 'rfq' #settings.DB_NAME
-DB_PORT = 3306 #settings.DB_PORT
+DB_HOST = '168.231.66.43'
+DB_USER = 'rfq'
+DB_PASSWORD = 'rfq@0213'
+DB_NAME = 'rfq'
+DB_PORT = 3306
 
-# Configure Chrome options with SSL bypass
-chrome_options = Options()
-chrome_options.add_experimental_option("detach", True)
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--disable-software-rasterizer")
-chrome_options.add_argument("--enable-logging")
-chrome_options.add_argument("--v=1")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument('--pageLoadStrategy=normal')
-chrome_options.add_argument('--ignore-certificate-errors')
-chrome_options.add_argument('--allow-running-insecure-content')
-chrome_options.add_argument('--disable-web-security')
-chrome_options.add_argument('--disable-extensions')
-chrome_options.add_argument('--allow-insecure-localhost')
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("--memory-growth=4096")
-chrome_options.add_argument("--disable-setuid-sandbox")
-chrome_options.add_argument('--no-sandbox')
-chrome_options.add_argument('--ssl-version-min=tls1')
-chrome_options.add_argument('--cipher-suite-blacklist=0x0004,0x0005,0xc011,0xc007')
-chrome_options.add_argument("--disable-http2")
-chrome_options.add_argument("--disable-quic")
-chrome_options.add_argument("--disable-features=NetworkService")
+# OPTIMIZED Chrome options for maximum performance - FIXED GPU ISSUES
+def get_optimized_chrome_options():
+    chrome_options = Options()
+    
+    # Essential performance optimizations
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    # ENHANCED: More complete GPU disabling
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-gpu-compositing")
+    chrome_options.add_argument("--disable-gpu-rasterization")
+    chrome_options.add_argument("--disable-gpu-sandbox")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-accelerated-2d-canvas")
+    chrome_options.add_argument("--disable-accelerated-jpeg-decoding")
+    chrome_options.add_argument("--disable-accelerated-mjpeg-decode")
+    chrome_options.add_argument("--disable-accelerated-video-decode")
+    chrome_options.add_argument("--disable-accelerated-video-encode")
+    chrome_options.add_argument("--disable-webgl")
+    chrome_options.add_argument("--disable-webgl2")
+    chrome_options.add_argument("--disable-3d-apis")
+    chrome_options.add_argument("--use-gl=disabled")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor,VizHitTestSurfaceLayer")
+    
+    # Memory optimizations
+    chrome_options.add_argument("--memory-pressure-off")
+    chrome_options.add_argument("--disable-background-timer-throttling")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    
+    # Disable unnecessary features for speed
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-plugins")
+    chrome_options.add_argument("--disable-images")
+    chrome_options.add_argument("--disable-web-security")
+    
+    # SSL and security
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument('--allow-running-insecure-content')
+    chrome_options.add_argument('--allow-insecure-localhost')
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # Network optimizations
+    chrome_options.add_argument("--disable-background-networking")
+    chrome_options.add_argument("--disable-default-apps")
+    chrome_options.add_argument("--disable-sync")
+    
+    # Process management
+    chrome_options.add_argument("--renderer-process-limit=1")
+    
+    # ENHANCED: Logging control
+    chrome_options.add_argument("--log-level=3")  # Only fatal errors
+    chrome_options.add_argument("--silent")
+    chrome_options.add_argument("--disable-logging")
+    chrome_options.add_argument("--disable-gpu-process-crash-limit")
+    chrome_options.add_argument("--disable-crash-reporter")
+    chrome_options.add_argument("--disable-in-process-stack-traces")
+    
+    # DevTools suppression (WORKING!)
+    chrome_options.add_argument("--disable-dev-tools")
+    chrome_options.add_argument("--remote-debugging-port=0")
+    
+    return chrome_options
 
 # Create custom SSL context
 ssl_context = ssl.create_default_context()
@@ -80,11 +128,177 @@ ssl_context.verify_mode = ssl.CERT_NONE
 requests.packages.urllib3.disable_warnings()
 requests.adapters.DEFAULT_RETRIES = 3
 
-print("STARTING SCRIPT---------------------------------")
+print("STARTING OPTIMIZED SCRIPT WITH COMPLETE DATA EXTRACTION---------------------------------")
 
 # Global variables for hang detection
 last_active = time.time()
-TIMEOUT_THRESHOLD = 300  # 5 minutes
+TIMEOUT_THRESHOLD = 1800  # 30 minutes
+
+# ENHANCED CACHING SYSTEM WITH 90-DAY EXPIRATION
+CACHE_DURATION_DAYS = 90  # 90 days cache duration
+CACHE_FILE_PATH = 'cage_cache_90day.pkl'
+
+def load_cage_cache():
+    """Load CAGE cache from file with expiration checking"""
+    if not os.path.exists(CACHE_FILE_PATH):
+        print("No existing cache file found. Starting with empty cache.")
+        return {}
+    
+    try:
+        with open(CACHE_FILE_PATH, 'rb') as f:
+            cached_data = pickle.load(f)
+        
+        # Check if cache structure is valid (has timestamps)
+        if not isinstance(cached_data, dict):
+            print("Invalid cache structure. Starting with empty cache.")
+            return {}
+        
+        current_time = datetime.datetime.now()
+        valid_cache = {}
+        expired_count = 0
+        
+        for cage_code, cache_entry in cached_data.items():
+            # Check if cache entry has timestamp (new format)
+            if isinstance(cache_entry, dict) and 'timestamp' in cache_entry and 'data' in cache_entry:
+                cache_timestamp = cache_entry['timestamp']
+                days_since_cache = (current_time - cache_timestamp).days
+                
+                if days_since_cache < CACHE_DURATION_DAYS:
+                    valid_cache[cage_code] = cache_entry['data']
+                    #print(f"Cache valid for CAGE {cage_code}: {days_since_cache} days old")
+                else:
+                    expired_count += 1
+                    print(f"Cache expired for CAGE {cage_code}: {days_since_cache} days old")
+            else:
+                # Old cache format without timestamp - treat as expired
+                expired_count += 1
+                print(f"Old cache format for CAGE {cage_code} - treating as expired")
+        
+        print(f"Loaded cache: {len(valid_cache)} valid entries, {expired_count} expired entries removed")
+        return valid_cache
+        
+    except Exception as e:
+        print(f"Error loading cache file: {e}")
+        print("Starting with empty cache.")
+        return {}
+
+def save_cage_cache(cage_cache):
+    """Save CAGE cache to file with timestamps"""
+    try:
+        current_time = datetime.datetime.now()
+        
+        # Load existing cache to preserve timestamps
+        existing_cached_data = {}
+        if os.path.exists(CACHE_FILE_PATH):
+            try:
+                with open(CACHE_FILE_PATH, 'rb') as f:
+                    existing_cached_data = pickle.load(f)
+            except:
+                existing_cached_data = {}
+        
+        # Prepare cache data with timestamps
+        cache_data_with_timestamps = {}
+        
+        for cage_code, cage_data in cage_cache.items():
+            # Check if we already have this CAGE code with timestamp
+            if (cage_code in existing_cached_data and 
+                isinstance(existing_cached_data[cage_code], dict) and 
+                'timestamp' in existing_cached_data[cage_code]):
+                # Keep existing timestamp if data hasn't changed
+                existing_data = existing_cached_data[cage_code]['data']
+                if existing_data == cage_data:
+                    cache_data_with_timestamps[cage_code] = existing_cached_data[cage_code]
+                else:
+                    # Data changed, update with new timestamp
+                    cache_data_with_timestamps[cage_code] = {
+                        'timestamp': current_time,
+                        'data': cage_data
+                    }
+            else:
+                # New entry, add current timestamp
+                cache_data_with_timestamps[cage_code] = {
+                    'timestamp': current_time,
+                    'data': cage_data
+                }
+        
+        # Save to file
+        with open(CACHE_FILE_PATH, 'wb') as f:
+            pickle.dump(cache_data_with_timestamps, f)
+        
+        print(f"Cache saved successfully: {len(cache_data_with_timestamps)} entries")
+        
+        # Print cache statistics
+        new_entries = sum(1 for entry in cache_data_with_timestamps.values() 
+                         if (current_time - entry['timestamp']).days == 0)
+        print(f"Cache statistics: {new_entries} new entries added in this session")
+        
+    except Exception as e:
+        print(f"Error saving cache file: {e}")
+
+def get_cache_info():
+    """Get information about current cache status"""
+    if not os.path.exists(CACHE_FILE_PATH):
+        return "No cache file exists"
+    
+    try:
+        with open(CACHE_FILE_PATH, 'rb') as f:
+            cached_data = pickle.load(f)
+        
+        if not isinstance(cached_data, dict):
+            return "Invalid cache format"
+        
+        current_time = datetime.datetime.now()
+        total_entries = len(cached_data)
+        valid_entries = 0
+        expired_entries = 0
+        
+        age_distribution = {
+            '0-7 days': 0,
+            '8-30 days': 0,
+            '31-60 days': 0,
+            '61-90 days': 0,
+            '90+ days (expired)': 0
+        }
+        
+        for cage_code, cache_entry in cached_data.items():
+            if isinstance(cache_entry, dict) and 'timestamp' in cache_entry:
+                days_old = (current_time - cache_entry['timestamp']).days
+                
+                if days_old < CACHE_DURATION_DAYS:
+                    valid_entries += 1
+                    if days_old <= 7:
+                        age_distribution['0-7 days'] += 1
+                    elif days_old <= 30:
+                        age_distribution['8-30 days'] += 1
+                    elif days_old <= 60:
+                        age_distribution['31-60 days'] += 1
+                    else:
+                        age_distribution['61-90 days'] += 1
+                else:
+                    expired_entries += 1
+                    age_distribution['90+ days (expired)'] += 1
+            else:
+                expired_entries += 1
+                age_distribution['90+ days (expired)'] += 1
+        
+        info = f"""
+Cache Information:
+- Total entries: {total_entries}
+- Valid entries: {valid_entries}
+- Expired entries: {expired_entries}
+- Age distribution:
+"""
+        for age_range, count in age_distribution.items():
+            info += f"  {age_range}: {count}\n"
+        
+        return info.strip()
+        
+    except Exception as e:
+        return f"Error reading cache: {e}"
+
+# Initialize cache
+cage_cache = load_cage_cache()
+pdf_cache = {}
 
 # Unit code to description mapping
 UNIT_MAPPING = {
@@ -146,35 +360,15 @@ def check_for_hang():
 
 def cleanup_resources(driver):
     try:
-        # Close all but the main window
         while len(driver.window_handles) > 1:
             driver.switch_to.window(driver.window_handles[-1])
             driver.close()
             driver.switch_to.window(driver.window_handles[0])
-            
-        # Clear browser cache periodically
-        driver.execute_script("window.open('');")
-        driver.switch_to.window(driver.window_handles[-1])
-        driver.get('chrome://settings/clearBrowserData')
-        time.sleep(1)
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
+        gc.collect()
     except Exception as e:
         print(f"Cleanup error: {e}")
 
-def is_valid_pdf(content):
-    # Check for PDF magic number
-    if not content.startswith(b'%PDF'):
-        return False
-        
-    # Check for PDF end marker
-    if b'%%EOF' not in content[-1024:]:  # Check last 1KB
-        return False
-        
-    return True
-
-# Retry decorator for critical functions
-def retry(max_attempts=3, delay=5, cleanup_func=None):
+def retry(max_attempts=2, delay=2, cleanup_func=None):
     def decorator(func):
         def wrapper(*args, **kwargs):
             attempts = 0
@@ -188,7 +382,6 @@ def retry(max_attempts=3, delay=5, cleanup_func=None):
                     last_exception = e
                     print(f"Attempt {attempts} failed: {str(e)}")
                     
-                    # Perform cleanup if provided
                     if cleanup_func:
                         try:
                             cleanup_func()
@@ -197,29 +390,48 @@ def retry(max_attempts=3, delay=5, cleanup_func=None):
                             
                     if attempts >= max_attempts:
                         raise last_exception
-                    time.sleep(delay * attempts)  # Exponential backoff
+                    time.sleep(delay)
             return None
         return wrapper
     return decorator
 
 def initialize_driver():
-    """Initialize WebDriver with robust error handling and SSL bypass"""
-    max_retries = 3
+    """Initialize WebDriver with optimized settings and GPU error suppression"""
+    max_retries = 2
     retry_count = 0
+    
+    # Suppress Chrome GPU error messages
+    import os
+    os.environ['CHROME_LOG_FILE'] = 'NUL'  # Windows
     
     while retry_count < max_retries:
         try:
+            # Use a random port to avoid conflicts
             service = Service(
                 executable_path=ChromeDriverManager().install(),
-                port=random.randint(10000, 20000)  # Random port to avoid conflicts
+                port=random.randint(10000, 20000),
+                service_args=['--verbose', '--log-path=NUL']  
             )
             
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            driver.set_page_load_timeout(30)
-            driver.implicitly_wait(5)
+            chrome_options = get_optimized_chrome_options()
             
-            # Verify connection
+            # Additional options for GPU error suppression
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            
+            # Suppress DevTools messages
+            chrome_options.add_experimental_option("detach", False)
+            
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            # OPTIMIZED TIMEOUTS
+            driver.set_page_load_timeout(20)
+            driver.implicitly_wait(3)
+            
+            # Test driver functionality
             driver.get("about:blank")
+            print("WebDriver initialized successfully")
             return driver
             
         except Exception as e:
@@ -227,14 +439,14 @@ def initialize_driver():
             print(f"WebDriver initialization attempt {retry_count} failed: {str(e)}")
             if retry_count >= max_retries:
                 raise RuntimeError(f"Failed to initialize WebDriver after {max_retries} attempts")
-            time.sleep(5)
+            time.sleep(3)
 
-def safe_get(driver, url, max_retries=3):
+def safe_get(driver, url, max_retries=2):
     """Safe page loading with SSL error handling"""
     retries = 0
     while retries < max_retries:
         try:
-            driver.set_page_load_timeout(20)
+            driver.set_page_load_timeout(20)  
             driver.get(url)
             WebDriverWait(driver, 10).until(
                 lambda d: d.execute_script('return document.readyState') == 'complete')
@@ -242,7 +454,6 @@ def safe_get(driver, url, max_retries=3):
         except TimeoutException:
             print(f"Timeout loading {url}, retrying...")
             retries += 1
-            # Try to stop loading
             try:
                 driver.execute_script("window.stop();")
             except:
@@ -272,20 +483,23 @@ def check_driver_health(driver):
         return False
 
 def extract_quantity(raw_quantity):
-    """Extract integer quantity from raw string."""
+    """Extract integer quantity from raw string like 'QTY: 12'. Returns 0 if not found."""
     try:
-        return int(raw_quantity.split("QTY:")[1].strip())
-    except (IndexError, ValueError):
-        return None
+        q = raw_quantity.split("QTY:")[1].strip()
+        return int(re.sub(r"[^\d]", "", q)) if q else 0
+    except Exception:
+        return 0
+
 
 def click_element(wait, locator, by=By.ID):
     """Click on an element using WebDriverWait."""
     element = wait.until(EC.element_to_be_clickable((by, locator)))
     element.click()
 
-@retry(max_attempts=3, delay=5)
-def extract_unit_from_pdf(pdf_url, driver):
-    """Direct PDF extraction from downloaded content - now extracts unit and additional fields"""
+#PDF EXTRACTION
+@retry(max_attempts=5, delay=3)  # Increased from 3 to 5 attempts
+def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
+    """Enhanced PDF extraction with comprehensive retry logic"""
     unit = "N/A"
     inspection_point = ""
     acceptance_point = ""
@@ -293,596 +507,395 @@ def extract_unit_from_pdf(pdf_url, driver):
     deliver_days = ""
     buyer_info = ""
     
-    print(f"\nExtracting from: {pdf_url}")
+    print(f"\nExtracting from PDF: {pdf_url}")
     
-    try:
-        # First check if URL ends with .pdf
-        if not pdf_url.lower().endswith('.pdf'):
-            print("URL doesn't appear to be a PDF, but continuing anyway")
-        
-        # Get cookies from Selenium session
-        cookies = {c['name']: c['value'] for c in driver.get_cookies()}
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Referer': 'https://www.dibbs.bsm.dla.mil/',
-            'Accept': '*/*',  # Accept any content type
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-        }
-
-        # First make a HEAD request to check if redirects are happening
+    # ENHANCED PDF RETRY LOGIC
+    for pdf_attempt in range(max_pdf_retries):
         try:
-            head_response = requests.head(
-                pdf_url,
-                cookies=cookies,
-                headers=headers,
-                verify=False,
-                allow_redirects=True,
-                timeout=30
-            )
-            final_url = head_response.url
-            if final_url != pdf_url:
-                print(f"URL redirected to: {final_url}")
-                pdf_url = final_url
-        except requests.exceptions.RequestException as e:
-            print(f"HEAD request failed: {str(e)}")
-            # Continue with original URL if HEAD fails
-
-        # Try multiple direct download attempts with exponential backoff
-        max_direct_attempts = 3
-        direct_attempt = 0
-        pdf_content = None
-        
-        while direct_attempt < max_direct_attempts:
-            try:
-                with requests.get(
-                    pdf_url,
-                    cookies=cookies,
-                    headers=headers,
-                    verify=False,
-                    stream=True,
-                    timeout=30,
-                    allow_redirects=True
-                ) as response:
-                    # Check status code
-                    if response.status_code != 200:
-                        print(f"HTTP error: {response.status_code} (Attempt {direct_attempt+1}/{max_direct_attempts})")
-                        direct_attempt += 1
-                        if direct_attempt < max_direct_attempts:
-                            # Exponential backoff
-                            sleep_time = 2 ** direct_attempt
-                            print(f"Retrying direct download in {sleep_time} seconds...")
-                            time.sleep(sleep_time)
-                            continue
-                        else:
-                            # If we've exhausted direct download attempts, try Selenium
-                            raise requests.exceptions.HTTPError(f"Status code: {response.status_code}")
-                    
-                    # Check content type
-                    content_type = response.headers.get('Content-Type', '')
-                    if 'application/pdf' not in content_type.lower() and 'octet-stream' not in content_type.lower():
-                        print(f"Warning: Content-Type is {content_type}, not PDF")
-                    
-                    # Download full content
-                    pdf_content = response.content
-                    
-                    # Verify PDF signature
-                    if not pdf_content.startswith(b'%PDF'):
-                        print("First bytes don't match PDF signature, checking more of the content...")
-                        
-                        # Sometimes PDFs might have some bytes before the %PDF signature
-                        # Try to find the PDF signature in the first 1024 bytes
-                        pdf_sig_pos = pdf_content.find(b'%PDF', 0, 1024)
-                        if pdf_sig_pos >= 0:
-                            print(f"Found PDF signature at byte position {pdf_sig_pos}")
-                            # Trim content to start at the PDF signature
-                            pdf_content = pdf_content[pdf_sig_pos:]
-                        else:
-                            # If still not found, try another attempt
-                            direct_attempt += 1
-                            if direct_attempt < max_direct_attempts:
-                                print(f"Retrying direct download (Attempt {direct_attempt+1}/{max_direct_attempts})...")
-                                time.sleep(2 ** direct_attempt)
-                                continue
-                            else:
-                                raise ValueError("Not a valid PDF")
-                    
-                    # If we get here, we have a valid PDF
-                    break
-                    
-            except (requests.exceptions.RequestException, ValueError) as e:
-                direct_attempt += 1
-                if direct_attempt < max_direct_attempts:
-                    print(f"Direct download attempt {direct_attempt} failed: {str(e)}. Retrying...")
-                    time.sleep(2 ** direct_attempt)
-                else:
-                    print(f"All direct download attempts failed: {str(e)}. Trying Selenium download...")
-                    pdf_content = None
-                    break
-
-        # If direct downloads all failed, try Selenium as fallback
-        if pdf_content is None:
-            original_window = driver.current_window_handle
-            driver.execute_script("window.open('');")
-            driver.switch_to.window(driver.window_handles[-1])
+            print(f"PDF processing attempt {pdf_attempt + 1}/{max_pdf_retries}")
             
-            try:
-                # First try just navigating to the PDF and getting page source
-                driver.get(pdf_url)
-                time.sleep(5)  # Wait for download to potentially complete
-                
-                # Try a different approach - download using Selenium and fetch the binary data
-                # Create a temporary file to save the PDF
-                temp_file_fd, temp_file_path = tempfile.mkstemp(suffix='.pdf')
-                os.close(temp_file_fd)
-                
+            # Get cookies from Selenium session
+            cookies = {c['name']: c['value'] for c in driver.get_cookies()}
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Referer': 'https://www.dibbs.bsm.dla.mil/',
+                'Accept': '*/*',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+
+            # Download with multiple retry strategies
+            pdf_content = None
+            download_attempts = 3
+            
+            for attempt in range(download_attempts):
                 try:
-                    # Execute download script with proper waits
-                    driver.execute_script("""
-                        var link = document.createElement('a');
-                        link.href = arguments[0];
-                        link.download = 'download.pdf';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    """, pdf_url)
+                    print(f"  PDF download attempt {attempt + 1}/{download_attempts}")
                     
-                    # Try to get downloaded file
-                    # This would need to be modified based on your specific browser configuration
-                    # and download folder settings
-                    time.sleep(10)  # Wait for download
-                    
-                    # Alternative: Use requests again with updated cookies after Selenium navigation
-                    updated_cookies = {c['name']: c['value'] for c in driver.get_cookies()}
-                    
-                    # Try one more direct download with the updated cookies
                     with requests.get(
                         pdf_url,
-                        cookies=updated_cookies,
+                        cookies=cookies,
                         headers=headers,
                         verify=False,
                         stream=True,
-                        timeout=30,
+                        timeout=45,  # Increased timeout
                         allow_redirects=True
                     ) as response:
-                        if response.status_code == 200:
-                            pdf_content = response.content
-                            if pdf_content.startswith(b'%PDF'):
-                                print("Successfully downloaded PDF with updated cookies!")
-                            else:
-                                pdf_sig_pos = pdf_content.find(b'%PDF', 0, 1024)
-                                if pdf_sig_pos >= 0:
-                                    pdf_content = pdf_content[pdf_sig_pos:]
-                                    print("Found PDF signature in content with updated cookies!")
-                                else:
-                                    print("Still couldn't get a valid PDF")
-                
-                except Exception as e:
-                    print(f"Error during Selenium download: {str(e)}")
-                
-                finally:
-                    try:
-                        os.unlink(temp_file_path)
-                    except:
-                        pass
-                
-            except Exception as e:
-                print(f"Selenium download failed: {str(e)}")
-                return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
-            finally:
-                driver.close()
-                driver.switch_to.window(original_window)
-
-        # If we still don't have valid PDF content, give up
-        if pdf_content is None or not b'%PDF' in pdf_content[:1024]:
-            print("Unable to download valid PDF content. Giving up.")
-            return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
-
-        # Process PDF content
-        try:
-            with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
-                full_text = ""
-                
-                # Extract text from all pages and combine
-                for i, page in enumerate(pdf.pages[:15]):  # Check first 15 pages
-                    page_text = page.extract_text() or ""
-                    full_text += page_text + "\n"
-                    
-                    # Original unit extraction logic for each page
-                    # Pattern 1: ITEM NO. SUPPLIES/SERVICES QUANTITY UNIT UNIT PRICE AMOUNT
-                    pattern1 = re.compile(
-                        r"^\d+\s+\d{4}-\d{2}-\d{3}-\d{4}\s+\d+\.\d{3}\s+([A-Z]{2})\s+\$",
-                        re.MULTILINE
-                    )
-                    match1 = pattern1.search(page_text)
-                    if match1:
-                        unit = match1.group(1).upper()
-                        print(f"Found unit via Pattern1 on page {i+1}: {unit}")
-                    
-                    # Pattern 2: CLIN PR PRLI UI QUANTITY UNIT PRICE TOTAL PRICE
-                    pattern2 = re.compile(
-                        r"^\d+\s+\d+\s+\d+\s+([A-Z]{2})\s+[\d,]+\.\d{3}",
-                        re.MULTILINE
-                    )
-                    match2 = pattern2.search(page_text)
-                    if match2:
-                        unit = match2.group(1).upper()
-                        print(f"Found unit via Pattern2 (UI) on page {i+1}: {unit}")
-                    
-                    # Enhanced fallback patterns for unit
-                    fallback_patterns = [
-                        r"QTY:\s*\d+\s+([A-Z]{2})\b",
-                        r"UNIT\s*[:=]\s*([A-Z]{2})\b",
-                        r"U/I\s*[:=]\s*([A-Z]{2})\b",
-                        r"\b(\d+)\s+([A-Z]{2})\s+@",
-                        r"Quantity\s*:\s*\d+\s+([A-Z]{2})\b"
-                    ]
-                    
-                    for pattern in fallback_patterns:
-                        matches = re.finditer(pattern, page_text, re.IGNORECASE)
-                        for match in matches:
-                            unit_candidate = match.group(1) if match.lastindex else match.group(0)
-                            if unit_candidate.upper() in ['EA', 'BX', 'PK', 'FT', 'YD', 'GAL', 'LB', 'PG']:
-                                unit = unit_candidate.upper()
-                                print(f"Found unit on page {i+1} via fallback pattern: {unit}")
-                    
-                    # Table extraction fallback for unit
-                    tables = page.extract_tables()
-                    for table in tables:
-                        if len(table) > 1:
-                            headers = [str(cell).upper().strip() for cell in table[0]]
-                            if "UNIT" in headers:
-                                unit_col = headers.index("UNIT")
-                            elif "UI" in headers:
-                                unit_col = headers.index("UI")
-                            else:
+                        
+                        if response.status_code != 200:
+                            print(f"  HTTP error: {response.status_code}")
+                            if attempt < download_attempts - 1:
+                                time.sleep(2 ** attempt)
                                 continue
-                            
-                            for row in table[1:]:
-                                if len(row) > unit_col:
-                                    unit_candidate = str(row[unit_col]).strip().upper()
-                                    if unit_candidate in ['EA', 'BX', 'PK', 'FT', 'YD', 'GAL', 'LB', 'PG']:
-                                        unit = unit_candidate
-                                        print(f"Found unit in table on page {i+1}: {unit}")
-
-                # Extract additional fields from the combined text
-                print("Extracting additional fields...")
-                
-                # Extract INSPECTION POINT
-                inspection_patterns = [
-                    r"INSPECTION\s+POINT\s*:\s*([^\n\r]+)",
-                    r"INSPECTION\s+POINT\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
-                    r"INSPECTION\s+POINT\s*:\s*([^:]+?)(?=\s*(?:ACCEPTANCE|FOB|DELIVERY|$))"
-                ]
-                
-                for pattern in inspection_patterns:
-                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        inspection_point = match.group(1).strip()
-                        print(f"Found inspection point: {inspection_point}")
-                        break
-                
-                # Extract ACCEPTANCE POINT
-                acceptance_patterns = [
-                    r"ACCEPTANCE\s+POINT\s*:\s*([^\n\r]+)",
-                    r"ACCEPTANCE\s+POINT\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
-                    r"ACCEPTANCE\s+POINT\s*:\s*([^:]+?)(?=\s*(?:INSPECTION|FOB|DELIVERY|$))"
-                ]
-                
-                for pattern in acceptance_patterns:
-                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        acceptance_point = match.group(1).strip()
-                        print(f"Found acceptance point: {acceptance_point}")
-                        break
-                
-                # Extract FOB / DELIVER FOB
-                fob_patterns = [
-                    r"DELIVER\s+FOB\s*:\s*([^\n\r]+)",
-                    r"FOB\s*:\s*([^\n\r]+)",
-                    r"DELIVER\s+FOB\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
-                    r"FOB\s*:\s*([^:]+?)(?=\s*(?:DELIVERY|INSPECTION|ACCEPTANCE|$))"
-                ]
-                
-                for pattern in fob_patterns:
-                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        deliver_fob = match.group(1).strip()
-                        print(f"Found deliver FOB: {deliver_fob}")
-                        break
-                
-                # Extract DELIVERY DAYS / DELIVERY DATE
-                delivery_patterns = [
-                    r"DELIVERY\s*\(IN\s+DAYS\)\s*:\s*(\d+)",
-                    r"DELIVERY\s+DATE\s*:\s*([^\n\r]+)",
-                    r"DELIVERY\s*:\s*(\d+)\s*DAYS?",
-                    r"DELIVERY\s+DAYS?\s*:\s*(\d+)",
-                    r"DELIVERY\s+DATE\s*:\s*([^:]+?)(?=\s*(?:FOB|INSPECTION|ACCEPTANCE|$))"
-                ]
-                
-                for pattern in delivery_patterns:
-                    match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        deliver_days = match.group(1).strip()
-                        print(f"Found delivery days/date: {deliver_days}")
-                        break
-                
-                # Enhanced BUYER INFORMATION extraction with all patterns
-                # All patterns for buyer information - UNIVERSAL patterns that capture ALL formats
-                buyer_line_patterns = [
-                    # UNIVERSAL PATTERNS - "Buyer: Name Code" format - Captures ANY name format
-                    # Pattern A1: Buyer: Name Code Tel: phone Fax: fax ... Email: email
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern A2: Buyer: Name Code Tel: phone Email: email (no fax)
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern A3: Buyer: Name Code Tel: phone Fax: fax (email found later)
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
-                    
-                    # Pattern A4: Buyer: Name Code Tel: phone (no fax, email found later)
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)",
-                    
-                    # Pattern A5: More flexible Tel pattern for DSN numbers
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([A-Z0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern A6: Very flexible - handle any spacing/line breaks
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([^\s\n\r]+)",
-                    
-                    # FALLBACK PATTERNS with shorter codes (3+ characters)
-                    # Pattern B1: Buyer: Name Code Tel: phone Fax: fax ... Email: email
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern B2: Buyer: Name Code Tel: phone Email: email (no fax)
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern B3: Buyer: Name Code Tel: phone Fax: fax (email found later)
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
-                    
-                    # Pattern B4: Buyer: Name Code Tel: phone (no fax, email found later)
-                    r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)",
-                    
-                    # EXISTING PATTERNS - "Name: ... Buyer Code:" format
-                    # Pattern 1: All on one line (original format)
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Fax:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern 2: Handle line breaks between components (more flexible)
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+).*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern 3: Very flexible - capture across multiple lines with any intervening text, including DSN numbers
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+).*?Email:\s*([A-Za-z0-9\.\@\-\_]+)",
-                    
-                    # Pattern 4: Handle the exact format we see with line breaks and DSN tel numbers
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                    
-                    # Pattern 5: More lenient Tel matching for DSN numbers
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([A-Z0-9\-]+).*?Email:\s*([A-Za-z0-9\.\@\-\_]+)",
-                    
-                    # Pattern 6: Very broad Tel pattern to catch all variations
-                    r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([^\s\n\r]+).*?Email:\s*([^\s\n\r]+)"
-                ]
-                
-                # The buyer info is after the address in the ISSUED BY section, so we need broader patterns
-                print("Searching for ISSUED BY section with buyer information...")
-                
-                # Try multiple approaches to find the complete ISSUED BY section
-                issued_by_patterns = [
-                    # Pattern 1: From "5. ISSUED BY" to "8. TO:" - this should capture the full section
-                    r"5\.\s*ISSUED\s+BY(.*?)(?=8\.\s*TO:)",
-                    # Pattern 2: From "ISSUED BY" to "TO:" (more flexible)
-                    r"ISSUED\s+BY(.*?)(?=\d+\.\s*TO:)",
-                    # Pattern 3: From "5. ISSUED BY" to any section starting with 7, 8, 9, or 10
-                    r"5\.\s*ISSUED\s+BY(.*?)(?=\d+\.\s*(?:TO|DELIVER|DESTINATION|PLEASE))",
-                    # Pattern 4: Very broad - from ISSUED BY until we hit a numbered section
-                    r"ISSUED\s+BY(.*?)(?=\d+\.\s*[A-Z])",
-                    # Pattern 5: Capture a large chunk after ISSUED BY
-                    r"ISSUED\s+BY([^$]{1,3000})",
-                    # Pattern 6: From 5. ISSUED BY to end of that logical section
-                    r"5\.\s*ISSUED\s+BY(.*?)(?=\n\s*\d+\.|\n\s*$|$)"
-                ]
-                
-                for i, pattern in enumerate(issued_by_patterns):
-                    issued_by_match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-                    if issued_by_match:
-                        issued_by_text = issued_by_match.group(1).strip()
-                        print(f"ISSUED BY pattern {i+1} found section:")
-                        print(f"Section length: {len(issued_by_text)} characters")
-                        print(f"Section text: {issued_by_text}")
+                            else:
+                                raise Exception(f"HTTP {response.status_code} after {download_attempts} attempts")
                         
-                        # Look for buyer information in this complete section
-                        buyer_found = False
-                        for j, buyer_pattern in enumerate(buyer_line_patterns):
-                            buyer_match = re.search(buyer_pattern, issued_by_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-                            if buyer_match:
-                                print(f"Found buyer pattern {j+1} in ISSUED BY section: {buyer_match.groups()}")
-                                groups = buyer_match.groups()
-                                
-                                if j < 10:  # New "Buyer: Name Code" patterns (patterns 0-9)
-                                    name = groups[0].strip()
-                                    buyer_code = groups[1].strip()
-                                    tel = groups[2].strip()
-                                    
-                                    buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
-                                    
-                                    # Handle different group counts for new patterns
-                                    if len(groups) == 5:  # Has fax and email (patterns 0, 6)
-                                        fax = groups[3].strip()
-                                        email = groups[4].strip()
-                                        buyer_info += f" Fax: {fax} Email: {email}"
-                                    elif len(groups) == 4 and j in [1, 4, 7]:  # Patterns with email, no fax
-                                        email = groups[3].strip()
-                                        buyer_info += f" Email: {email}"
-                                    elif len(groups) == 4 and j in [2, 8]:  # Patterns with fax, no email in pattern
-                                        fax = groups[3].strip()
-                                        buyer_info += f" Fax: {fax}"
-                                        # Try to find email separately in the same section
-                                        email_match = re.search(r"Email:\s*([^\s\n\r]+)", issued_by_text, re.IGNORECASE)
-                                        if email_match:
-                                            buyer_info += f" Email: {email_match.group(1).strip()}"
-                                    elif len(groups) == 3:  # Patterns with only name, code, tel
-                                        # Try to find fax and email separately
-                                        fax_match = re.search(r"Fax:\s*([0-9\-]+)", issued_by_text, re.IGNORECASE)
-                                        email_match = re.search(r"Email:\s*([^\s\n\r]+)", issued_by_text, re.IGNORECASE)
-                                        if fax_match:
-                                            buyer_info += f" Fax: {fax_match.group(1).strip()}"
-                                        if email_match:
-                                            buyer_info += f" Email: {email_match.group(1).strip()}"
-                                    
-                                else:  # Existing "Name: ... Buyer Code:" patterns (patterns 10+)
-                                    name = groups[0].strip()
-                                    buyer_code = groups[1].strip()
-                                    tel = groups[2].strip()
-                                    
-                                    buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
-                                    
-                                    if len(groups) == 5 and groups[3] and groups[4]:  # Has fax
-                                        fax = groups[3].strip()
-                                        email = groups[4].strip()
-                                        buyer_info += f" Fax: {fax} Email: {email}"
-                                    elif len(groups) == 4:  # No fax, last group is email
-                                        email = groups[3].strip()
-                                        buyer_info += f" Email: {email}"
-                                    elif len(groups) == 5 and not groups[3]:  # No fax, email is in groups[4]
-                                        email = groups[4].strip()
-                                        buyer_info += f" Email: {email}"
-                                
-                                print(f"Successfully extracted buyer info: {buyer_info}")
-                                buyer_found = True
-                                break
+                        pdf_content = response.content
                         
-                        # If patterns didn't work, try to construct from individual components we know exist
-                        if not buyer_found:
-                            print("Pattern matching failed, trying to extract individual components...")
-                            
-                            # Extract components individually from this section with improved patterns
-                            name_match = re.search(r"Name:\s*([^:]+?)(?=\s+Buyer\s+Code:)", issued_by_text, re.IGNORECASE)
-                            code_match = re.search(r"Buyer\s+Code:\s*([A-Z0-9]+)", issued_by_text, re.IGNORECASE)
-                            # More flexible Tel pattern that includes DSN
-                            tel_match = re.search(r"Tel:\s*([A-Z0-9\-]+)", issued_by_text, re.IGNORECASE)
-                            fax_match = re.search(r"Fax:\s*([0-9\-]+)", issued_by_text, re.IGNORECASE)
-                            email_match = re.search(r"Email:\s*([A-Za-z0-9\.\@\-\_]+)", issued_by_text, re.IGNORECASE)
-                            
-                            # Also try the "Buyer: Name Code" format for individual components
-                            if not name_match or not code_match:
-                                # Try with longer codes first, then shorter
-                                buyer_match = re.search(r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})", issued_by_text, re.IGNORECASE)
-                                if not buyer_match:
-                                    buyer_match = re.search(r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})", issued_by_text, re.IGNORECASE)
-                                
-                                if buyer_match:
-                                    name_match = type('Match', (), {'group': lambda x: buyer_match.group(1)})()
-                                    code_match = type('Match', (), {'group': lambda x: buyer_match.group(2)})()
-                            
-                            print(f"Individual components found:")
-                            print(f"  Name: {name_match.group(1) if name_match else 'None'}")
-                            print(f"  Code: {code_match.group(1) if code_match else 'None'}")
-                            print(f"  Tel: {tel_match.group(1) if tel_match else 'None'}")
-                            print(f"  Fax: {fax_match.group(1) if fax_match else 'None'}")
-                            print(f"  Email: {email_match.group(1) if email_match else 'None'}")
-                            
-                            if name_match and code_match and tel_match and email_match:
-                                buyer_info = f"Name: {name_match.group(1).strip()} Buyer Code: {code_match.group(1).strip()} Tel: {tel_match.group(1).strip()}"
-                                if fax_match:
-                                    buyer_info += f" Fax: {fax_match.group(1).strip()}"
-                                buyer_info += f" Email: {email_match.group(1).strip()}"
-                                print(f"Successfully constructed buyer info from components: {buyer_info}")
-                                buyer_found = True
+                        # Verify PDF signature
+                        if not pdf_content.startswith(b'%PDF'):
+                            pdf_sig_pos = pdf_content.find(b'%PDF', 0, 1024)
+                            if pdf_sig_pos >= 0:
+                                pdf_content = pdf_content[pdf_sig_pos:]
+                            else:
+                                raise Exception(f"Invalid PDF content on attempt {attempt + 1}")
                         
-                        # If we found buyer info, break out of the ISSUED BY pattern loop
-                        if buyer_found:
-                            break
-                        else:
-                            print(f"No buyer patterns matched in this ISSUED BY section")
-                            # Show what buyer-related keywords we can find
-                            keywords_found = []
-                            for keyword in ['name:', 'buyer', 'tel:', 'email:', 'code']:
-                                if keyword in issued_by_text.lower():
-                                    keywords_found.append(keyword)
-                            print(f"Found these buyer keywords: {keywords_found}")
+                        print(f"  Successfully downloaded PDF: {len(pdf_content)} bytes")
+                        break
+                        
+                except Exception as e:
+                    print(f"  Download attempt {attempt + 1} failed: {e}")
+                    if attempt < download_attempts - 1:
+                        time.sleep(2 ** attempt)
+                        continue
                     else:
-                        print(f"ISSUED BY pattern {i+1} did not match")
-                
-                # If still no buyer info found, try searching anywhere in the text
-                if not buyer_info:
-                    print("Trying to find buyer info anywhere in the PDF text...")
+                        raise
+
+            if not pdf_content or not b'%PDF' in pdf_content[:1024]:
+                raise Exception("Failed to download valid PDF content")
+
+            # COMPREHENSIVE PDF PROCESSING with error handling
+            try:
+                with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
+                    print(f"  Successfully opened PDF with {len(pdf.pages)} pages")
                     
-                    # Search for each component separately to see what we can find
-                    name_anywhere = re.search(r"Name:\s*([^:]+?)(?=\s+Buyer|$)", full_text, re.IGNORECASE)
-                    buyer_anywhere = re.search(r"Buyer\s+Code:\s*([A-Z0-9]+)", full_text, re.IGNORECASE)
-                    tel_anywhere = re.search(r"Tel:\s*([0-9\-\s]+)", full_text, re.IGNORECASE)
-                    email_anywhere = re.search(r"Email:\s*([^\s\n\r]+)", full_text, re.IGNORECASE)
+                    full_text = ""
+                    page_texts = []
                     
-                    print(f"Name found anywhere: {name_anywhere.group(1) if name_anywhere else 'None'}")
-                    print(f"Buyer Code found anywhere: {buyer_anywhere.group(1) if buyer_anywhere else 'None'}")
-                    print(f"Tel found anywhere: {tel_anywhere.group(1) if tel_anywhere else 'None'}")
-                    print(f"Email found anywhere: {email_anywhere.group(1) if email_anywhere else 'None'}")
+                    # Extract text from all pages (up to 15 for performance)
+                    for page_num, page in enumerate(pdf.pages[:15], 1):
+                        try:
+                            text = page.extract_text() or ""
+                            if text:
+                                page_texts.append(text)
+                                full_text += f"\n--- PAGE {page_num} ---\n{text}"
+                                print(f"  Extracted text from page {page_num}: {len(text)} characters")
+                                
+                                # UNIT EXTRACTION - Multiple patterns 
+                                if unit == "N/A":
+                                    # Pattern 1: ITEM NO. SUPPLIES/SERVICES QUANTITY UNIT UNIT PRICE AMOUNT
+                                    pattern1 = re.compile(
+                                        r"^\d+\s+\d{4}-\d{2}-\d{3}-\d{4}\s+\d+\.\d{3}\s+([A-Z]{2})\s+\$",
+                                        re.MULTILINE
+                                    )
+                                    match1 = pattern1.search(text)
+                                    if match1:
+                                        unit = match1.group(1).upper()
+                                        print(f"  Found unit via Pattern1 on page {page_num}: {unit}")
+                                    
+                                    # Pattern 2: CLIN PR PRLI UI QUANTITY UNIT PRICE TOTAL PRICE
+                                    pattern2 = re.compile(
+                                        r"^\d+\s+\d+\s+\d+\s+([A-Z]{2})\s+[\d,]+\.\d{3}",
+                                        re.MULTILINE
+                                    )
+                                    match2 = pattern2.search(text)
+                                    if match2:
+                                        unit = match2.group(1).upper()
+                                        print(f"  Found unit via Pattern2 (UI) on page {page_num}: {unit}")
+                                    
+                                    # Fallback patterns for unit
+                                    fallback_patterns = [
+                                        r"QTY:\s*\d+\s+([A-Z]{2})\b",
+                                        r"UNIT\s*[:=]\s*([A-Z]{2})\b",
+                                        r"U/I\s*[:=]\s*([A-Z]{2})\b",
+                                        r"\b(\d+)\s+([A-Z]{2})\s+@",
+                                        r"Quantity\s*:\s*\d+\s+([A-Z]{2})\b",
+                                        r"UNIT\s+OF\s+ISSUE\s*[:=]\s*([A-Z]{2})\b"
+                                    ]
+                                    
+                                    for pattern in fallback_patterns:
+                                        matches = re.finditer(pattern, text, re.IGNORECASE)
+                                        for match in matches:
+                                            unit_candidate = match.group(1) if match.lastindex else match.group(0)
+                                            if unit_candidate.upper() in UNIT_MAPPING:
+                                                unit = unit_candidate.upper()
+                                                print(f"  Found unit on page {page_num} via fallback pattern: {unit}")
+                                                break
+                                        if unit != "N/A":
+                                            break
+                                    
+                                    # Table extraction fallback for unit
+                                    tables = page.extract_tables()
+                                    for table in tables:
+                                        if len(table) > 1:
+                                            headers = [str(cell).upper().strip() for cell in table[0]]
+                                            unit_col = None
+                                            if "UNIT" in headers:
+                                                unit_col = headers.index("UNIT")
+                                            elif "UI" in headers:
+                                                unit_col = headers.index("UI")
+                                            
+                                            if unit_col is not None:
+                                                for row in table[1:]:
+                                                    if len(row) > unit_col and row[unit_col]:
+                                                        unit_candidate = str(row[unit_col]).strip().upper()
+                                                        if unit_candidate in UNIT_MAPPING:
+                                                            unit = unit_candidate
+                                                            print(f"  Found unit in table on page {page_num}: {unit}")
+                                                            break
+                                                if unit != "N/A":
+                                                    break
+                            
+                        except Exception as page_error:
+                            print(f"  Error extracting text from page {page_num}: {page_error}")
+                            continue
                     
-                    # Search for the complete buyer line anywhere in the text
-                    anywhere_patterns = [
-                        # UNIVERSAL: Add "Buyer: Name Code" patterns for searching anywhere - Captures ANY name
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)",
-                        
-                        # FALLBACK with shorter codes
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
-                        r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)",
-                        
-                        # EXISTING: Keep all your existing patterns
-                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Fax:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
-                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
-                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s+([A-Z0-9]+)\s+Tel:\s+([0-9\-]+)\s+Fax:\s+([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
-                        r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s+([A-Z0-9]+)\s+Tel:\s+([0-9\-]+)\s+Email:\s*([^\s\n\r]+)"
+                    if not full_text.strip():
+                        raise Exception("No text extracted from any page")
+                    
+                    print(f"  Total text extracted: {len(full_text)} characters")
+
+                    # Extract INSPECTION POINT
+                    inspection_patterns = [
+                        r"INSPECTION\s+POINT\s*:\s*([^\n\r]+)",
+                        r"INSPECTION\s+POINT\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
+                        r"INSPECTION\s+POINT\s*:\s*([^:]+?)(?=\s*(?:ACCEPTANCE|FOB|DELIVERY|$))"
                     ]
                     
-                    for k, pattern in enumerate(anywhere_patterns):
+                    for pattern in inspection_patterns:
                         match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
                         if match:
-                            print(f"Found buyer pattern {k+1} anywhere in text: {match.groups()}")
-                            groups = match.groups()
-                            
-                            if k < 8:  # New "Buyer: Name Code" patterns
-                                name = groups[0].strip()
-                                buyer_code = groups[1].strip()
-                                tel = groups[2].strip()
-                                buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
-                                
-                                if len(groups) == 5:  # Has fax and email
-                                    fax = groups[3].strip()
-                                    email = groups[4].strip()
-                                    buyer_info += f" Fax: {fax} Email: {email}"
-                                elif len(groups) == 4 and k in [1, 5]:  # Has email, no fax
-                                    email = groups[3].strip()
-                                    buyer_info += f" Email: {email}"
-                                elif len(groups) == 4 and k in [2, 6]:  # Has fax, no email
-                                    fax = groups[3].strip()
-                                    buyer_info += f" Fax: {fax}"
-                            else:  # Existing "Name: ... Buyer Code:" patterns
-                                buyer_info = f"Name: {groups[0].strip()} Buyer Code: {groups[1].strip()} Tel: {groups[2].strip()}"
-                                if len(groups) == 5:  # Has fax
-                                    buyer_info += f" Fax: {groups[3].strip()} Email: {groups[4].strip()}"
-                                else:  # No fax
-                                    buyer_info += f" Email: {groups[3].strip()}"
-                            
-                            print(f"Extracted buyer info from anywhere: {buyer_info}")
+                            inspection_point = match.group(1).strip()
+                            print(f"  Found inspection point: {inspection_point}")
                             break
+                    
+                    # Extract ACCEPTANCE POINT
+                    acceptance_patterns = [
+                        r"ACCEPTANCE\s+POINT\s*:\s*([^\n\r]+)",
+                        r"ACCEPTANCE\s+POINT\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
+                        r"ACCEPTANCE\s+POINT\s*:\s*([^:]+?)(?=\s*(?:INSPECTION|FOB|DELIVERY|$))"
+                    ]
+                    
+                    for pattern in acceptance_patterns:
+                        match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            acceptance_point = match.group(1).strip()
+                            print(f"  Found acceptance point: {acceptance_point}")
+                            break
+                    
+                    # Extract FOB / DELIVER FOB
+                    fob_patterns = [
+                        r"DELIVER\s+FOB\s*:\s*([^\n\r]+)",
+                        r"FOB\s*:\s*([^\n\r]+)",
+                        r"DELIVER\s+FOB\s*:\s*([A-Z\s]+)(?=\s*[A-Z\s]*:|\s*$)",
+                        r"FOB\s*:\s*([^:]+?)(?=\s*(?:DELIVERY|INSPECTION|ACCEPTANCE|$))"
+                    ]
+                    
+                    for pattern in fob_patterns:
+                        match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            deliver_fob = match.group(1).strip()
+                            print(f"  Found deliver FOB: {deliver_fob}")
+                            break
+                    
+                    # Extract DELIVERY DAYS / DELIVERY DATE
+                    delivery_patterns = [
+                        r"DELIVERY\s*\(IN\s+DAYS\)\s*:\s*(\d+)",
+                        r"DELIVERY\s+DATE\s*:\s*([^\n\r]+)",
+                        r"DELIVERY\s*:\s*(\d+)\s*DAYS?",
+                        r"DELIVERY\s+DAYS?\s*:\s*(\d+)",
+                        r"DELIVERY\s+DATE\s*:\s*([^:]+?)(?=\s*(?:FOB|INSPECTION|ACCEPTANCE|$))"
+                    ]
+                    
+                    for pattern in delivery_patterns:
+                        match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            deliver_days = match.group(1).strip()
+                            print(f"  Found delivery days/date: {deliver_days}")
+                            break
+                    
+                    # COMPREHENSIVE BUYER INFORMATION EXTRACTION
+                    print("  Searching for buyer information...")
+                    
+                    # Look for ISSUED BY section first
+                    issued_by_patterns = [
+                        r"5\.\s*ISSUED\s+BY(.*?)(?=8\.\s*TO:)",
+                        r"ISSUED\s+BY(.*?)(?=\d+\.\s*TO:)",
+                        r"5\.\s*ISSUED\s+BY(.*?)(?=\d+\.\s*(?:TO|DELIVER|DESTINATION|PLEASE))",
+                        r"ISSUED\s+BY(.*?)(?=\d+\.\s*[A-Z])",
+                        r"ISSUED\s+BY([^$]{1,3000})"
+                    ]
+                    
+                    for i, pattern in enumerate(issued_by_patterns):
+                        issued_by_match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+                        if issued_by_match:
+                            issued_by_text = issued_by_match.group(1).strip()
+                            print(f"  Found ISSUED BY section using pattern {i+1}")
+                            
+                            # Comprehensive buyer patterns
+                            buyer_patterns = [
+                                # New "Buyer: Name Code" patterns
+                                r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                                r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                                r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)",
+                                r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)",
+                                r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                                r"Buyer:\s*(.+?)\s+([A-Z0-9]{3,})\s+Tel:\s*([0-9\-DSN]+)",
+                                
+                                # Existing "Name: ... Buyer Code:" patterns
+                                r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Fax:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                                r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                                r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+).*?Email:\s*([^\s\n\r]+)",
+                                r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-DSN]+).*?Email:\s*([A-Za-z0-9\.\@\-\_]+)",
+                                r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([A-Z0-9\-]+).*?Email:\s*([A-Za-z0-9\.\@\-\_]+)",
+                                r"Name:\s*([^:]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([^\s\n\r]+).*?Email:\s*([^\s\n\r]+)"
+                            ]
+                            
+                            buyer_found = False
+                            for j, buyer_pattern in enumerate(buyer_patterns):
+                                buyer_match = re.search(buyer_pattern, issued_by_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+                                if buyer_match:
+                                    print(f"  Found buyer pattern {j+1} in ISSUED BY section")
+                                    groups = buyer_match.groups()
+                                    
+                                    if j < 6:  # New "Buyer: Name Code" patterns
+                                        name = groups[0].strip()
+                                        buyer_code = groups[1].strip()
+                                        tel = groups[2].strip()
+                                        
+                                        buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
+                                        
+                                        if len(groups) == 5:  # Has fax and email
+                                            fax = groups[3].strip()
+                                            email = groups[4].strip()
+                                            buyer_info += f" Fax: {fax} Email: {email}"
+                                        elif len(groups) == 4 and j in [1, 4]:  # Has email, no fax
+                                            email = groups[3].strip()
+                                            buyer_info += f" Email: {email}"
+                                        elif len(groups) == 4 and j in [2]:  # Has fax, no email
+                                            fax = groups[3].strip()
+                                            buyer_info += f" Fax: {fax}"
+                                        elif len(groups) == 3:  # Only name, code, tel
+                                            # Try to find fax and email separately
+                                            fax_match = re.search(r"Fax:\s*([0-9\-]+)", issued_by_text, re.IGNORECASE)
+                                            email_match = re.search(r"Email:\s*([^\s\n\r]+)", issued_by_text, re.IGNORECASE)
+                                            if fax_match:
+                                                buyer_info += f" Fax: {fax_match.group(1).strip()}"
+                                            if email_match:
+                                                buyer_info += f" Email: {email_match.group(1).strip()}"
+                                    
+                                    else:  # Existing "Name: ... Buyer Code:" patterns
+                                        name = groups[0].strip()
+                                        buyer_code = groups[1].strip()
+                                        tel = groups[2].strip()
+                                        
+                                        buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
+                                        
+                                        if len(groups) == 5 and groups[3] and groups[4]:  # Has fax
+                                            fax = groups[3].strip()
+                                            email = groups[4].strip()
+                                            buyer_info += f" Fax: {fax} Email: {email}"
+                                        elif len(groups) == 4:  # No fax, last group is email
+                                            email = groups[3].strip()
+                                            buyer_info += f" Email: {email}"
+                                        elif len(groups) == 5 and not groups[3]:  # No fax, email is in groups[4]
+                                            email = groups[4].strip()
+                                            buyer_info += f" Email: {email}"
+                                    
+                                    print(f"  Successfully extracted buyer info: {buyer_info}")
+                                    buyer_found = True
+                                    break
+                            
+                            if buyer_found:
+                                break
+                    
+                    # If no buyer info found in ISSUED BY, search entire document
+                    if not buyer_info:
+                        print("  No buyer info found in ISSUED BY section, searching entire document...")
+                        
+                        anywhere_patterns = [
+                            r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)\s+Fax:\s*([0-9\-]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                            r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)[\s\S]*?Email:\s*([^\s\n\r]+)",
+                            r"Buyer:\s*(.+?)\s+([A-Z0-9]{6,})\s+Tel:\s*([0-9\-DSN]+)",
+                            r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Fax:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)",
+                            r"Name:\s*([^B]+?)\s+Buyer\s+Code:\s*([A-Z0-9]+)\s+Tel:\s*([0-9\-]+)\s+Email:\s*([^\s\n\r]+)"
+                        ]
+                        
+                        for k, pattern in enumerate(anywhere_patterns):
+                            match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                            if match:
+                                print(f"  Found buyer pattern {k+1} anywhere in text")
+                                groups = match.groups()
+                                
+                                if k < 3:  # "Buyer: Name Code" patterns
+                                    name = groups[0].strip()
+                                    buyer_code = groups[1].strip()
+                                    tel = groups[2].strip()
+                                    buyer_info = f"Name: {name} Buyer Code: {buyer_code} Tel: {tel}"
+                                    
+                                    if len(groups) == 5:  # Has fax and email
+                                        fax = groups[3].strip()
+                                        email = groups[4].strip()
+                                        buyer_info += f" Fax: {fax} Email: {email}"
+                                    elif len(groups) == 4:  # Has email, no fax
+                                        email = groups[3].strip()
+                                        buyer_info += f" Email: {email}"
+                                else:  # "Name: ... Buyer Code:" patterns
+                                    buyer_info = f"Name: {groups[0].strip()} Buyer Code: {groups[1].strip()} Tel: {groups[2].strip()}"
+                                    if len(groups) == 5:  # Has fax
+                                        buyer_info += f" Fax: {groups[3].strip()} Email: {groups[4].strip()}"
+                                    else:  # No fax
+                                        buyer_info += f" Email: {groups[3].strip()}"
+                                
+                                print(f"  Extracted buyer info from anywhere: {buyer_info}")
+                                break
+
+                    print(f"  PDF processing successful on attempt {pdf_attempt + 1}")
+                    print(f"  Extracted - Unit: {unit}, Inspection: {inspection_point[:30]}...")
+                    
+                    # If we get here, PDF processing was successful
+                    break  # Exit the retry loop
+                    
+            except Exception as pdf_processing_error:
+                print(f"  PDF processing error on attempt {pdf_attempt + 1}: {pdf_processing_error}")
+                if pdf_attempt < max_pdf_retries - 1:
+                    print(f"  Retrying PDF processing...")
+                    time.sleep(3)
+                    continue
+                else:
+                    raise
 
         except Exception as e:
-            print(f"PDF processing error: {str(e)}")
-            traceback.print_exc()
-
-    except Exception as e:
-        print(f"Critical error in extract_unit_from_pdf: {str(e)}")
-        traceback.print_exc()
-        
+            print(f"PDF attempt {pdf_attempt + 1} failed: {str(e)}")
+            if pdf_attempt < max_pdf_retries - 1:
+                print(f"Retrying entire PDF extraction process...")
+                time.sleep(5)  # Wait longer between full retries
+                continue
+            else:
+                print(f"PDF extraction failed after {max_pdf_retries} attempts")
+                break
+    
+    # Final logging
+    print(f"PDF extraction complete:")
+    print(f"Unit: {unit}")
+    print(f"Inspection: {inspection_point[:50]}...")
+    print(f"Acceptance: {acceptance_point[:50]}...")
+    print(f"Buyer: {buyer_info[:50]}...")
+    
     return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
 
-@retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
+@retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
 def extract_data_from_page(driver, wait):
     """Extract data from the current page."""
     check_for_hang()
@@ -909,72 +922,30 @@ def extract_data_from_page(driver, wait):
 def check_if_single_page(driver):
     """Check if there's only one page of results."""
     try:
-        # Look for pagination elements
         pagination_elements = driver.find_elements(By.XPATH, "//tr[@class='pagination']")
         if not pagination_elements:
-            print("No pagination row found - single page")
             return True
         
-        # Check for any page links (Page$2, Page$3, etc.)
         page_links = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/a[contains(@href, 'Page')]")
         if not page_links:
-            print("No page links found - single page")
             return True
             
-        # Check for ellipsis links
         ellipsis_links = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/a[text()='...']")
         
-        # If we have page links or ellipsis, it's multi-page
         if page_links or ellipsis_links:
-            print(f"Found {len(page_links)} page links and {len(ellipsis_links)} ellipsis links - multiple pages")
             return False
         
         return True
         
     except Exception as e:
         print(f"Error checking pagination: {e}")
-        return True  # Assume single page if we can't determine
+        return True
 
-def get_pagination_info(driver):
-    """Get information about current pagination state for debugging."""
-    try:
-        pagination_row = driver.find_element(By.XPATH, "//tr[@class='pagination']/td/table/tbody/tr")
-        
-        # Get all td elements in pagination
-        pagination_cells = pagination_row.find_elements(By.XPATH, ".//td")
-        
-        print("=== PAGINATION DEBUG INFO ===")
-        for i, cell in enumerate(pagination_cells):
-            cell_html = cell.get_attribute('innerHTML')
-            print(f"Cell {i}: {cell_html}")
-        
-        # Get current page (span element)
-        current_page_spans = pagination_row.find_elements(By.XPATH, ".//td/span")
-        if current_page_spans:
-            print(f"Current page indicators: {[span.text for span in current_page_spans]}")
-        
-        # Get clickable page links
-        page_links = pagination_row.find_elements(By.XPATH, ".//td/a[contains(@href, 'Page')]")
-        if page_links:
-            print(f"Available page links: {[link.text for link in page_links]}")
-            print(f"Page link hrefs: {[link.get_attribute('href') for link in page_links]}")
-        
-        # Get ellipsis links
-        ellipsis_links = pagination_row.find_elements(By.XPATH, ".//td/a[text()='...']")
-        if ellipsis_links:
-            print(f"Ellipsis links: {[link.get_attribute('href') for link in ellipsis_links]}")
-        
-        print("=== END PAGINATION DEBUG ===")
-        
-    except Exception as e:
-        print(f"Error getting pagination info: {e}")
-
-@retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
+@retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
 def handle_pagination(driver, wait):
-    """Handle pagination with proper chunked pagination support (pages 1-10, 11-20, etc.)"""
+    """OPTIMIZED pagination with faster processing"""
     page_number = 1
     
-    # First, extract data from the initial page (page 1)
     print(f"Processing page {page_number}...")
     extract_data_from_page(driver, wait)
     
@@ -984,7 +955,6 @@ def handle_pagination(driver, wait):
             if not check_driver_health(driver):
                 raise WebDriverException("Driver connection lost")
             
-            # Check if pagination exists at all
             try:
                 pagination_xpath = "//tr[@class='pagination']/td/table/tbody/tr"
                 pagination_row = wait.until(EC.presence_of_element_located((By.XPATH, pagination_xpath)))
@@ -992,14 +962,11 @@ def handle_pagination(driver, wait):
                 print("No pagination found. Only one page exists.")
                 break
             
-            # Calculate the next page number
             next_page_number = page_number + 1
             print(f"Looking for page {next_page_number}...")
             
-            # Try to find the next page link in current pagination chunk
             next_page_link = None
             
-            # Look for the direct page number link first
             try:
                 next_page_link = pagination_row.find_element(
                     By.XPATH, f".//td/a[@href and contains(@href, 'Page${next_page_number}')]"
@@ -1008,36 +975,26 @@ def handle_pagination(driver, wait):
             except:
                 print(f"Direct link for page {next_page_number} not found in current chunk")
             
-            # If direct page link not found, check if we need to click "..." to load next chunk
             if not next_page_link:
                 try:
-                    # Look for "..." link that loads the next chunk
-                    # The "..." link contains the first page number of the next chunk
-                    # For example: Page$11, Page$21, Page$31, etc.
-                    
-                    # Calculate which chunk we need
                     target_chunk_start = ((next_page_number - 1) // 10) * 10 + 1
                     if target_chunk_start > next_page_number:
                         target_chunk_start -= 10
                     
-                    # If we're not in the right chunk, look for the "..." link
                     if target_chunk_start != 1 and target_chunk_start % 10 == 1:
                         ellipsis_link = pagination_row.find_element(
                             By.XPATH, f".//td/a[@href and contains(@href, 'Page${target_chunk_start}') and text()='...']"
                         )
                         print(f"Found ellipsis link for chunk starting at page {target_chunk_start}")
                         
-                        # Click the ellipsis to load the new chunk
                         href_value = ellipsis_link.get_attribute("href")
                         if "__doPostBack" in href_value:
                             script = href_value.split('javascript:')[1]
                             driver.execute_script(f"javascript:{script}")
                             
-                            # Wait for the new pagination chunk to load
                             wait.until(EC.presence_of_element_located((By.XPATH, pagination_xpath)))
-                            time.sleep(1)  # Brief pause for pagination to update
+                            time.sleep(1)
                             
-                            # Now try to find the direct page link again
                             pagination_row = driver.find_element(By.XPATH, pagination_xpath)
                             next_page_link = pagination_row.find_element(
                                 By.XPATH, f".//td/a[@href and contains(@href, 'Page${next_page_number}')]"
@@ -1047,27 +1004,53 @@ def handle_pagination(driver, wait):
                 except Exception as e:
                     print(f"Could not find ellipsis link: {e}")
             
-            # If we still don't have a next page link, we've reached the end
             if not next_page_link:
                 print(f"No link found for page {next_page_number}. Reached end of pagination.")
                 break
             
-            # Click the next page link
             try:
                 href_value = next_page_link.get_attribute("href")
                 if "__doPostBack" in href_value:
                     script = href_value.split('javascript:')[1]
-                    driver.execute_script(f"javascript:{script}")
                     
-                    # Wait for the new page to load
-                    wait.until(EC.presence_of_element_located((By.XPATH, "//tr[contains(@class, 'BgWhite') or contains(@class, 'BgSilver')]")))
-                    time.sleep(1)  # Brief pause for page content to load
+                    try:
+                        driver.execute_script("arguments[0].click();", next_page_link)
+                    except:
+                        driver.execute_script(f"javascript:{script}")
                     
-                    page_number = next_page_number
-                    print(f"Successfully moved to page {page_number}")
-                    print(f"Processing page {page_number}...")
-                    extract_data_from_page(driver, wait)
-                    cleanup_resources(driver)  # Periodic cleanup
+                    try:
+                        WebDriverWait(driver, 10).until(EC.staleness_of(pagination_row))
+                        
+                        wait.until(EC.presence_of_element_located(
+                            (By.XPATH, "//tr[contains(@class, 'BgWhite') or contains(@class, 'BgSilver')]")
+                        ))
+                        
+                        time.sleep(1)
+                        
+                        page_number = next_page_number
+                        print(f"Successfully moved to page {page_number}")
+                        print(f"Processing page {page_number}...")
+                        extract_data_from_page(driver, wait)
+                        
+                        # Cleanup every 5 pages
+                        if page_number % 5 == 0:
+                            cleanup_resources(driver)
+                        
+                    except TimeoutException as te:
+                        print(f"Timeout while waiting for page {next_page_number} to load: {te}")
+                        try:
+                            current_rows = driver.find_elements(By.XPATH, 
+                                "//tr[contains(@class, 'BgWhite') or contains(@class, 'BgSilver')]")
+                            if current_rows:
+                                print(f"Found {len(current_rows)} rows on page, continuing...")
+                                page_number = next_page_number
+                                extract_data_from_page(driver, wait)
+                            else:
+                                print("No rows found, assuming pagination failed")
+                                break
+                        except Exception as recovery_error:
+                            print(f"Recovery attempt failed: {recovery_error}")
+                            break
                     
                 else:
                     print(f"Invalid href for page {next_page_number}: {href_value}")
@@ -1079,64 +1062,96 @@ def handle_pagination(driver, wait):
 
         except Exception as e:
             print(f"Error during pagination at page {page_number}: {e}")
-            
-            # Try to determine if we've reached the end by checking current page indicator
-            try:
-                # Look for current page span (non-clickable)
-                current_page_spans = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/span")
-                if current_page_spans:
-                    current_page_text = current_page_spans[-1].text.strip()
-                    print(f"Current page indicator: {current_page_text}")
-                
-                # Check if there are any more clickable page links
-                remaining_links = driver.find_elements(By.XPATH, "//tr[@class='pagination']//td/a[contains(@href, 'Page')]")
-                if not remaining_links:
-                    print("No more page links found. Reached end of pagination.")
-                    break
-                    
-            except Exception as check_error:
-                print(f"Error checking pagination state: {check_error}")
-            
-            print("Stopping pagination due to error.")
             break
 
-@retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
-def process_nsn_links(driver):
-    """Visit NSN links and extract CAGE data, part numbers, UNIT values, and additional PDF fields."""
-    cage_codes = []
+@retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
+def process_nsn_links_comprehensive(driver, start_time):
+    """Process each unique NSN and create separate records for each CAGE+Part combination"""
+    total_rows = len(row_data_list)
+    successful_saves = 0
+    failed_saves = 0
     
+    # Group rows by NSN to avoid re-processing the same NSN page
+    nsn_groups = {}
     for row_data in row_data_list:
+        nsn = row_data.get('nsn', 'Unknown')
+        if nsn not in nsn_groups:
+            nsn_groups[nsn] = []
+        nsn_groups[nsn].append(row_data)
+    
+    print(f"Processing {len(nsn_groups)} unique NSNs from {total_rows} total rows...")
+    print("STRATEGY: Create separate records for each NSN+CAGE+Part combination")
+    
+    for nsn_index, (nsn, nsn_rows) in enumerate(nsn_groups.items(), 1):
+        print(f"\n=== Processing NSN {nsn_index}/{len(nsn_groups)}: {nsn} ===")
+        
+        # Show all solicitations for this NSN (for information only)
+        solicitations_info = []
+        total_quantity_all_solicitations = 0
+        
+        for row in nsn_rows:
+            raw_quantity = row.get('quantity', '0')
+            quantity = extract_quantity(raw_quantity)
+            total_quantity_all_solicitations += quantity
+            solicitations_info.append({
+                'solicitation': row.get('solicitation', 'N/A'),
+                'quantity': quantity
+            })
+        
+        print(f"Found {len(nsn_rows)} solicitations for this NSN:")
+        for sol in solicitations_info:
+            print(f"  - {sol['solicitation']}: QTY {sol['quantity']}")
+        print(f"Total quantity across all solicitations: {total_quantity_all_solicitations}")
+        
         try:
-            check_for_hang()
-            if not check_driver_health(driver):
-                raise WebDriverException("Driver connection lost")
-                
-            nsn_link = row_data['nsn_link']
-            driver.execute_script("window.open(arguments[0]);", nsn_link)
-            driver.switch_to.window(driver.window_handles[-1])
+            # Use the first row to get the NSN link and other common data
+            first_row = nsn_rows[0]
+            nsn_link = first_row['nsn_link']
+            
+            # Navigate to NSN page ONCE
+            if not safe_get(driver, nsn_link):
+                print(f"Failed to load NSN page for {nsn}")
+                failed_saves += 1
+                continue
 
+            # Extract CAGE codes and part numbers ONCE
+            cage_values = []
+            part_numbers = []
+            
             try:
                 cage_table = WebDriverWait(driver, 60).until(
                     EC.presence_of_element_located((By.XPATH, "//table[@summary='Table conatins Approved Source Data']"))
                 )
                 
                 cage_rows = cage_table.find_elements(By.XPATH, ".//tbody/tr")
-                cage_values = []
-                part_numbers = []
+                print(f"Found {len(cage_rows)} CAGE codes for NSN {nsn}")
 
-                for cage_row in cage_rows:
+                for j, cage_row in enumerate(cage_rows, 1):
                     try:
                         cage_value = cage_row.find_element(By.XPATH, "./td[@headers='h1']").text.strip()
                         part_number = cage_row.find_element(By.XPATH, "./td[@headers='h2']").text.strip()
                         cage_values.append(cage_value)
                         part_numbers.append(part_number)
-                        cage_codes.append(cage_value)
+                        print(f"  CAGE {j}: {cage_value} | Part: {part_number}")
                     except Exception as e:
-                        print(f"Error extracting CAGE/part: {e}")
+                        print(f"  Error extracting CAGE row {j}: {e}")
 
-                row_data['cages'] = ", ".join(cage_values)
-                row_data['part_numbers'] = ", ".join(part_numbers)
+                if not cage_values:
+                    print(f"No CAGE codes found for NSN {nsn}")
+                    failed_saves += 1
+                    continue
 
+            except Exception as cage_error:
+                print(f"Error finding CAGE table for NSN {nsn}: {cage_error}")
+                failed_saves += 1
+                continue
+
+            # Get CAGE details ONCE
+            print(f"Getting CAGE details for {len(cage_values)} codes...")
+            cage_details_list = extract_cage_details_comprehensive(driver, cage_values)
+            
+            # Extract PDF data ONCE
+            try:
                 solicitation_table = WebDriverWait(driver, 60).until(
                     EC.presence_of_element_located((By.XPATH, "//table[@summary='Contains RFQ records for the NSN. ']"))
                 )
@@ -1146,142 +1161,463 @@ def process_nsn_links(driver):
                 )
                 pdf_url = pdf_link.get_attribute("href")
                 
-                # Extract unit and additional fields from PDF
-                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info = extract_unit_from_pdf(pdf_url, driver=driver)
+                print(f"Extracting PDF data...")
+                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info = extract_unit_from_pdf_comprehensive(pdf_url, driver=driver)
+                print(f"PDF extracted - Unit: {unit_value}")
                 
-                row_data['unit'] = unit_value
-                row_data['inspection_point'] = inspection_point
-                row_data['acceptance_point'] = acceptance_point
-                row_data['deliver_fob'] = deliver_fob
-                row_data['deliver_days'] = deliver_days
-                row_data['buyer_info'] = buyer_info
-                
-                print(f"Extracted data for NSN {row_data['nsn']}:")
-                print(f"  UNIT: {unit_value}")
-                print(f"  INSPECTION POINT: {inspection_point}")
-                print(f"  ACCEPTANCE POINT: {acceptance_point}")
-                print(f"  DELIVER FOB: {deliver_fob}")
-                print(f"  DELIVER DAYS: {deliver_days}")
-                print(f"  BUYER INFO: {buyer_info}")
-                
-            except Exception as e:
-                print(f"Error processing NSN details: {e}")
-                row_data['cages'] = '-'
-                row_data['part_numbers'] = '-'
-                row_data['unit'] = 'N/A'
-                row_data['inspection_point'] = ''
-                row_data['acceptance_point'] = ''
-                row_data['deliver_fob'] = ''
-                row_data['deliver_days'] = ''
-                row_data['buyer_info'] = ''
+            except Exception as pdf_error:
+                print(f"PDF extraction failed for NSN {nsn}: {pdf_error}")
+                unit_value = inspection_point = acceptance_point = deliver_fob = deliver_days = buyer_info = ""
+
+            unit_code = unit_value.strip().upper() if unit_value else 'N/A'
+            unit_description = UNIT_MAPPING.get(unit_code, f'{unit_code} (Unknown)')
+            unit = f"{unit_code} ({unit_description})" if unit_code != 'N/A' else 'N/A'
             
-            finally:
-                if len(driver.window_handles) > 1:
-                    driver.close()
-                driver.switch_to.window(driver.window_handles[0])
-                cleanup_resources(driver)  # Cleanup after each NSN
-
+            if unit == 'N/A' or unit_code == 'N/A':
+                print(f"SKIPPING NSN {nsn}: Unit is N/A")
+                failed_saves += 1
+                continue
+            
+            # NEW LOGIC: Create records for each solicitation-CAGE-part combination
+            print(f"Creating records for each solicitation-CAGE-part combination...")
+            records_saved_for_nsn = 0
+            
+            # Process each solicitation separately
+            for solicitation_data in nsn_rows:
+                solicitation = solicitation_data.get('solicitation', 'N/A')
+                raw_quantity = solicitation_data.get('quantity', '0')
+                solicitation_quantity = extract_quantity(raw_quantity)
+                
+                print(f"\nProcessing solicitation {solicitation} with quantity {solicitation_quantity}")
+                
+                # Create record for each CAGE+Part combination with this solicitation's quantity
+                for j, cage in enumerate(cage_values):
+                    cage = cage.strip()
+                    part_number = part_numbers[j].strip() if j < len(part_numbers) else 'N/A'
+                    
+                    # Create record with THIS SOLICITATION's quantity only
+                    nsn_record = {
+                        'NSN': nsn,
+                        'Nomenclature': solicitation_data.get('nomenclature', 'N/A'),
+                        'Quantity': solicitation_quantity,  # CHANGED: Use individual solicitation quantity
+                        'Solicitation': solicitation,
+                        'Status': solicitation_data.get('status', 'N/A'),
+                        'Issued Date': solicitation_data.get('issued_date', 'N/A'),
+                        'Return By Date': solicitation_data.get('return_by_date', 'N/A'),
+                        'CAGE Code': cage,
+                        'Part Number': part_number,
+                        'Unit': unit,
+                        'Inspection Point': inspection_point,
+                        'Acceptance Point': acceptance_point,
+                        'Deliver FOB': deliver_fob,
+                        'Deliver Days': deliver_days,
+                        'Buyer Info': buyer_info
+                    }
+                    
+                    print(f"  Record: SOL={solicitation}, CAGE={cage}, PART={part_number}, QTY={solicitation_quantity}")
+                    
+                    # Save individual record
+                    if save_single_record_to_db(nsn_record, cage_details_list):
+                        records_saved_for_nsn += 1
+                        successful_saves += 1
+                        print(f"    SUCCESS - Individual record saved")
+                    else:
+                        failed_saves += 1
+                        print(f"    FAILED - Database save failed")
+            
+            print(f"NSN {nsn} COMPLETE: {records_saved_for_nsn} individual records saved")
+            print(f"Overall progress: {successful_saves} saved, {failed_saves} failed")
+            
         except Exception as e:
-            print(f"Error processing NSN link: {e}")
-    
-    return cage_codes
+            print(f"ERROR processing NSN {nsn}: {e}")
+            failed_saves += 1
 
-@retry(max_attempts=3, delay=5, cleanup_func=cleanup_resources)
-def extract_cage_details(driver, cage_codes):
+    print(f"\nFINAL RESULTS:")
+    print(f"   Unique NSNs processed: {len(nsn_groups)}")
+    print(f"   Original solicitation rows: {total_rows}")
+    print(f"   Individual records saved: {successful_saves}")
+    print(f"   Failed saves: {failed_saves}")
+    
+    return successful_saves
+
+@retry(max_attempts=2, delay=3, cleanup_func=cleanup_resources)
+def extract_cage_details_comprehensive(driver, cage_codes):
+    """Enhanced CAGE extraction with validation and re-scraping of empty cached data"""
+    unique_cages = list(set(cage_codes))
     extracted_data = []
     
-    for cage_code in cage_codes:
+    # Check cache first with validation for meaningful data
+    cached_results = []
+    uncached_cages = []
+    
+    print(f"\n90-Day Cache Status Check with Data Validation:")
+    print("=" * 50)
+    
+    for cage_code in unique_cages:
+        if cage_code in cage_cache:
+            cached_entry = cage_cache[cage_code]
+            
+            #print(f"Cache HIT for CAGE {cage_code}")
+            
+            # VALIDATE if cached data has meaningful information
+            has_meaningful_data = False
+            
+            if isinstance(cached_entry, dict):
+                # Check meaningful fields for actual data (not just "N/A")
+                meaningful_fields = ['Organization Name', 'City', 'Phone', 'Street Name', 'Email']
+                
+                for field in meaningful_fields:
+                    value = cached_entry.get(field, 'N/A')
+                    if value not in ['N/A', '', None, '-']:
+                        has_meaningful_data = True
+                        break
+                
+                if has_meaningful_data:
+                    # Print what meaningful data we found
+                    org_name = cached_entry.get('Organization Name', 'N/A')
+                    city = cached_entry.get('City', 'N/A')
+                    phone = cached_entry.get('Phone', 'N/A')
+                    
+                    print(f"VALID cached data found:")
+                    print(f"Organization: {org_name}")
+                    print(f"City: {city}")
+                    print(f"Phone: {phone}")
+                    
+                    cached_results.append(cached_entry)
+                    print(f"USING cached data")
+                else:
+                    # Cache hit but data is empty - need to re-scrape
+                    print(f"EMPTY cached data found - all fields are N/A")
+                    print(f"Will re-scrape and update cache")
+                    uncached_cages.append(cage_code)
+            else:
+                print(f"Invalid cached data format: {type(cached_entry)}")
+                print(f"Will re-scrape and update cache")
+                uncached_cages.append(cage_code)
+        else:
+            uncached_cages.append(cage_code)
+            print(f"Cache MISS for CAGE {cage_code}")
+    
+    print(f"\nCache Analysis Summary:")
+    print(f"Total CAGE codes to process: {len(unique_cages)}")
+    print(f"Valid cached entries (with data): {len(cached_results)}")
+    print(f"Empty/Invalid cached entries: {len(unique_cages) - len(uncached_cages) - len(cached_results)}")
+    print(f"Never cached entries: {len(uncached_cages) - (len(unique_cages) - len(uncached_cages) - len(cached_results))}")
+    print(f"Total need to fetch from web: {len(uncached_cages)}")
+    print(f"Useful cache efficiency: {(len(cached_results)/len(unique_cages)*100):.1f}%")
+    print("=" * 50)
+    
+    # Process uncached CAGE codes (including empty cached ones)
+    for i, cage_code in enumerate(uncached_cages, 1):
+        cage_data = {
+            "CAGE Code": cage_code,
+            "Organization Name": "N/A",
+            "Street Name": "N/A",
+            "City": "N/A",
+            "Postal Code": "N/A",
+            "Phone": "N/A",
+            "Fax": "N/A",
+            "Email": "N/A"
+        }
+        
+        extraction_successful = False
+        
         try:
             check_for_hang()
             if not check_driver_health(driver):
-                raise WebDriverException("Driver connection lost")
+                print(f"Driver health check failed for CAGE {cage_code}")
+                # Update cache even with empty data to avoid re-attempting immediately
+                cage_cache[cage_code] = cage_data
+                extracted_data.append(cage_data)
+                continue
                 
-            driver.get("https://eportal.nspa.nato.int/Codification/CageTool/CageTool/")
+            # Check if this was previously cached (empty) or completely new
+            was_cached = cage_code in cage_cache
+            print(f"Processing CAGE code {i}/{len(uncached_cages)}: {cage_code} {'(re-scraping empty cache)' if was_cached else '(new)'}")
             
-            findCageCodeInput = WebDriverWait(driver, 60).until(
-                EC.presence_of_element_located((By.ID, "inputCageCode"))
-            )
-            findCageCodeInput.clear()
-            findCageCodeInput.send_keys(cage_code)
-
-            search_button = WebDriverWait(driver, 60).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
-            )
-            driver.execute_script("arguments[0].click();", search_button)
-
-            expand_button = WebDriverWait(driver, 60).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "svg.svg-inline--fa.fa-chevron-right"))
-            )
-            expand_button.click()
-
-            read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
-            phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
+            # Navigate to NATO CAGE website
+            driver.set_page_load_timeout(30)
             
-            cage_data = {
-                "CAGE Code": cage_code,
-                "Organization Name": read_only_elements[1].text.strip() if len(read_only_elements) > 1 else "N/A",
-                "Street Name": read_only_elements[10].text.strip() if len(read_only_elements) > 10 else "N/A",
-                "City": read_only_elements[12].text.strip() if len(read_only_elements) > 12 else "N/A",
-                "Postal Code": read_only_elements[13].text.strip() if len(read_only_elements) > 13 else "N/A",
-                "Phone": phone_fax[0].text.strip() if len(phone_fax) > 0 else "N/A",
-                "Fax": WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
-                ).text.strip(),
-                "Email": WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
-                ).get_attribute("href").replace("mailto:", "").strip()
-            }
+            if not safe_get(driver, "https://eportal.nspa.nato.int/Codification/CageTool/CageTool/"):
+                print(f"Failed to load NATO website for CAGE {cage_code}")
+                cage_cache[cage_code] = cage_data
+                extracted_data.append(cage_data)
+                continue
             
-            extracted_data.append(cage_data)
-            print(f"Extracted data for CAGE code {cage_code}: {cage_data}")
+            # Wait for page to fully load
+            WebDriverWait(driver, 30).until(
+                lambda d: d.execute_script('return document.readyState') == 'complete'
+            )
+            time.sleep(3)  # Wait for Angular to load
+            
+            try:
+                # Find and fill CAGE code input
+                findCageCodeInput = WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located((By.ID, "inputCageCode"))
+                )
+                findCageCodeInput.clear()
+                findCageCodeInput.send_keys(cage_code)
+
+                # Find and click search button
+                search_button = WebDriverWait(driver, 60).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-primary[title='Search']"))
+                )
+                
+                # Use JavaScript click for better reliability
+                driver.execute_script("arguments[0].click();", search_button)
+                time.sleep(5)  # Wait for search results
+
+                # Check if CAGE code was found
+                try:
+                    # Look for "No data available" or similar messages
+                    no_data_messages = driver.find_elements(By.XPATH, "//*[contains(text(), 'No data') or contains(text(), 'not found') or contains(text(), 'No records')]")
+                    if no_data_messages:
+                        print(f"CAGE {cage_code} not found in NATO database")
+                        cage_cache[cage_code] = cage_data
+                        extracted_data.append(cage_data)
+                        continue
+                except:
+                    pass
+
+                # Try to find and click expand button - multiple approaches
+                expand_button = None
+                expand_attempts = 0
+                max_expand_attempts = 3
+                
+                while expand_attempts < max_expand_attempts:
+                    try:
+                        expand_attempts += 1
+                        
+                        # Comprehensive expand button selectors
+                        expand_selectors = [
+                            "svg.svg-inline--fa.fa-chevron-right",
+                            ".fa-chevron-right",
+                            "svg[data-icon='chevron-right']",
+                            "button svg.fa-chevron-right",
+                            "[class*='chevron-right']",
+                            ".btn-outline-primary",
+                            ".btn-outline-secondary", 
+                            ".btn-secondary",
+                            "button[class*='btn-outline']",
+                            "button[aria-expanded='false']",
+                            "button[data-toggle]",
+                            "[role='button']"
+                        ]
+                        
+                        for selector in expand_selectors:
+                            try:
+                                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                                if elements:
+                                    for element in elements:
+                                        try:
+                                            if element.is_displayed() and element.is_enabled():
+                                                expand_button = element
+                                                break
+                                        except:
+                                            continue
+                                    if expand_button:
+                                        break
+                            except:
+                                continue
+                        
+                        # If found, try to click
+                        if expand_button:
+                            # Scroll into view and click
+                            driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", expand_button)
+                            time.sleep(1)
+                            
+                            try:
+                                driver.execute_script("arguments[0].click();", expand_button)
+                                print(f"Successfully expanded details for CAGE {cage_code}")
+                                break
+                            except Exception as e1:
+                                try:
+                                    expand_button.click()
+                                    print(f"Successfully expanded details for CAGE {cage_code} (normal click)")
+                                    break
+                                except Exception as e2:
+                                    try:
+                                        from selenium.webdriver.common.action_chains import ActionChains
+                                        actions = ActionChains(driver)
+                                        actions.move_to_element(expand_button).click().perform()
+                                        print(f"Successfully expanded details for CAGE {cage_code} (action chains)")
+                                        break
+                                    except Exception as e3:
+                                        expand_button = None
+                        
+                        # Wait before retry
+                        if expand_attempts < max_expand_attempts:
+                            time.sleep(3)
+                        
+                    except Exception as e:
+                        if expand_attempts < max_expand_attempts:
+                            time.sleep(2)
+                            continue
+                        else:
+                            break
+                
+                # Wait for expanded content
+                time.sleep(3)
+                
+                # Extract data using comprehensive approach
+                try:
+                    # Try multiple strategies to find the data
+                    read_only_elements = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > span.readOnly")
+                    if not read_only_elements:
+                        read_only_elements = driver.find_elements(By.CSS_SELECTOR, "span.readOnly")
+                        if not read_only_elements:
+                            read_only_elements = driver.find_elements(By.CSS_SELECTOR, ".readOnly")
+                    
+                    phone_fax = driver.find_elements(By.CSS_SELECTOR, "div.ng-star-inserted > div.ng-star-inserted > span")
+                    if not phone_fax:
+                        phone_fax = driver.find_elements(By.CSS_SELECTOR, "span")
+                    
+                    print(f"Found {len(read_only_elements)} readonly elements for CAGE {cage_code}")
+                    
+                    # Extract organization name
+                    if len(read_only_elements) > 1:
+                        org_name = read_only_elements[1].text.strip()
+                        if org_name and org_name != 'N/A':
+                            cage_data["Organization Name"] = org_name
+                    
+                    # Extract street name
+                    if len(read_only_elements) > 10:
+                        street = read_only_elements[10].text.strip()
+                        if street and street != 'N/A':
+                            cage_data["Street Name"] = street
+                    
+                    # Extract city
+                    if len(read_only_elements) > 12:
+                        city = read_only_elements[12].text.strip()
+                        if city and city != 'N/A':
+                            cage_data["City"] = city
+                    
+                    # Extract postal code
+                    if len(read_only_elements) > 13:
+                        postal = read_only_elements[13].text.strip()
+                        if postal and postal != 'N/A':
+                            cage_data["Postal Code"] = postal
+                    
+                    # Extract phone
+                    if len(phone_fax) > 0:
+                        phone = phone_fax[0].text.strip()
+                        if phone and phone != 'N/A':
+                            cage_data["Phone"] = phone
+                    
+                    # Extract fax with error handling
+                    try:
+                        fax_element = WebDriverWait(driver, 5).until(
+                            EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'Fax(es)')]/following-sibling::div"))
+                        )
+                        fax = fax_element.text.strip()
+                        if fax and fax != 'N/A':
+                            cage_data["Fax"] = fax
+                    except:
+                        pass
+                    
+                    # Extract email with error handling
+                    try:
+                        email_element = WebDriverWait(driver, 5).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, "a[href^='mailto:']"))
+                        )
+                        email = email_element.get_attribute("href").replace("mailto:", "").strip()
+                        if email and email != 'N/A':
+                            cage_data["Email"] = email
+                    except:
+                        # Try to find any email-like text
+                        email_elements = driver.find_elements(By.XPATH, "//*[contains(text(), '@')]")
+                        if email_elements:
+                            for elem in email_elements:
+                                text = elem.text.strip()
+                                if '@' in text and '.' in text and text != 'N/A':
+                                    cage_data["Email"] = text
+                                    break
+                    
+                    # Validate extraction success
+                    meaningful_fields = ['Organization Name', 'City', 'Phone', 'Street Name', 'Email']
+                    extracted_fields = [field for field in meaningful_fields if cage_data.get(field, 'N/A') not in ['N/A', '', None]]
+                    
+                    if extracted_fields:
+                        extraction_successful = True
+                        print(f"Successfully extracted data for CAGE {cage_code}:")
+                        for field in extracted_fields:
+                            print(f"   {field}: {cage_data[field]}")
+                    else:
+                        print(f"Extraction failed for CAGE {cage_code} - no meaningful data found")
+                    
+                except Exception as data_extraction_error:
+                    print(f"Error extracting data fields for CAGE {cage_code}: {data_extraction_error}")
+                
+            except TimeoutException as te:
+                print(f"Timeout while processing CAGE {cage_code}: {te}")
+            except Exception as processing_error:
+                print(f"Error during CAGE processing for {cage_code}: {processing_error}")
 
         except Exception as e:
             print(f"Error extracting data for CAGE code {cage_code}: {e}")
+
+        # Always update cache with new data (even if still empty)
+        if was_cached:
+            print(f"Updating cache for CAGE {cage_code} (was previously empty)")
+        else:
+            print(f"Adding CAGE {cage_code} to cache for 90 days")
+        
+        cage_cache[cage_code] = cage_data
+        extracted_data.append(cage_data)
+        
+        # Add small delay between requests to be respectful
+        time.sleep(1)
+    
+    # Add cached results to final output
+    extracted_data.extend(cached_results)
+    
+    # Save updated cache to file
+    print(f"\nSaving updated cache...")
+    save_cage_cache(cage_cache)
+    
+    print(f"\nCage extraction complete:")
+    print(f"Total results: {len(extracted_data)}")
+    print(f"New/Updated entries: {len(uncached_cages)}")
+    print(f"Valid cached entries used: {len(cached_results)}")
+    print(f"Overall success rate: {(len([d for d in extracted_data if d.get('Organization Name', 'N/A') != 'N/A'])/len(extracted_data)*100):.1f}%")
     
     return extracted_data
 
 def consolidate_duplicates(nsn_data_list):
-    """
-    Consolidate records with the same CAGE code, nomenclature, NSN, and return_by_date
-    by summing their quantities and keeping one consolidated record.
-    """
+    """Consolidate records with the same CAGE code, nomenclature, NSN, return_by_date, and part number (ignoring solicitation)"""
     print("Starting consolidation process...")
     
-    # Dictionary to group records by the consolidation key
     consolidated_dict = defaultdict(list)
     
-    # Group records by the consolidation criteria
     for record in nsn_data_list:
-        # Create a key based on CAGE Code, Nomenclature, NSN, and Return By Date
         consolidation_key = (
             record.get('CAGE Code', '').strip(),
             record.get('Nomenclature', '').strip(),
             record.get('NSN', '').strip(),
-            record.get('Return By Date', '').strip()
+            record.get('Return By Date', '').strip(),
+            record.get('Part Number', '').strip()
+            # REMOVED: Solicitation from consolidation key - now different solicitations with same NSN+CAGE+Part will be consolidated
         )
         consolidated_dict[consolidation_key].append(record)
     
-    # Process consolidated groups
     consolidated_list = []
     
     for key, records in consolidated_dict.items():
         if len(records) == 1:
-            # No duplicates, keep the original record
+            # Single record - no consolidation needed
             consolidated_list.append(records[0])
         else:
-            # Multiple records found, consolidate them
-            cage_code, nomenclature, nsn, return_by_date = key
-            print(f"Consolidating {len(records)} records for CAGE: {cage_code}, NSN: {nsn}, Nomenclature: {nomenclature}")
+            # Multiple records with same key - consolidate them
+            cage_code, nomenclature, nsn, return_by_date, part_number = key
+            print(f"Consolidating {len(records)} records for CAGE: {cage_code}, NSN: {nsn}, Part: {part_number}")
             
-            # Take the first record as base and sum quantities
+            # Use first record as base and sum quantities
             base_record = records[0].copy()
             total_quantity = 0
-            
-            # Collect all part numbers (remove duplicates)
-            all_part_numbers = set()
+            all_solicitations = set()
             
             for record in records:
-                # Sum quantities (handle None values)
+                # Sum quantities from different solicitations
                 quantity = record.get('Quantity', 0)
                 if quantity is not None and isinstance(quantity, (int, float)):
                     total_quantity += quantity
@@ -1291,27 +1627,36 @@ def consolidate_duplicates(nsn_data_list):
                     except (ValueError, TypeError):
                         print(f"Warning: Could not convert quantity '{quantity}' to number")
                 
-                # Collect part numbers
-                part_number = record.get('Part Number', '').strip()
-                if part_number and part_number != 'N/A':
-                    all_part_numbers.add(part_number)
+                # Collect all solicitation numbers for audit trail
+                solicitation = record.get('Solicitation', '').strip()
+                if solicitation and solicitation != 'N/A':
+                    all_solicitations.add(solicitation)
             
             # Update the base record with consolidated data
             base_record['Quantity'] = total_quantity
             
-            # Combine part numbers (remove duplicates)
-            if all_part_numbers:
-                base_record['Part Number'] = ', '.join(sorted(all_part_numbers))
+            # Keep the part number from the key (should be same for all records in this group)
+            base_record['Part Number'] = part_number if part_number and part_number != 'N/A' else 'N/A'
+            
+            # Store primary solicitation number only
+            if all_solicitations:
+                # Keep the first solicitation as primary
+                base_record['Solicitation'] = sorted(all_solicitations)[0]  # Use first solicitation as primary
+                print(f"  Using primary solicitation: {base_record['Solicitation']}")
+                if len(all_solicitations) > 1:
+                    print(f"  (Consolidated from {len(all_solicitations)} solicitations)")
             
             consolidated_list.append(base_record)
-            
-            print(f"Consolidated to 1 record with total quantity: {total_quantity}")
+            print(f"  Result: 1 record with total quantity: {total_quantity}")
     
-    print(f"Consolidation complete: {len(nsn_data_list)} original records -> {len(consolidated_list)} consolidated records")
+    print(f"Consolidation complete: {len(nsn_data_list)} -> {len(consolidated_list)} records")
     return consolidated_list
 
 def process_row_data(row_data_list):
+    """Process row data and create NSN entries"""
     temp_nsn_data_list = []
+    
+    print("Processing row data...")
     
     for row_data in row_data_list:
         try:
@@ -1323,12 +1668,10 @@ def process_row_data(row_data_list):
             issued_date = row_data.get('issued_date', 'N/A')
             return_by_date = row_data.get('return_by_date', 'N/A')
             
-            # Get unit code and map to full description
             unit_code = row_data.get('unit', 'N/A').strip().upper()
             unit_description = UNIT_MAPPING.get(unit_code, f'{unit_code} (Unknown)')
             unit = f"{unit_code} ({unit_description})" if unit_code != 'N/A' else 'N/A'
 
-            # Get additional fields
             inspection_point = row_data.get('inspection_point', '')
             acceptance_point = row_data.get('acceptance_point', '')
             deliver_fob = row_data.get('deliver_fob', '')
@@ -1370,11 +1713,48 @@ def process_row_data(row_data_list):
         except Exception as e:
             print(f"Error processing row data: {e}")
 
-    # Consolidate duplicates before returning
     consolidated_data = consolidate_duplicates(temp_nsn_data_list)
     return consolidated_data
 
-def save_to_db(data_list, cage_details_list):
+def save_single_record_to_db(record_data, cage_details_list):
+    """Save record to database or update quantity if it already exists.
+       Identity = (NSN, CAGE, PART_NUMBER, RETURN_BY_DATE). Solicitation is metadata only.
+    """
+    nsn = record_data.get('NSN', 'N/A')
+    solicitation = record_data.get('Solicitation', 'N/A')
+    cage_code = record_data.get('CAGE Code', 'N/A')
+    part_number = record_data.get('Part Number', 'N/A')
+    return_by = record_data.get('Return By Date', 'N/A')
+
+    # coerce quantity to int safely
+    new_quantity = record_data.get('Quantity') or 0
+    try:
+        new_quantity = int(new_quantity)
+    except Exception:
+        new_quantity = 0
+
+    # check existing by nsn+cage+part+return_by
+    existing_quantity = get_existing_nsn_quantity(nsn, cage_code, part_number, return_by)
+
+    if existing_quantity is not None:
+        print(f"  UPDATING EXISTING: NSN={nsn}, CAGE={cage_code}, PART={part_number}, RETURN_BY={return_by}")
+        print(f"  Current quantity: {existing_quantity}, Adding: {new_quantity}")
+        success = update_existing_quantity(nsn, cage_code, part_number, return_by, new_quantity)
+        if success:
+            try:
+                print(f"  SUCCESS: Total quantity now: {int(existing_quantity) + int(new_quantity)}")
+            except Exception:
+                print("  SUCCESS: Quantity updated")
+            return True
+        else:
+            print("  FAILED: Could not update quantity")
+            return False
+
+    # ========================
+    # INSERT NEW RECORD
+    # ========================
+    print(f"  INSERTING NEW: NSN={nsn}, CAGE={cage_code}, PART={part_number}, RETURN_BY={return_by}, QTY={new_quantity}")
+
     sql_query = """
     INSERT INTO solicitations_solicitation 
     (cage, nsn, nomenclature, solicitation, status, quantity, issued_date, return_by_date, 
@@ -1382,7 +1762,66 @@ def save_to_db(data_list, cage_details_list):
      inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, scraped_date)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
-    
+
+    try:
+        db_connection = MySQLdb.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            passwd=DB_PASSWORD,
+            db=DB_NAME,
+            port=DB_PORT,
+            cursorclass=DictCursor,
+            autocommit=True
+        )
+        cursor = db_connection.cursor()
+
+        # attach CAGE details if available
+        cage_details = next((item for item in cage_details_list if item['CAGE Code'] == cage_code), None)
+
+        if cage_details:
+            organization_name = cage_details.get('Organization Name', 'N/A')
+            street_name = cage_details.get('Street Name', 'N/A')
+            city = cage_details.get('City', 'N/A')
+            postal_code = cage_details.get('Postal Code', 'N/A')
+            phone = cage_details.get('Phone', 'N/A')
+            fax = cage_details.get('Fax', 'N/A')
+            email = cage_details.get('Email', 'N/A')
+        else:
+            organization_name = street_name = city = postal_code = phone = fax = email = 'N/A'
+
+        db_record = (
+            cage_code, nsn, record_data.get('Nomenclature', 'N/A'), solicitation,
+            record_data.get('Status', 'N/A'), new_quantity, record_data.get('Issued Date', 'N/A'),
+            return_by, organization_name, street_name, city, postal_code, phone, fax, email,
+            part_number, record_data.get('Unit', 'EA (EACH)'),
+            record_data.get('Inspection Point', ''), record_data.get('Acceptance Point', ''),
+            record_data.get('Deliver FOB', ''), record_data.get('Deliver Days', ''),
+            record_data.get('Buyer Info', ''), datetime.date.today()
+        )
+
+        cursor.execute(sql_query, db_record)
+        print(f"  SUCCESS: New record inserted with quantity {new_quantity}")
+        return True
+
+    except Exception as e:
+        print(f"  Error inserting new record: {e}")
+        return False
+    finally:
+        try:
+            if 'db_connection' in locals():
+                db_connection.close()
+        except:
+            pass
+
+
+def get_existing_nsn_quantity(nsn, cage_code, part_number, return_by_date):
+    """Get existing quantity for NSN+CAGE+PART+RETURN_BY combination (solicitation-agnostic)."""
+    check_query = """
+    SELECT quantity 
+    FROM solicitations_solicitation 
+    WHERE nsn = %s AND cage = %s AND part_number = %s AND return_by_date = %s
+    LIMIT 1
+    """
     try:
         db_connection = MySQLdb.connect(
             host=DB_HOST,
@@ -1393,73 +1832,83 @@ def save_to_db(data_list, cage_details_list):
             cursorclass=DictCursor
         )
         cursor = db_connection.cursor()
-
-        for data in data_list:
+        cursor.execute(check_query, (nsn, cage_code, part_number, return_by_date))
+        result = cursor.fetchone()
+        if result:
             try:
-                cage_code = data.get('CAGE Code', 'N/A')
-                cage_details = next((item for item in cage_details_list if item['CAGE Code'] == cage_code), None)
-
-                if cage_details:
-                    organization_name = cage_details.get('Organization Name', 'N/A')
-                    street_name = cage_details.get('Street Name', 'N/A')
-                    city = cage_details.get('City', 'N/A')
-                    postal_code = cage_details.get('Postal Code', 'N/A')
-                    phone = cage_details.get('Phone', 'N/A')
-                    fax = cage_details.get('Fax', '-')
-                    email = cage_details.get('Email', 'N/A')
-                else:
-                    organization_name = '-'
-                    street_name = '-'
-                    city = '-'
-                    postal_code = '-'
-                    phone = '-'
-                    fax = '-'
-                    email = '-'
-
-                cursor.execute(sql_query, (
-                    data.get('CAGE Code', 'N/A'),
-                    data.get('NSN', 'N/A'),
-                    data.get('Nomenclature', 'N/A'),
-                    data.get('Solicitation', 'N/A'),
-                    data.get('Status', 'N/A'),
-                    data.get('Quantity', 0),
-                    data.get('Issued Date', 'N/A'),
-                    data.get('Return By Date', 'N/A'),
-                    organization_name,
-                    street_name,
-                    city,
-                    postal_code,
-                    phone,
-                    fax,
-                    email,
-                    data.get('Part Number', 'N/A'),
-                    data.get('Unit', 'EA (EACH)'),
-                    data.get('Inspection Point', ''),
-                    data.get('Acceptance Point', ''),
-                    data.get('Deliver FOB', ''),
-                    data.get('Deliver Days', ''),
-                    data.get('Buyer Info', ''),
-                    datetime.date.today() 
-                ))
-                db_connection.commit()
-                print(f"Saved consolidated record: CAGE {cage_code}, NSN {data.get('NSN', 'N/A')}, Quantity {data.get('Quantity', 0)}")
-                
-            except MySQLdb.Error as e:
-                print(f"Database error: {e}")
-                db_connection.rollback()
-    
+                existing_quantity = int(result['quantity'] or 0)
+            except Exception:
+                existing_quantity = 0
+            print(f"  EXISTING RECORD: (NSN={nsn}, CAGE={cage_code}, PART={part_number}, RETURN_BY={return_by_date}) qty={existing_quantity}")
+            return existing_quantity
+        else:
+            print(f"  NEW RECORD: (NSN={nsn}, CAGE={cage_code}, PART={part_number}, RETURN_BY={return_by_date}) not found")
+            return None
     except Exception as e:
-        print(f"Error connecting to database: {e}")
+        print(f"  Error checking existing quantity: {e}")
+        return None
     finally:
         try:
-            db_connection.close()
+            if 'db_connection' in locals():
+                db_connection.close()
         except:
             pass
 
+def update_existing_quantity(nsn, cage_code, part_number, return_by_date, additional_quantity):
+    """Update existing record (NSN+CAGE+PART+RETURN_BY) by adding new quantity."""
+    update_query = """
+    UPDATE solicitations_solicitation 
+    SET quantity = COALESCE(quantity,0) + %s,
+        scraped_date = %s
+    WHERE nsn = %s AND cage = %s AND part_number = %s AND return_by_date = %s
+    """
+    try:
+        db_connection = MySQLdb.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            passwd=DB_PASSWORD,
+            db=DB_NAME,
+            port=DB_PORT,
+            cursorclass=DictCursor,
+            autocommit=True
+        )
+        cursor = db_connection.cursor()
+
+        try:
+            add_qty = int(additional_quantity or 0)
+        except Exception:
+            add_qty = 0
+
+        cursor.execute(update_query, (add_qty, datetime.date.today(), nsn, cage_code, part_number, return_by_date))
+        if cursor.rowcount > 0:
+            print(f"  QUANTITY UPDATED: +{add_qty} for (NSN={nsn}, CAGE={cage_code}, PART={part_number}, RETURN_BY={return_by_date})")
+            return True
+        else:
+            print("  UPDATE FAILED: No rows matched")
+            return False
+    except Exception as e:
+        print(f"  Error updating quantity: {e}")
+        return False
+    finally:
+        try:
+            if 'db_connection' in locals():
+                db_connection.close()
+        except:
+            pass
+
+
 def main():
-    max_retries = 3
+    start_time = time.time()
+    max_retries = 2
     retry_count = 0
     driver = None
+    
+    # Display cache information at startup
+    print("="*80)
+    print("COMPREHENSIVE WEB SCRAPER WITH 90-DAY CAGE CACHE SYSTEM")
+    print("="*80)
+    print(get_cache_info())
+    print("="*80)
     
     while retry_count < max_retries:
         try:
@@ -1473,103 +1922,92 @@ def main():
                 print("Failed to load website after multiple attempts")
                 return
 
-            driver.maximize_window()
+            print('=' * 70)
+            print("WELCOME TO COMPREHENSIVE RFQ AUTOMATED PROGRAM")
+            print('=' * 70)
 
-            print('--------------------------------------------------------------------------')
-            print("WELCOME TO RFQ AUTOMATED PROGRAM")
-            print('--------------------------------------------------------------------------')
-
-            # Handle date argument - get from command line or use None to default to first date
+            # Handle date argument
             formated_date = sys.argv[1] if len(sys.argv) > 1 else None
             print(f"Requested date: {formated_date}" if formated_date else "No date specified - will use first available date")
 
-            wait = WebDriverWait(driver, 60)
+            wait = WebDriverWait(driver, 30)
 
             # Accept terms and navigate
             click_element(wait, "butAgree")
-            click_element(wait, "ctl00_cph1_lnkRfqDatesRecent")
+            click_element(wait, "ctl00_cph1_lnkRfqDatesIssue")
 
-            # Date selection logic - IMPROVED
-            table_xpath = "//table[@title='RFQ Download Files' and @summary='Table contains links to RFQ files']"
-            table = wait.until(EC.presence_of_element_located((By.XPATH, table_xpath)))
+            # Date selection logic - MODIFIED TO USE RFQ DATES TABLE
+            # Wait for the date table to load
+            date_table_xpath = "//table[@id='ctl00_cph1_dtlDateList' and @title='Table contains Issue Dates for RFQs']"
+            date_table = wait.until(EC.presence_of_element_located((By.XPATH, date_table_xpath)))
 
-            headers = table.find_elements(By.XPATH, ".//thead/tr/th")
-            post_date_index = next(
-                (idx + 1 for idx, header in enumerate(headers) if header.text.strip() == "Post Date"),
-                None
-            )
+            # Get all date links from the table
+            date_links = date_table.find_elements(By.XPATH, ".//td/span/a[contains(@href, 'Value=')]")
 
-            if post_date_index:
-                date_links = table.find_elements(By.XPATH, f".//tbody/tr/td[{post_date_index}]//a")
+            if date_links:
+                # Extract available dates and their elements
+                available_dates = []
+                date_elements = {}
                 
-                if date_links:
-                    # Get the first available date as default
-                    first_available_date = date_links[0].text.strip()
-                    print(f"First available date: {first_available_date}")
-                    
-                    # Determine which date to use
-                    if formated_date:
-                        # User specified a date, try to find it
-                        target_link = None
-                        for link in date_links:
-                            if link.text.strip() == formated_date:
-                                target_link = link
-                                break
-                        
-                        if target_link:
-                            date_to_send = formated_date
-                            print(f"Found requested date: {formated_date}")
-                        else:
-                            print(f"Requested date '{formated_date}' not found in available dates")
-                            print("Available dates:")
-                            for link in date_links:
-                                print(f"  - {link.text.strip()}")
-                            print(f"Defaulting to first available date: {first_available_date}")
-                            target_link = date_links[0]
-                            date_to_send = first_available_date
+                for link in date_links:
+                    date_text = link.text.strip()
+                    available_dates.append(date_text)
+                    date_elements[date_text] = link
+                
+                print(f"Found {len(available_dates)} available dates")
+                first_available_date = available_dates[0] if available_dates else None
+                print(f"First available date: {first_available_date}")
+                
+                # Date selection logic
+                if formated_date:
+                    if formated_date in date_elements:
+                        target_link = date_elements[formated_date]
+                        date_to_send = formated_date
+                        print(f"Found requested date: {formated_date}")
                     else:
-                        # No date specified, use first available date
-                        target_link = date_links[0]
+                        print(f"Requested date '{formated_date}' not found in available dates")
+                        print("Available dates:")
+                        for date in available_dates:
+                            print(f"  - {date}")
+                        print(f"Defaulting to first available date: {first_available_date}")
+                        target_link = date_elements[first_available_date]
                         date_to_send = first_available_date
-                        print(f"Using first available date: {date_to_send}")
+                else:
+                    target_link = date_elements[first_available_date]
+                    date_to_send = first_available_date
+                    print(f"Using first available date: {date_to_send}")
+                
+                if target_link:
+                    print(f"Clicking date link for: {date_to_send}")
+                    target_link.click()
+                    time.sleep(2)
                     
-                    # Click the target link
-                    if target_link:
-                        print(f"Clicking date link for: {date_to_send}")
-                        target_link.click()
-                        
-                        # Wait for the page to load
-                        time.sleep(2)
-                    else:
-                        print("No valid date link found")
-                        return
-                    
-                    # Send date to Django API
+                    # Send date to Django API (optional)
                     try:
                         response = requests.post(
                             'http://localhost:8000/solicitations/',
                             json={
                                 'selected_date': date_to_send, 
-                                'is_user_input': bool(formated_date)  # True if user specified, False if defaulted
+                                'is_user_input': bool(formated_date)
                             },
                             headers={'Content-Type': 'application/json'},
-                            timeout=10
+                            timeout=5
                         )
                         if response.status_code == 200:
                             print(f"Successfully sent date to Django: {date_to_send}")
                         else:
-                            print(f"Django API responded with status {response.status_code}")
+                            print(f"Django API responded with status {response.status_code} (continuing anyway)")
                     except requests.exceptions.RequestException as e:
-                        print(f"Error sending date to Django API: {e}")
+                        print(f"Django API error (continuing anyway): {e}")
                 else:
-                    print("No date links found in the table")
+                    print("No valid date link found")
                     return
             else:
-                print("Post Date column not found in table headers")
+                print("No date links found in the RFQ dates table")
                 return
 
-            # Continue with the rest of your workflow...
-            # (The rest of your main() function remains the same)
+            # Main scraping workflow
+            print("Starting comprehensive data extraction...")
             
             # Check for pagination and handle accordingly
             if check_if_single_page(driver):
@@ -1581,11 +2019,33 @@ def main():
             
             print(f"Total records extracted from all pages: {len(row_data_list)}")
             
-            # Process NSN links
-            cage_codes = process_nsn_links(driver)
-            cage_details_list = extract_cage_details(driver, cage_codes)
-            processed_data = process_row_data(row_data_list)
-            save_to_db(processed_data, cage_details_list)
+            if not row_data_list:
+                print("No data extracted. Exiting.")
+                return
+            
+            # Process NSN links and save each record immediately
+            print("Processing NSN links and saving each record immediately...")
+            total_saved = process_nsn_links_comprehensive(driver,start_time)
+
+            print(f"Completed: {total_saved} records saved to database")
+            
+            end_time = time.time()
+            total_time = end_time - start_time
+            print(f"Script completed successfully in {total_time/60:.2f} minutes ({total_time:.2f} seconds)")
+            print(f"Processed {len(row_data_list)} total records")
+            print(f"Average time per record: {total_time/len(row_data_list):.2f} seconds" if row_data_list else "No records processed")
+            
+            # Performance summary with cache statistics
+            print("\n" + "="*60)
+            print("PERFORMANCE SUMMARY:")
+            print(f"Processed {len(row_data_list)} total records")
+            print(f"Successfully saved {total_saved} records to database")
+            print(f"Average time per record: {total_time/len(row_data_list):.2f} seconds" if row_data_list else "No records processed")
+            
+            print(f"Cache file location: {CACHE_FILE_PATH}")
+            print(f"Cache duration: {CACHE_DURATION_DAYS} days")
+            print("="*60)
+            
             break
             
         except Exception as e:
@@ -1595,14 +2055,29 @@ def main():
             if retry_count >= max_retries:
                 print("Max retries reached. Exiting.")
                 break
-            time.sleep(10)
+            time.sleep(5)
         finally:
             try:
                 if driver:
                     driver.quit()
+                    print("WebDriver closed successfully")
             except:
                 pass
-            print("Script execution completed")
 
 if __name__ == "__main__":
+    print("="*80)
+    print("COMPREHENSIVE WEB SCRAPER WITH 90-DAY CAGE CACHE SYSTEM")
+    print("Expected Performance: High-speed processing with comprehensive data")
+    print("Key Features:")
+    print("Complete PDF data extraction (unit, buyer info, delivery details)")
+    print("90-day CAGE code caching system for maximum efficiency")
+    print("Comprehensive CAGE code processing")
+    print("Optimized single-window navigation")
+    print("Enhanced error handling and recovery")
+    print("Memory management and intelligent caching")
+    print("Data consolidation and deduplication")
+    print("Persistent cache with automatic expiration")
+    print(f"Cache file: {CACHE_FILE_PATH}")
+    print(f"Cache duration: {CACHE_DURATION_DAYS} days")
+    print("="*80)
     main()

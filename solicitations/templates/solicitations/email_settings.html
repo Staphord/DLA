@@ -5,7 +5,7 @@
 <section class="vh-100">
     <div class="container mt-5">
         <div class="row">
-            <div class="col-md-8 mx-auto">
+            <div class="col-md-10 mx-auto">
                 <div class="card shadow">
                     <div class="card-header mybg">
                         <h4 class="text-white mb-0">Email Automation Settings</h4>
@@ -21,20 +21,121 @@
                             <div id="schedule-settings" class="card p-3 bg-light mb-4">
                                 <h5>Schedule Settings</h5>
                                 
-                                <div class="row g-3">
+                                <div class="row g-3 mb-4">
                                     <div class="col-md-6">
                                         <label for="{{ form.send_day.id_for_label }}" class="form-label">Frequency:</label>
                                         {{ form.send_day }}
+                                        {% if form.send_day.errors %}
+                                            <div class="text-danger small mt-1">
+                                                {% for error in form.send_day.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
                                     </div>
                                     
                                     <div class="col-md-6">
-                                        <label for="{{ form.send_time.id_for_label }}" class="form-label">Time:</label>
-                                        {{ form.send_time }}
+                                        <label for="{{ form.send_scope.id_for_label }}" class="form-label">Send Scope:</label>
+                                        {{ form.send_scope }}
+                                        {% if form.send_scope.help_text %}
+                                            <div class="form-text">{{ form.send_scope.help_text }}</div>
+                                        {% endif %}
+                                        {% if form.send_scope.errors %}
+                                            <div class="text-danger small mt-1">
+                                                {% for error in form.send_scope.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <!-- Multiple Time Intervals -->
+                                <div class="mb-4">
+                                    <h6 class="mb-3">Time Intervals</h6>
+                                    <p class="text-muted small mb-3">Configure up to three different times when RFQs will be sent automatically. Enable/disable each time slot as needed.</p>
+                                    
+                                    <!-- Time Interval 1 -->
+                                    <div class="row g-3 mb-3 align-items-center">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                {{ form.enable_time_1 }}
+                                                <label class="form-check-label" for="{{ form.enable_time_1.id_for_label }}">
+                                                    <strong>Time 1</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.send_time_1.id_for_label }}" class="form-label">Morning:</label>
+                                            {{ form.send_time_1 }}
+                                            {% if form.send_time_1.errors %}
+                                                <div class="text-danger small mt-1">
+                                                    {% for error in form.send_time_1.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Default: 9:00 AM</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Time Interval 2 -->
+                                    <div class="row g-3 mb-3 align-items-center">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                {{ form.enable_time_2 }}
+                                                <label class="form-check-label" for="{{ form.enable_time_2.id_for_label }}">
+                                                    <strong>Time 2</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.send_time_2.id_for_label }}" class="form-label">Afternoon:</label>
+                                            {{ form.send_time_2 }}
+                                            {% if form.send_time_2.errors %}
+                                                <div class="text-danger small mt-1">
+                                                    {% for error in form.send_time_2.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Default: 2:00 PM</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Time Interval 3 -->
+                                    <div class="row g-3 mb-3 align-items-center">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                {{ form.enable_time_3 }}
+                                                <label class="form-check-label" for="{{ form.enable_time_3.id_for_label }}">
+                                                    <strong>Time 3</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.send_time_3.id_for_label }}" class="form-label">Evening:</label>
+                                            {{ form.send_time_3 }}
+                                            {% if form.send_time_3.errors %}
+                                                <div class="text-danger small mt-1">
+                                                    {% for error in form.send_time_3.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Default: 6:00 PM</span>
+                                        </div>
                                     </div>
                                 </div>
                                 
                                 <!-- Schedule Preview -->
-                                <div class="mt-3 p-2 bg-white rounded border">
+                                <div class="mt-3 p-3 bg-white rounded border">
                                     <h6 class="mb-2">Schedule Preview:</h6>
                                     <div id="schedulePreview" class="fw-bold text-primary">
                                         <!-- Will be filled by JavaScript -->
@@ -45,7 +146,7 @@
                             <!-- Current Status Display -->
                             <div class="mb-3">
                                 <span class="fw-bold me-2">Current Status:</span>
-                                {% if is_enabled %}
+                                {% if current_auto_send %}
                                 <span class="badge bg-success">Enabled</span>
                                 {% else %}
                                 <span class="badge bg-danger">Disabled</span>
@@ -57,8 +158,10 @@
                                 <a href="{% url 'solicitations:solicitations' %}" class="btn btn-secondary">Cancel</a>
                                 
                                 <!-- Dynamic button that changes based on schedule changes -->
-                                <button type="submit" id="actionButton" name="toggle_status" class="btn {% if is_enabled %}btn-danger{% else %}btn-success{% endif %}">
-                                    {% if is_enabled %}
+                                <button type="submit" id="actionButton" name="toggle_status" 
+                                        class="btn {% if current_auto_send %}btn-danger{% else %}btn-success{% endif %}"
+                                        data-current-state="{{ current_auto_send|yesno:'enabled,disabled' }}">
+                                    {% if current_auto_send %}
                                     <i class="fas fa-power-off"></i> Disable Automation
                                     {% else %}
                                     <i class="fas fa-power-on"></i> Enable Automation
@@ -79,46 +182,91 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const daySelect = document.getElementById('{{ form.send_day.id_for_label }}');
-        const timeInput = document.getElementById('{{ form.send_time.id_for_label }}');
+        const scopeSelect = document.getElementById('{{ form.send_scope.id_for_label }}');
         const schedulePreview = document.getElementById('schedulePreview');
         const actionButton = document.getElementById('actionButton');
         const actionType = document.getElementById('action_type');
         
+        // Time interval elements
+        const time1Checkbox = document.getElementById('{{ form.enable_time_1.id_for_label }}');
+        const time1Input = document.getElementById('{{ form.send_time_1.id_for_label }}');
+        const time2Checkbox = document.getElementById('{{ form.enable_time_2.id_for_label }}');
+        const time2Input = document.getElementById('{{ form.send_time_2.id_for_label }}');
+        const time3Checkbox = document.getElementById('{{ form.enable_time_3.id_for_label }}');
+        const time3Input = document.getElementById('{{ form.send_time_3.id_for_label }}');
+        
         // Store initial values to detect changes
-        const initialDay = daySelect.value;
-        const initialTime = timeInput.value;
+        const initialValues = {
+            day: daySelect.value,
+            scope: scopeSelect.value,
+            time1Enabled: time1Checkbox.checked,
+            time1: time1Input.value,
+            time2Enabled: time2Checkbox.checked,
+            time2: time2Input.value,
+            time3Enabled: time3Checkbox.checked,
+            time3: time3Input.value
+        };
         
         // Update schedule preview
         function updateSchedulePreview() {
             const dayText = daySelect.options[daySelect.selectedIndex].text;
-            const timeValue = timeInput.value; // This is already in 24-hour format
-
-            if (dayText === 'Every day') {
-                schedulePreview.textContent = `Emails will be sent every day at ${timeValue}`;
-            } else {
-                schedulePreview.textContent = `Emails will be sent every ${dayText} at ${timeValue}`;
+            const scopeText = scopeSelect.options[scopeSelect.selectedIndex].text;
+            
+            // Collect enabled times
+            const enabledTimes = [];
+            if (time1Checkbox.checked && time1Input.value) {
+                enabledTimes.push(time1Input.value);
+            }
+            if (time2Checkbox.checked && time2Input.value) {
+                enabledTimes.push(time2Input.value);
+            }
+            if (time3Checkbox.checked && time3Input.value) {
+                enabledTimes.push(time3Input.value);
             }
             
-            // Check if changes were made to schedule
-            const hasChanges = (daySelect.value !== initialDay || timeInput.value !== initialTime);
+            let previewText = '';
+            if (enabledTimes.length === 0) {
+                previewText = 'No time intervals enabled';
+            } else {
+                const timesStr = enabledTimes.join(', ');
+                if (dayText === 'Every day') {
+                    previewText = `Emails will be sent every day at ${timesStr}`;
+                } else {
+                    previewText = `Emails will be sent every ${dayText} at ${timesStr}`;
+                }
+                previewText += ` (${scopeText.toLowerCase()})`;
+            }
+            
+            schedulePreview.textContent = previewText;
+            
+            // Check if changes were made
+            const hasChanges = (
+                daySelect.value !== initialValues.day ||
+                scopeSelect.value !== initialValues.scope ||
+                time1Checkbox.checked !== initialValues.time1Enabled ||
+                time1Input.value !== initialValues.time1 ||
+                time2Checkbox.checked !== initialValues.time2Enabled ||
+                time2Input.value !== initialValues.time2 ||
+                time3Checkbox.checked !== initialValues.time3Enabled ||
+                time3Input.value !== initialValues.time3
+            );
             
             // Update button based on changes
             if (hasChanges) {
                 // Replace with Save Changes button
                 actionButton.innerHTML = '<i class="fas fa-save"></i> Save Changes';
                 actionButton.className = 'btn btn-warning text-white';
-                actionButton.name = 'save_schedule';
                 actionType.value = 'save_schedule';
             } else {
-                // Restore original toggle button
-                {% if is_enabled %}
+                // Show current status button based on current auto_send state
+                const currentState = actionButton.getAttribute('data-current-state');
+                if (currentState === 'enabled') {
                     actionButton.innerHTML = '<i class="fas fa-power-off"></i> Disable Automation';
                     actionButton.className = 'btn btn-danger';
-                {% else %}
+                } else {
                     actionButton.innerHTML = '<i class="fas fa-power-on"></i> Enable Automation';
                     actionButton.className = 'btn btn-success';
-                {% endif %}
-                actionButton.name = 'toggle_status';
+                }
                 actionType.value = 'toggle_status';
             }
         }
@@ -128,7 +276,30 @@
         
         // Add event listeners
         daySelect.addEventListener('change', updateSchedulePreview);
-        timeInput.addEventListener('change', updateSchedulePreview);
+        scopeSelect.addEventListener('change', updateSchedulePreview);
+        time1Checkbox.addEventListener('change', updateSchedulePreview);
+        time1Input.addEventListener('change', updateSchedulePreview);
+        time2Checkbox.addEventListener('change', updateSchedulePreview);
+        time2Input.addEventListener('change', updateSchedulePreview);
+        time3Checkbox.addEventListener('change', updateSchedulePreview);
+        time3Input.addEventListener('change', updateSchedulePreview);
+        
+        // Disable time inputs when checkbox is unchecked
+        function toggleTimeInput(checkbox, input) {
+            input.disabled = !checkbox.checked;
+            if (!checkbox.checked) {
+                input.value = '';
+            }
+        }
+        
+        // Set up initial state and event listeners for time inputs
+        toggleTimeInput(time1Checkbox, time1Input);
+        toggleTimeInput(time2Checkbox, time2Input);
+        toggleTimeInput(time3Checkbox, time3Input);
+        
+        time1Checkbox.addEventListener('change', () => toggleTimeInput(time1Checkbox, time1Input));
+        time2Checkbox.addEventListener('change', () => toggleTimeInput(time2Checkbox, time2Input));
+        time3Checkbox.addEventListener('change', () => toggleTimeInput(time3Checkbox, time3Input));
     });
 </script>
 {% endblock %}

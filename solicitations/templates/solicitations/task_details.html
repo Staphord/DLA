@@ -1,0 +1,719 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Task Log</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:user-tasks-list' %}">Tasks</a></li>
+      <li class="breadcrumb-item active">{{ session.session_id|slice:":12" }}...</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+  <!-- Real-time Controls -->
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <div class="d-flex align-items-center gap-3 mb-2 mb-md-0">
+              <h6 class="mb-0">View Mode:</h6>
+              <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" name="viewMode" id="staticMode" {% if not realtime_mode %}checked{% endif %}>
+                <label class="btn btn-outline-primary btn-sm" for="staticMode">
+                  <i class="bi bi-pause-circle me-1"></i>Static
+                </label>
+                
+                <input type="radio" class="btn-check" name="viewMode" id="realtimeMode" {% if realtime_mode %}checked{% endif %}>
+                <label class="btn btn-outline-success btn-sm" for="realtimeMode">
+                  <i class="bi bi-play-circle me-1"></i>Real-time
+                </label>
+              </div>
+              
+              <!-- Real-time status indicator -->
+              <div id="realtimeStatus" class="d-flex align-items-center gap-2" style="display: {% if realtime_mode %}flex{% else %}none{% endif %} !important;">
+                <div class="status-indicator">
+                  <span class="status-dot bg-secondary" id="connectionDot"></span>
+                  <span class="status-text" id="connectionText">Connecting...</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Real-time controls -->
+            <div id="realtimeControls" style="display: {% if realtime_mode %}flex{% else %}none{% endif %} !important;" class="d-flex align-items-center gap-2 flex-wrap">
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="autoScrollToggle" checked>
+                <label class="form-check-label" for="autoScrollToggle">Auto-scroll</label>
+              </div>
+              <small class="text-muted">New: <span id="newLogCount">0</span></small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs Container -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+          <!-- Header -->
+          <div class="logs-header p-3 border-bottom bg-light">
+            <h6 class="mb-0 fw-medium">
+              <i class="bi bi-list-ul me-2"></i>
+              Execution Logs 
+              {% if not realtime_mode %}
+                <span class="text-muted small">({{ logs.paginator.count }} total)</span>
+              {% else %}
+                <span class="text-muted small" id="totalLogCount">(Real-time mode)</span>
+              {% endif %}
+            </h6>
+          </div>
+
+          <!-- Logs Display -->
+          <div class="logs-container" id="logsContainer" data-realtime="{% if realtime_mode %}true{% else %}false{% endif %}">
+            {% if realtime_mode %}
+              <!-- Real-time logs container -->
+              <div id="realtimeLogsContainer"></div>
+            {% else %}
+              <!-- Static logs display -->
+              {% for log in logs %}
+                <div class="log-entry {% if log.level == 'ERROR' %}log-error{% elif log.level == 'WARNING' %}log-warning{% elif log.category == 'email' %}log-email{% endif %}" data-log-id="{{ log.id }}">
+                  <div class="log-main">
+                    <div class="log-meta">
+                      <span class="log-time">{{ log.timestamp|date:"H:i:s.u" }}</span>
+                      <span class="log-level log-level-{{ log.level|lower }}">{{ log.level }}</span>
+                      <span class="log-category">{{ log.category }}</span>
+                      {% if log.cage_code %}
+                        <span class="log-tag">{{ log.cage_code }}</span>
+                      {% endif %}
+                      {% if log.rfq_id %}
+                        <span class="log-tag">RFQ:{{ log.rfq_id }}</span>
+                      {% endif %}
+                    </div>
+                    <div class="log-message">{{ log.message }}</div>
+                    {% if log.email_recipient or log.error_details %}
+                      <div class="log-details">
+                        {% if log.email_recipient %}
+                          <span class="detail-item">
+                            <i class="bi bi-envelope me-1"></i>
+                            <a href="mailto:{{ log.email_recipient }}" class="text-decoration-none">{{ log.email_recipient }}</a>
+                          </span>
+                        {% endif %}
+                        {% if log.email_subject %}
+                          <span class="detail-item">
+                            <i class="bi bi-chat-text me-1"></i>
+                            {{ log.email_subject }}
+                          </span>
+                        {% endif %}
+                        {% if log.error_details %}
+                          <span class="detail-item error-detail">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            {{ log.error_details|truncatechars:100 }}
+                          </span>
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  </div>
+                  <div class="log-actions">
+                    <button class="btn btn-link btn-sm p-0 text-muted" type="button" data-bs-toggle="collapse" data-bs-target="#details-{{ log.id }}" aria-expanded="false">
+                      <i class="bi bi-three-dots"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Expanded Details -->
+                <div class="collapse" id="details-{{ log.id }}">
+                  <div class="log-expanded">
+                    <div class="expanded-content">
+                      {% if log.all_fields %}
+                        <div class="row g-3">
+                          {% for key, value in log.all_fields.items %}
+                            {% if value is not None and value != '' and value != 0 or value == 0 %}
+                              <div class="col-md-6">
+                                <div class="field-item">
+                                  <label class="field-label">{{ key|capfirst|title }}</label>
+                                  <div class="field-value">
+                                    {% if key == 'extra_data_pretty' %}
+                                      <pre class="code-block">{{ value|safe }}</pre>
+                                    {% elif key == 'email_recipient' %}
+                                      <a href="mailto:{{ value }}" class="text-primary text-decoration-none">
+                                        <i class="bi bi-envelope me-1"></i>{{ value }}
+                                      </a>
+                                    {% elif key == 'cage_code' %}
+                                      <span class="badge bg-secondary">{{ value }}</span>
+                                    {% elif key == 'rfq_id' or key == 'solicitation_id' %}
+                                      <span class="badge bg-info">{{ value }}</span>
+                                    {% elif key == 'timestamp' or key == 'formatted_timestamp' %}
+                                      <code>{{ value }}</code>
+                                    {% else %}
+                                      <span class="text-break">{{ value }}</span>
+                                    {% endif %}
+                                  </div>
+                                </div>
+                              </div>
+                            {% endif %}
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="alert alert-warning mb-0">
+                          <i class="bi bi-exclamation-triangle me-2"></i>
+                          No detailed information available for this log entry.
+                        </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+              {% empty %}
+                <div class="empty-state">
+                  <div class="text-center py-5">
+                    <i class="bi bi-inbox display-4 text-muted"></i>
+                    <h5 class="mt-3 text-muted">No logs found</h5>
+                    <p class="text-muted">Try adjusting your search filters</p>
+                  </div>
+                </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+
+          <!-- Pagination (only for static mode) -->
+          {% if not realtime_mode and logs.has_other_pages %}
+            <div class="logs-pagination p-3 border-top bg-light">
+              <nav aria-label="Logs pagination">
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                  {% if logs.has_previous %}
+                    <li class="page-item">
+                      <a class="page-link" href="?page={{ logs.previous_page_number }}{% if current_category_filter %}&category={{ current_category_filter }}{% endif %}{% if current_level_filter %}&level={{ current_level_filter }}{% endif %}{% if current_search %}&q={{ current_search|urlencode }}{% endif %}{% if page_size %}&page_size={{ page_size }}{% endif %}">
+                        <i class="bi bi-chevron-left"></i>
+                      </a>
+                    </li>
+                  {% endif %}
+
+                  <li class="page-item active">
+                    <span class="page-link">{{ logs.number }} of {{ logs.paginator.num_pages }}</span>
+                  </li>
+
+                  {% if logs.has_next %}
+                    <li class="page-item">
+                      <a class="page-link" href="?page={{ logs.next_page_number }}{% if current_category_filter %}&category={{ current_category_filter }}{% endif %}{% if current_level_filter %}&level={{ current_level_filter }}{% endif %}{% if current_search %}&q={{ current_search|urlencode }}{% endif %}{% if page_size %}&page_size={{ page_size }}{% endif %}">
+                        <i class="bi bi-chevron-right"></i>
+                      </a>
+                    </li>
+                  {% endif %}
+                </ul>
+              </nav>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+/* Status indicator styles */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.bg-success { background-color: #28a745 !important; }
+.status-dot.bg-danger { background-color: #dc3545 !important; }
+.status-dot.bg-warning { background-color: #ffc107 !important; }
+.status-dot.bg-secondary { background-color: #6c757d !important; }
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Real-time terminal theme */
+.logs-container[data-realtime="true"] {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.logs-container[data-realtime="true"] .log-entry {
+  border-bottom: 1px solid #333;
+  background-color: transparent;
+  color: #d4d4d4;
+}
+
+.logs-container[data-realtime="true"] .log-entry:hover {
+  background-color: #252526;
+}
+
+.logs-container[data-realtime="true"] .log-message { color: #d4d4d4; } 
+.logs-container[data-realtime="true"] .log-time { color: #9cdcfe; }
+.logs-container[data-realtime="true"] .log-level-info { background-color: #007acc; }
+.logs-container[data-realtime="true"] .log-level-warning { background-color: #ff8800; }
+.logs-container[data-realtime="true"] .log-level-error { background-color: #f14c4c; }
+.logs-container[data-realtime="true"] .log-category { background-color: #3c3c3c; color: #cccccc; }
+.logs-container[data-realtime="true"] .log-tag { background-color: #2d2d30; border-color: #464647; color: #cccccc; }
+
+/* New log animation */
+.log-entry.new-log {
+  animation: highlightNew 0.5s ease-in-out;
+}
+
+@keyframes highlightNew {
+  0% { background-color: #ffeaa7; transform: translateX(-5px); }
+  100% { background-color: transparent; transform: translateX(0); }
+}
+
+/* Standard log styles */
+.log-entry {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  transition: background-color 0.2s ease;
+}
+
+.log-entry:hover { background-color: #f8f9fa; }
+.log-entry.log-error { border-left: 3px solid #dc3545; background-color: #fff5f5; }
+.log-entry.log-warning { border-left: 3px solid #fd7e14; background-color: #fff8f0; }
+.log-entry.log-email { border-left: 3px solid #0d6efd; background-color: #f0f7ff; }
+
+.log-main { flex: 1; min-width: 0; }
+
+.log-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.log-time {
+  color: #6c757d;
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.log-level {
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 50px;
+  text-align: center;
+}
+
+.log-level-info { background-color: #0dcaf0; color: #fff; }
+.log-level-warning { background-color: #fd7e14; color: #fff; }
+.log-level-error { background-color: #dc3545; color: #fff; }
+.log-level-critical { background-color: #6f42c1; color: #fff; }
+.log-level-debug { background-color: #6c757d; color: #fff; }
+
+.log-category {
+  background-color: #e9ecef;
+  color: #495057;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.625rem;
+  text-transform: lowercase;
+}
+
+.log-tag {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  color: #495057;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 500;
+}
+
+.log-message {
+  font-weight: 500;
+  color: #212529;
+  margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+
+.log-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #6c757d;
+}
+
+.detail-item { display: flex; align-items: center; }
+.detail-item.error-detail { color: #dc3545; }
+
+.log-actions {
+  margin-left: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.log-entry:hover .log-actions { opacity: 1; }
+
+.log-expanded {
+  background-color: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  padding: 1rem;
+  margin: 0 1rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.expanded-content {
+  background-color: #fff;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  border: 1px solid #e9ecef;
+}
+
+.field-item { margin-bottom: 0.75rem; }
+
+.field-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6c757d;
+  margin-bottom: 0.25rem;
+}
+
+.field-value { font-size: 0.875rem; color: #212529; }
+
+.code-block {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty-state { padding: 2rem; }
+.logs-header { position: sticky; top: 0; z-index: 10; }
+.logs-pagination { position: sticky; bottom: 0; z-index: 10; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .log-meta { flex-direction: column; align-items: flex-start; gap: 0.25rem; }
+  .log-details { flex-direction: column; gap: 0.25rem; }
+  .logs-container { max-height: 60vh; }
+}
+
+/* Scrollbar styling */
+.logs-container::-webkit-scrollbar { width: 6px; }
+.logs-container::-webkit-scrollbar-track { background: #f1f1f1; }
+.logs-container::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+.logs-container::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+</style>
+
+<script>
+class RealtimeLogViewer {
+  constructor() {
+    this.socket = null;
+    this.isConnected = false;
+    this.isRealtimeMode = document.getElementById('logsContainer').dataset.realtime === 'true';
+    this.autoScroll = true;
+    this.newLogCount = 0;
+    this.maxLogsDisplay = 1000;
+    
+    this.init();
+  }
+
+  init() {
+    this.setupEventListeners();
+    if (this.isRealtimeMode) {
+      this.connectWebSocket();
+      this.loadInitialLogs();
+    }
+  }
+
+  setupEventListeners() {
+    // Mode toggle
+    document.getElementById('staticMode')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.switchToStaticMode();
+    });
+
+    document.getElementById('realtimeMode')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.switchToRealtimeMode();
+    });
+
+    // Real-time controls
+    document.getElementById('autoScrollToggle')?.addEventListener('change', (e) => {
+      this.autoScroll = e.target.checked;
+    });
+
+    document.getElementById('clearLogsBtn')?.addEventListener('click', () => {
+      this.clearDisplayedLogs();
+    });
+
+    document.getElementById('scrollToBottomBtn')?.addEventListener('click', () => {
+      this.scrollToBottom();
+    });
+  }
+
+  connectWebSocket() {
+    const wsUrl = '{{ ws_url }}';
+    this.socket = new WebSocket(wsUrl);
+
+    this.socket.onopen = () => {
+      this.isConnected = true;
+      this.updateConnectionStatus('connected', 'Connected');
+      console.log('WebSocket connected');
+    };
+
+    this.socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      this.handleWebSocketMessage(data);
+    };
+
+    this.socket.onclose = () => {
+      this.isConnected = false;
+      this.updateConnectionStatus('disconnected', 'Disconnected');
+      setTimeout(() => {
+        if (this.isRealtimeMode) this.connectWebSocket();
+      }, 3000);
+    };
+
+    this.socket.onerror = (error) => {
+      this.updateConnectionStatus('error', 'Connection Error');
+      console.error('WebSocket error:', error);
+    };
+  }
+
+  handleWebSocketMessage(data) {
+    switch (data.type) {
+      case 'connection_established':
+        console.log('Connection established:', data.message);
+        break;
+      case 'new_log':
+        this.addNewLog(data.log);
+        break;
+    }
+  }
+
+  addNewLog(logData) {
+    const container = document.getElementById('realtimeLogsContainer');
+    const logElement = this.createLogElement(logData);
+    
+    logElement.classList.add('new-log');
+    container.appendChild(logElement);
+    
+    this.newLogCount++;
+    this.updateNewLogCount();
+    this.limitDisplayedLogs();
+    
+    if (this.autoScroll) this.scrollToBottom();
+    
+    setTimeout(() => logElement.classList.remove('new-log'), 500);
+  }
+
+  createLogElement(logData) {
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${this.getLogClass(logData)}`;
+    logEntry.dataset.logId = logData.id;
+
+    const formattedTime = this.formatTimestamp(logData.timestamp);
+    
+    logEntry.innerHTML = `
+      <div class="log-main">
+        <div class="log-meta">
+          <span class="log-time">${formattedTime}</span>
+          <span class="log-level log-level-${logData.level.toLowerCase()}">${logData.level}</span>
+          <span class="log-category">${logData.category}</span>
+          ${logData.cage_code ? `<span class="log-tag">${logData.cage_code}</span>` : ''}
+          ${logData.rfq_id ? `<span class="log-tag">RFQ:${logData.rfq_id}</span>` : ''}
+        </div>
+        <div class="log-message">${this.escapeHtml(logData.message)}</div>
+        ${this.createLogDetails(logData)}
+      </div>
+    `;
+
+    return logEntry;
+  }
+
+  getLogClass(logData) {
+    let classes = [];
+    if (logData.level === 'ERROR') classes.push('log-error');
+    else if (logData.level === 'WARNING') classes.push('log-warning');
+    else if (logData.category === 'email') classes.push('log-email');
+    return classes.join(' ');
+  }
+
+  createLogDetails(logData) {
+    const details = [];
+    
+    if (logData.email_recipient) {
+      details.push(`<span class="detail-item"><i class="bi bi-envelope me-1"></i><a href="mailto:${logData.email_recipient}" class="text-decoration-none">${logData.email_recipient}</a></span>`);
+    }
+    
+    if (logData.email_subject) {
+      details.push(`<span class="detail-item"><i class="bi bi-chat-text me-1"></i>${this.escapeHtml(logData.email_subject)}</span>`);
+    }
+    
+    if (logData.error_details) {
+      const truncated = logData.error_details.length > 100 ? logData.error_details.substring(0, 100) + '...' : logData.error_details;
+      details.push(`<span class="detail-item error-detail"><i class="bi bi-exclamation-triangle me-1"></i>${this.escapeHtml(truncated)}</span>`);
+    }
+
+    return details.length > 0 ? `<div class="log-details">${details.join('')}</div>` : '';
+  }
+
+  formatTimestamp(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}.${date.getMilliseconds().toString().padStart(3, '0')}`;
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  limitDisplayedLogs() {
+    const container = document.getElementById('realtimeLogsContainer');
+    const logs = container.children;
+    if (logs.length > this.maxLogsDisplay) {
+      const logsToRemove = logs.length - this.maxLogsDisplay;
+      for (let i = 0; i < logsToRemove; i++) {
+        container.removeChild(logs[0]);
+      }
+    }
+  }
+
+  scrollToBottom() {
+    const container = document.getElementById('logsContainer');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  clearDisplayedLogs() {
+    document.getElementById('realtimeLogsContainer').innerHTML = '';
+    this.newLogCount = 0;
+    this.updateNewLogCount();
+  }
+
+  updateConnectionStatus(status, text) {
+    const dot = document.getElementById('connectionDot');
+    const statusText = document.getElementById('connectionText');
+    
+    if (dot && statusText) {
+      dot.className = 'status-dot';
+      switch (status) {
+        case 'connected': dot.classList.add('bg-success'); break;
+        case 'disconnected': dot.classList.add('bg-danger'); break;
+        case 'error': dot.classList.add('bg-warning'); break;
+        default: dot.classList.add('bg-secondary');
+      }
+      statusText.textContent = text;
+    }
+  }
+
+  updateNewLogCount() {
+    const countElement = document.getElementById('newLogCount');
+    if (countElement) countElement.textContent = this.newLogCount;
+  }
+
+  loadInitialLogs() {
+    // Load existing logs via AJAX for real-time mode
+    const sessionId = '{{ session.session_id }}';
+    fetch(`/solicitations/api/logs/${sessionId}/recent/`, {
+      method: 'GET',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/json',
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.logs) {
+        const container = document.getElementById('realtimeLogsContainer');
+        data.logs.forEach(log => {
+          const logElement = this.createLogElement(log);
+          container.appendChild(logElement);
+        });
+        
+        // Update total count
+        const totalCountElement = document.getElementById('totalLogCount');
+        if (totalCountElement) {
+          totalCountElement.textContent = `(${data.total_count} loaded)`;
+        }
+        
+        this.scrollToBottom();
+      }
+    })
+    .catch(error => {
+      console.error('Error loading initial logs:', error);
+    });
+  }
+
+  switchToRealtimeMode() {
+    const url = new URL(window.location);
+    url.searchParams.set('realtime', 'true');
+    window.location.href = url.toString();
+  }
+
+  switchToStaticMode() {
+    const url = new URL(window.location);
+    url.searchParams.delete('realtime');
+    window.location.href = url.toString();
+  }
+
+  disconnect() {
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+  window.logViewer = new RealtimeLogViewer();
+  
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', () => {
+    if (window.logViewer) window.logViewer.disconnect();
+  });
+  
+  // Double-click to copy log ID
+  document.addEventListener('dblclick', function(e) {
+    const logEntry = e.target.closest('.log-entry');
+    if (logEntry?.dataset.logId) {
+      navigator.clipboard.writeText(`Log ID: ${logEntry.dataset.logId}`);
+      const feedback = document.createElement('div');
+      feedback.textContent = 'Log ID copied!';
+      feedback.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #28a745; color: white; padding: 8px 16px; border-radius: 4px; z-index: 9999; font-size: 14px;';
+      document.body.appendChild(feedback);
+      setTimeout(() => feedback.remove(), 2000);
+    }
+  });
+});
+</script>
+{% endblock %}
