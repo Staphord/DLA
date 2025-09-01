@@ -1,3 +1,5 @@
+import copy
+
 from boto3 import Session
 from botocore.client import ClientError
 
@@ -8,7 +10,7 @@ QUEUE_DOES_NOT_EXIST = "AWS.SimpleQueueService.NonExistentQueue"
 
 
 class Sqs(Broker):
-    def __init__(self, list_key: str = Conf.PREFIX):
+    def __init__(self, list_key: str = None):
         self.sqs = None
         super(Sqs, self).__init__(list_key)
         self.queue = self.get_queue()
@@ -39,7 +41,8 @@ class Sqs(Broker):
                 raise ValueError("receive_message_wait_time_seconds should be int")
             if wait_time_second > 20:
                 raise ValueError(
-                    "receive_message_wait_time_seconds is invalid. Reason: Must be >= 0 and <= 20"
+                    "receive_message_wait_time_seconds is invalid. Reason: Must be >= 0"
+                    " and <= 20"
                 )
             params.update({"WaitTimeSeconds": wait_time_second})
 
@@ -76,16 +79,16 @@ class Sqs(Broker):
         return "AWS SQS"
 
     @staticmethod
-    def get_connection(list_key: str = Conf.PREFIX) -> Session:
-        config = Conf.SQS
-        if "aws_region" in config:
-            config["region_name"] = config["aws_region"]
-            del config["aws_region"]
+    def get_connection(list_key: str = None) -> Session:
+        config_cloned = copy.deepcopy(Conf.SQS)
+        if "aws_region" in config_cloned:
+            config_cloned["region_name"] = config_cloned["aws_region"]
+            del config_cloned["aws_region"]
 
-        if "receive_message_wait_time_seconds" in config:
-            del config["receive_message_wait_time_seconds"]
+        if "receive_message_wait_time_seconds" in config_cloned:
+            del config_cloned["receive_message_wait_time_seconds"]
 
-        return Session(**config)
+        return Session(**config_cloned)
 
     def get_queue(self):
         self.sqs = self.connection.resource("sqs")

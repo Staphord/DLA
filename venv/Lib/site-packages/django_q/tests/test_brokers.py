@@ -2,11 +2,11 @@ import os
 from time import sleep
 
 import pytest
-import redis
 
 from django_q.brokers import Broker, get_broker
 from django_q.conf import Conf
 from django_q.humanhash import uuid
+from django_q.tests.settings import MONGO_HOST, REDIS_HOST
 
 
 def test_broker(monkeypatch):
@@ -40,84 +40,22 @@ def test_redis(monkeypatch):
     broker = get_broker()
     assert broker.ping() is True
     assert broker.info() is not None
-    monkeypatch.setattr(Conf, "REDIS", {"host": "127.0.0.1", "port": 7799})
+    monkeypatch.setattr(Conf, "REDIS", {"host": REDIS_HOST, "port": 7799})
     broker = get_broker()
     with pytest.raises(Exception):
         broker.ping()
-    monkeypatch.setattr(Conf, "REDIS", "redis://127.0.0.1:7799")
+    monkeypatch.setattr(Conf, "REDIS", f"redis://{REDIS_HOST}:7799")
     broker = get_broker()
     with pytest.raises(Exception):
         broker.ping()
 
 
 def test_custom(monkeypatch):
-    monkeypatch.setattr(Conf, "BROKER_CLASS", "brokers.redis_broker.Redis")
+    monkeypatch.setattr(Conf, "BROKER_CLASS", "django_q.brokers.redis_broker.Redis")
     broker = get_broker()
     assert broker.ping() is True
     assert broker.info() is not None
     assert broker.__class__.__name__ == "Redis"
-
-
-def test_disque(monkeypatch):
-    monkeypatch.setattr(Conf, "DISQUE_NODES", ["127.0.0.1:7711"])
-    # check broker
-    broker = get_broker(list_key="disque_test")
-    assert broker.ping() is True
-    assert broker.info() is not None
-    # clear before we start
-    broker.delete_queue()
-    # async_task
-    broker.enqueue("test")
-    assert broker.queue_size() == 1
-    # dequeue
-    task = broker.dequeue()[0]
-    assert task[1] == "test"
-    broker.acknowledge(task[0])
-    assert broker.queue_size() == 0
-    # Retry test
-    monkeypatch.setattr(Conf, "RETRY", 1)
-    broker.enqueue("test")
-    assert broker.queue_size() == 1
-    broker.dequeue()
-    assert broker.queue_size() == 0
-    sleep(1.5)
-    assert broker.queue_size() == 1
-    task = broker.dequeue()[0]
-    assert broker.queue_size() == 0
-    broker.acknowledge(task[0])
-    sleep(1.5)
-    assert broker.queue_size() == 0
-    # delete job
-    task_id = broker.enqueue("test")
-    broker.delete(task_id)
-    assert broker.dequeue() is None
-    # fail
-    task_id = broker.enqueue("test")
-    broker.fail(task_id)
-    # bulk test
-    for _ in range(5):
-        broker.enqueue("test")
-    monkeypatch.setattr(Conf, "BULK", 5)
-    monkeypatch.setattr(Conf, "DISQUE_FASTACK", True)
-    tasks = broker.dequeue()
-    for task in tasks:
-        assert task is not None
-        broker.acknowledge(task[0])
-    # test duplicate acknowledge
-    broker.acknowledge(task[0])
-    # delete queue
-    broker.enqueue("test")
-    broker.enqueue("test")
-    broker.delete_queue()
-    assert broker.queue_size() == 0
-    # connection test
-    monkeypatch.setattr(Conf, "DISQUE_NODES", ["127.0.0.1:7798", "127.0.0.1:7799"])
-    with pytest.raises(redis.exceptions.ConnectionError):
-        broker.get_connection()
-    # connection test with no nodes
-    monkeypatch.setattr(Conf, "DISQUE_NODES", None)
-    with pytest.raises(redis.exceptions.ConnectionError):
-        broker.get_connection()
 
 
 @pytest.mark.skipif(
@@ -186,7 +124,7 @@ def test_ironmq(monkeypatch):
 @pytest.mark.skipif(
     not os.getenv("AWS_ACCESS_KEY_ID"), reason="requires AWS credentials"
 )
-def canceled_sqs(monkeypatch):
+def test_sqs(monkeypatch):
     monkeypatch.setattr(
         Conf,
         "SQS",
@@ -194,11 +132,13 @@ def canceled_sqs(monkeypatch):
             "aws_region": os.getenv("AWS_REGION"),
             "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
             "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
-            "receive_message_wait_time_seconds": 20,
+            "receive_message_wait_time_seconds": 5,
         },
     )
     # check broker
-    broker = get_broker(list_key=uuid()[0])
+    broker = get_broker(list_key="testing")
+    assert "receive_message_wait_time_seconds" in Conf.SQS
+    assert "aws_region" in Conf.SQS
     assert broker.ping() is True
     assert broker.info() is not None
     assert broker.queue_size() == 0
@@ -235,7 +175,7 @@ def canceled_sqs(monkeypatch):
     broker.enqueue("test")
     while task is None:
         task = broker.dequeue()[0]
-    broker.fail(task[0])
+    broker.fail(task[0][0])
     # bulk test
     for _ in range(10):
         broker.enqueue("test")
@@ -312,7 +252,7 @@ def test_orm(monkeypatch):
 
 @pytest.mark.django_db
 def test_mongo(monkeypatch):
-    monkeypatch.setattr(Conf, "MONGO", {"host": "127.0.0.1", "port": 27017})
+    monkeypatch.setattr(Conf, "MONGO", {"host": MONGO_HOST, "port": 27017})
     # check broker
     broker = get_broker(list_key="mongo_test")
     assert broker.ping() is True

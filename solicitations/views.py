@@ -362,7 +362,7 @@ def searched_solicitations(request):
         mysearch = request.POST.get('mysearch', '') 
         if mysearch:
             today = timezone.now().date()
-            cutoff_date = today - timedelta(days=7)
+            cutoff_date = today - timedelta(days=14)
             
             # OPTIMIZATION 1: Use subqueries for database-level filtering (same as other views)
             sent_emails_subquery = SolicitationEmailStatus.objects.filter(
@@ -480,7 +480,7 @@ def searched_solicitations(request):
 def filtered_solicitations(request):
     try:
         today = timezone.now().date()
-        cutoff_date = today - timedelta(days=7)
+        cutoff_date = today - timedelta(days=14)
         
         # OPTIMIZATION 1: Use subqueries for database-level filtering
         sent_emails_subquery = SolicitationEmailStatus.objects.filter(

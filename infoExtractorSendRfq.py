@@ -526,7 +526,6 @@ def extract_oem_data(cage_code):
         print(f"Error extracting data for CAGE Code {cage_code}: {e}")
         return None
 
-# Function to send a consolidated email
 def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
     """
     Send a single email with multiple items to the same CAGE code
@@ -640,7 +639,7 @@ def send_consolidated_email(to_email, items, user_data, oem_info, sent_at=None):
             server = smtplib.SMTP("smtp.gmail.com", 587)
             server.starttls()
             server.login(from_email, password)
-            server.sendmail(from_email, to_email, msg.as_string())  ###### replace with to_email
+            server.sendmail(from_email, to_email, msg.as_string())  
             print(f"Consolidated email successfully sent to {to_email}")
             print('--------------------------------------------------------------------------')
         except Exception as e:

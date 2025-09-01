@@ -213,17 +213,21 @@ class EmailSettings(models.Model):
     # Second time interval (afternoon)
     send_time_2 = models.TimeField(
         default=datetime.time(14, 0),  # 2:00 PM
-        help_text="Second time interval for sending RFQs"
+        help_text="Second time interval for sending RFQs",
+        null=True,
+        blank=True
     )
     enable_time_2 = models.BooleanField(
-        default=True,
+        default=False,
         help_text="Enable second time interval"
     )
     
     # Third time interval (evening)
     send_time_3 = models.TimeField(
         default=datetime.time(18, 0),  # 6:00 PM
-        help_text="Third time interval for sending RFQs"
+        help_text="Third time interval for sending RFQs",
+        null=True,
+        blank=True
     )
     enable_time_3 = models.BooleanField(
         default=False,

@@ -136,15 +136,13 @@ class EmailSettingsForm(forms.ModelForm):
             'send_day', 
             'send_time', 
             'last_processed',
-            # New fields for multiple time intervals
             'send_time_1', 'enable_time_1',
             'send_time_2', 'enable_time_2', 
             'send_time_3', 'enable_time_3',
-            # New field for send scope
             'send_scope'
         ]
         widgets = {
-            'auto_send': forms.HiddenInput(),  # Make it a hidden field instead of removing it
+            'auto_send': forms.HiddenInput(),
             'send_day': forms.Select(attrs={
                 'class': 'form-select'
             }),
@@ -152,7 +150,7 @@ class EmailSettingsForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'time'
             }),
-            'last_processed': forms.HiddenInput(),  # Hide this field from the user
+            'last_processed': forms.HiddenInput(),
             
             # New time interval widgets
             'send_time_1': forms.TimeInput(attrs={
@@ -185,17 +183,32 @@ class EmailSettingsForm(forms.ModelForm):
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        
         # Add helpful text to the fields
         self.fields['send_day'].help_text = "Select 'Every day' to send emails daily, or choose a specific day of the week."
         self.fields['send_scope'].help_text = "Choose whether to send all pending solicitations or only today's solicitations."
         
-        # Make last_processed not required
+        # Make fields not required
         if 'last_processed' in self.fields:
             self.fields['last_processed'].required = False
         
-        # Make send_time not required since we're using the new multiple time intervals
         if 'send_time' in self.fields:
             self.fields['send_time'].required = False
+            
+        # Make time 2 and time 3 optional
+        if 'send_time_2' in self.fields:
+            self.fields['send_time_2'].required = False
+            
+        if 'send_time_3' in self.fields:
+            self.fields['send_time_3'].required = False
+            
+        if 'enable_time_2' in self.fields:
+            self.fields['enable_time_2'].required = False
+            
+        if 'enable_time_3' in self.fields:
+            self.fields['enable_time_3'].required = False
+
+
 
 class UserUpdateForm(forms.ModelForm):
     class Meta:

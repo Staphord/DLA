@@ -7,9 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import (WebDriverException, 
-                                      NoSuchWindowException,
-                                      TimeoutException)
+from selenium.common.exceptions import (WebDriverException, NoSuchWindowException, TimeoutException)
 import MySQLdb
 from MySQLdb.cursors import DictCursor
 import json
@@ -497,7 +495,7 @@ def click_element(wait, locator, by=By.ID):
     element.click()
 
 #PDF EXTRACTION
-@retry(max_attempts=5, delay=3)  # Increased from 3 to 5 attempts
+@retry(max_attempts=5, delay=3)  
 def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     """Enhanced PDF extraction with comprehensive retry logic"""
     unit = "N/A"
@@ -539,7 +537,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                         headers=headers,
                         verify=False,
                         stream=True,
-                        timeout=45,  # Increased timeout
+                        timeout=45, 
                         allow_redirects=True
                     ) as response:
                         
@@ -575,7 +573,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
             if not pdf_content or not b'%PDF' in pdf_content[:1024]:
                 raise Exception("Failed to download valid PDF content")
 
-            # COMPREHENSIVE PDF PROCESSING with error handling
+            # PDF PROCESSING with error handling
             try:
                 with pdfplumber.open(io.BytesIO(pdf_content)) as pdf:
                     print(f"  Successfully opened PDF with {len(pdf.pages)} pages")
@@ -583,7 +581,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                     full_text = ""
                     page_texts = []
                     
-                    # Extract text from all pages (up to 15 for performance)
+                    # Extract text from first 15 pages
                     for page_num, page in enumerate(pdf.pages[:15], 1):
                         try:
                             text = page.extract_text() or ""
