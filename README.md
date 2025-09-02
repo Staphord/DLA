@@ -1,70 +1,185 @@
-DLA - Government Tender Extraction and RFQ System
-Overview
-DLA is a Django-based application designed to automatically extract government tenders and associated OEM (Original Equipment Manufacturer) data. The system stores this information in a MySQL database and allows users to select tenders and send RFQs (Request for Quotations) to OEMs.
-The extraction process can run automatically every day or be triggered manually by an admin for a specific date. The project utilizes Selenium for web scraping, MySQL for data storage, and JavaScript with Bootstrap CSS for the frontend.
+ DLA — Government Tender Extraction and RFQ System
 
+ Overview
+ DLA is a Django-based system that extracts government solicitations, enriches them with OEM (Original Equipment Manufacturer) data, and streamlines RFQ (Request for Quotation) workflows. It stores data in MySQL, lets users manage solicitations, send RFQs, and track OEM replies to prepare tender submissions.
 
-Features
-•	Automated Tender Extraction: Fetches government tenders and associated OEM data automatically every day (using github workflows).
-•	Manual Extraction: Admin can select a specific date to extract tender data.
-•	Tender Management: Users can browse extracted tenders and select them for further actions.
-•	RFQ Sending: Users can send RFQs to OEMs directly from the system.
-•	RFQ Repplies: All rfq replies from oems are stored in database for the preparation of tender submission
-•	Database Storage: All extracted tenders and OEM data are stored in MySQL database.
-•	User-friendly Interface: Built with JavaScript and Bootstrap for a smooth user experience.
+ Key Features
+ - Automated extraction: Daily/background extraction of solicitations and OEM data
+ - Manual extraction: Admin-triggered extraction for a specific date
+ - RFQ workflow: Create and send RFQs to OEMs; track replies and documents
+ - User accounts: Custom user model with profile fields and admin management
+ - Background jobs: Uses Django Q for scheduled/async tasks
+ - Email integration: SMTP-based sending and processing of RFQ emails
+ - UI: Bootstrap-based frontend with project-specific static assets
 
+ Tech Stack
+ - Backend: Django (Python), Selenium (for scraping)
+ - Database: MySQL
+ - Task queue: Django Q
+ - Frontend: HTML, JavaScript, Bootstrap
 
-Technologies Used
-•	Backend: Django (Python), Selenium
-•	Frontend: JavaScript, Bootstrap CSS
-•	Database: MySQL
+ Repository Layout (high level)
+ - `RFQ/`: Project settings and entry points
+ - `solicitations/`: Core app for solicitations, RFQs, tasks, templates, static files
+ - `accounts/`: Custom user model and auth-related views/templates
+ - `media/`: Uploaded files (logos and RFQ reply documents)
+ - `static/`: App static assets (served via `collectstatic` in production)
+ - `venv/`: Local virtual environment (optional, not in production)
 
+ Project Structure
+ ```
+ DLA/
+ ├─ manage.py                   # Django management entry-point
+ ├─ requirements.txt            # Python dependencies
+ ├─ README.md                   # Project documentation
+ ├─ email.html                  # Email template used in RFQ flows
+ ├─ extractSolicitations.py     # Script to extract solicitations (scraping)
+ ├─ infoExtractorSendRfq.py     # Script to process & send RFQs
+ ├─ cage_cache_90day.pkl        # Cached dataset (domain-specific cache)
+ ├─ media/                      # User-uploaded and processed files
+ │  ├─ logos/                   # Company logos
+ │  └─ replies/                 # OEM reply documents and attachments
+ ├─ RFQ/                        # Django project configuration
+ │  ├─ __init__.py
+ │  ├─ asgi.py                  # ASGI config
+ │  ├─ wsgi.py                  # WSGI config
+ │  ├─ urls.py                  # Root URL routing
+ │  └─ settings.py              # Django settings (move secrets to env)
+ ├─ solicitations/              # Core app: solicitations, RFQs, email, tasks
+ │  ├─ __init__.py
+ │  ├─ admin.py                 # Admin registrations
+ │  ├─ apps.py                  # AppConfig
+ │  ├─ consumers.py             # WebSocket consumers 
+ │  ├─ context_processors.py    # Template context helpers
+ │  ├─ email_backend.py         # Email utilities/integration
+ │  ├─ forms.py                 # Django forms for views/templates
+ │  ├─ middleware/              # Custom middleware (timezone etc.)
+ │  ├─ migrations/              # Database schema migrations
+ │  ├─ models.py                # ORM models (Solicitation, RFQ, etc.)
+ │  ├─ routing.py               # Channels routing 
+ │  ├─ signals.py               # Model signal handlers
+ │  ├─ static/                  # App static files (css/js/img/vendor)
+ │  ├─ tasks.py                 # Background jobs (Django Q tasks)
+ │  ├─ templates/               # HTML templates for the app
+ │  ├─ tests.py                 # Unit/feature tests
+ │  ├─ urls.py                  # App URL routing
+ │  └─ views.py                 # HTTP views/controllers
+ ├─ accounts/                   # Accounts app with custom user model
+ │  ├─ __init__.py
+ │  ├─ admin.py                 # Admin registrations for user model
+ │  ├─ apps.py                  # AppConfig
+ │  ├─ forms.py                 # Signup/login/profile forms
+ │  ├─ migrations/              # User model migrations
+ │  ├─ models.py                # `accounts.CustomUser` and related models
+ │  ├─ templates/               # Account-related templates (auth, profile)
+ │  ├─ tests.py                 # Tests for accounts
+ │  ├─ urls.py                  # Routes for accounts
+ │  └─ views.py                 # Views for authentication/profile
+ └─ venv/                       # Local virtual environment (dev only)
+ ```
 
-Installation
-Prerequisites
-Ensure you have the following installed on your system:
-•	Python 3.x
-•	Django
-•	MySQL
-•	Selenium WebDriver (ChromeDriver)
+ File and Directory Explanations
+ - `manage.py`: Runs Django commands (migrate, runserver, qcluster, etc.).
+ - `RFQ/settings.py`: All core settings; 
+ - `RFQ/urls.py`: Root URL dispatcher; includes app URLs.
+ - `RFQ/wsgi.py` and `RFQ/asgi.py`: Deployment entry points for WSGI/ASGI servers.
+ - `solicitations/models.py`: Database schema for solicitations, RFQs, chats, email settings, and related data.
+ - `solicitations/tasks.py`: Long-running/background jobs for email processing, scheduling (Django Q).
+ - `solicitations/templates/`: Templates for listing solicitations, RFQ pages, email content, etc.
+ - `solicitations/static/`: Frontend assets; includes vendor libraries.
+ - `solicitations/management/commands/`: Custom CLI commands (e.g., to trigger extraction) runnable via `python manage.py <command>`.
+ - `accounts/models.py`: Custom user (`AUTH_USER_MODEL`) and related profile fields.
+ - `media/`: User-uploaded content and OEM RFQ reply files. 
+ - `extractSolicitations.py`, `infoExtractorSendRfq.py`: Top-level scripts for scraping and RFQ sending used in automation/manual runs.
+ - `requirements.txt`: Locked set of Python dependencies to reproduce environments.
 
+ Prerequisites
+ - Python 3.10+
+ - MySQL 8.x (or compatible)
+ - Chrome + ChromeDriver (for Selenium-based scraping)
 
-Steps
-1.	Clone the repository: 
-2.	git clone https://github.com/Staphord/DLA
-3.	cd dla
-4.	Create and activate a virtual environment: 
-5.	python -m venv venv
-6.	source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-7.	Install dependencies: 
-8.	pip install -r requirements.txt
-9.	Set up MySQL database: 
-o	Create a MySQL database for the project.
-o	Update the settings.py file with the database credentials:
-10.	DATABASES = {
-11.	    'default': {
-12.	        'ENGINE': 'django.db.backends.mysql',
-13.	        'NAME': 'your_database_name',
-14.	        'USER': 'your_mysql_user',
-15.	        'PASSWORD': 'your_mysql_password',
-16.	        'HOST': 'localhost',
-17.	        'PORT': '3306',
-18.	    }
-19.	}
-20.	Run database migrations: 
-21.	python manage.py migrate
-22.	Create a superuser (for admin access): 
-23.	python manage.py createsuperuser
-24.	Run the development server: 
-25.	python manage.py runserver
-26.	Access the application: Open http://127.0.0.1:8000/ in your web browser.
+ Quick Start (Windows PowerShell)
+ 1. Clone the repository
+    - `git clone <your_repo_url>`
+    - `cd DLA`
+ 2. Create and activate a virtual environment
+    - `python -m venv venv`
+    - `venv\Scripts\Activate.ps1`
+ 3. Install dependencies
+    - `pip install -r requirements.txt`
+ 4. Configure environment variables (recommended)
+    - in settings.py set django q, databases credentials, email cerdentials as seen in code file:
+      ```
+    - `CREATE DATABASE rfq CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+    - `CREATE USER 'rfq'@'%' IDENTIFIED BY 'your_password';`
+    - `GRANT ALL PRIVILEGES ON rfq.* TO 'rfq'@'%';`
+ 6. Run migrations and create a superuser
+    - `python manage.py migrate`
+    - `python manage.py createsuperuser`
+ 7. Start services
+    - Web server: `python manage.py runserver`
+    - Task worker (Django Q): `python manage.py qcluster`
+ 8. Open the app
+    - Visit `http://127.0.0.1:8000/`
 
+ Configuration
+ - Database: Defined in `RFQ/settings.py` (`DATABASES['default']`). Prefer loading from env vars as shown above.
+ - Email: SMTP settings in `RFQ/settings.py`. Use an app password for Gmail.
+ - Time zone and formats: See `TIME_ZONE`, `USE_TZ`, and `TIME_FORMAT` in `RFQ/settings.py`.
+ - Static and media
+   - `STATIC_URL=/static/`
+   - `MEDIA_URL=/media/`
+   - `MEDIA_ROOT=media/`
+   - In production, run `python manage.py collectstatic` and serve via a web server (e.g., Nginx).
 
-Usage
-•	Admin Dashboard: Log in with the admin credentials to manually extract tenders and manage data.
-•	User Dashboard: Log in with the user credentials to send rfqs and manage rfqs replies.
-•	Tender Extraction: Automatic extraction runs daily, or the admin can trigger it manually.
-•	RFQ Sending: Select a tender and send RFQs to the listed OEMs.
-Contact
-For any inquiries, contact gilgal2020@gmail.com or visit the project repository at https://github.com/your-repo/dla.
+ Background Jobs (Django Q)
+ - Worker: `python manage.py qcluster`
+ - Configuration: `Q_CLUSTER` in `RFQ/settings.py`
+ - Use scheduled tasks or code-triggered tasks to run extraction, email processing, and housekeeping.
+
+ Data Extraction and RFQs
+ - Automatic extraction: Implemented via background jobs; can be scheduled daily.
+ - Manual extraction: Available in admin or via management commands.
+ - Helper scripts (repository root):
+   - `extractSolicitations.py`: Runs solicitation scraping/extraction
+   - `infoExtractorSendRfq.py`: Processes extraction results and sends RFQs
+ - RFQ replies and documents are stored under `media/replies/`.
+
+ Management Commands
+ - The `solicitations/management/commands/` directory contains custom commands for extraction, email processing, and maintenance. Run them via:
+   - `python manage.py <command_name> [options]`
+
+ Admin and Users
+ - Admin site: `/admin/` (use the superuser created earlier)
+ - Custom user model: `accounts.CustomUser` (see `accounts/models.py`)
+
+ Development Tips
+ - Run tests: `python manage.py test`
+ - Create test users and sample data via fixtures or the admin site
+ - Use a separate `.env` for local dev vs production
+
+ Deployment Notes
+ - Set `DEBUG=False`, configure `ALLOWED_HOSTS`, and secure `SECRET_KEY`
+ - Use environment variables for all secrets (DB, SMTP)
+ - Run `collectstatic`; serve static/media via a CDN or web server
+ - Run multiple Django Q workers and a process supervisor (e.g., systemd)
+ - Put the site behind a reverse proxy (Nginx/Apache) with TLS
+
+ Troubleshooting
+ - MySQL client/driver issues: Ensure `mysqlclient` is installed (see `requirements.txt`) and MySQL headers are available
+ - ChromeDriver mismatch: Match ChromeDriver version to installed Chrome
+ - Emails not sending: Verify SMTP credentials and `EMAIL_USE_TLS/PORT`
+ - Background jobs not running: Ensure `python manage.py qcluster` is active and check logs
+
+ Security
+ - Do not commit secrets (DB credentials, SMTP passwords, secret keys)
+ - Move all sensitive settings to environment variables
+ - Restrict admin access and enforce strong passwords
+
+ License
+ - Add your license here (e.g., MIT, Apache-2.0, or proprietary)
+
+ Contact
+ - Email: `gilgal2020@gmail.com`
+ - Project URL: add your repository link here
 

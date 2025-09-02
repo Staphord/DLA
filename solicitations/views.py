@@ -309,19 +309,24 @@ def delete_solicitation(request,solicitation):
 def scrap_solicitations(request):
     if request.method == "POST" and request.headers.get("X-Requested-With") == "XMLHttpRequest":
         try:
+            # Parse the JSON data from the request body, or use an empty dict if the body is empty
             data = json.loads(request.body) if request.body else {}
-            scrape_date = data.get('date')
+            scrape_date = data.get('date')  # Get the date from the request body
             
+
+            # Use the provided scrape_date or a default value
             if scrape_date:
                 formated_date = datetime.strptime(scrape_date, "%Y-%m-%d").strftime("%m-%d-%Y")
-                logger.info(f"Scraping for date: {scrape_date}")
+                print(f"Scraping for date: {scrape_date}")
             else:
-                formated_date = datetime.now().strftime("%m-%d-%Y")
-                logger.info("No scrape date provided. Defaulting to current date.")
-            
-            python_exec = "/home/gilgalrfq/env/bin/python"
-            script_path = "/home/gilgalrfq/DLA/extractSolicitations.py"
-            
+                formated_date = datetime.now().strftime("%m-%d-%Y")  # Default to the current date
+                print("No scrape date provided. Defaulting to current date.")
+
+            # Path to the Python executable and script
+            python_exec = r"C:\Users\Staphord Bengesi\Desktop\DLA\venv\Scripts\python.exe"
+            script_path = os.path.join(os.getcwd(), "extractSolicitations.py")
+
+            # Run the external Python script, passing the user ID and date as arguments
             result = subprocess.Popen(
                 [python_exec, script_path, str(formated_date)],
                 stdout=subprocess.PIPE,
@@ -329,33 +334,27 @@ def scrap_solicitations(request):
                 text=True
             )
 
-            # Log real-time output
+            # Log output line by line
             for line in iter(result.stdout.readline, ''):
-                if line:
-                    logger.debug(f"Script output: {line.strip()}")
+                print(line.strip())
 
-            # Wait and capture final output
+            # Wait for the script to finish
             stdout, stderr = result.communicate()
 
             if result.returncode != 0:
-                error_message = f"Subprocess failed with error: {stderr.strip()}"
-                logger.error(error_message)
-                return JsonResponse({"success": False, "error": error_message})
+                error_message = f"Subprocess failed with error: {stderr}"
+                print(error_message)  # Log the error for debugging
+                return JsonResponse({"error": error_message}, status=500)
 
-            logger.info("Subprocess completed successfully.")
-            return JsonResponse({"success": True})
+            # Return success after script completes
+            return JsonResponse({"success": "Completed"})
 
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {str(e)}")
-            return JsonResponse({"success": False, "error": "Invalid JSON in request body"})
-
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON in request body"}, status=400)
         except Exception as e:
-            logger.exception("Unexpected error during solicitation scraping")
-            return JsonResponse({"success": False, "error": str(e)})
-
+            return JsonResponse({"error": str(e)}, status=500)
     else:
-        logger.warning("Invalid request method or missing AJAX header")
-        return JsonResponse({"success": False, "error": "Invalid request method or headers"})
+        return JsonResponse({"error": "Invalid request method or headers"}, status=400)
                         
 def searched_solicitations(request):
     if request.method == "POST":

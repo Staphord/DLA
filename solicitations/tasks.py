@@ -1517,16 +1517,6 @@ def emergency_cleanup_stale_processing():
             
             logger.warning(f"EMERGENCY CLEANUP: Reset {stale_count} stale processing records to pending")
             
-            # Also clear any user selection states that reference these
-            UserSelectionState.objects.filter(
-                processing_ids__isnull=False
-            ).exclude(
-                processing_ids=[]
-            ).update(
-                processing_ids=[],
-                is_submitting=False
-            )
-            
             logger.warning(f"EMERGENCY CLEANUP: Cleared user selection states")
         else:
             logger.info("EMERGENCY CLEANUP: No stale processing records found")
