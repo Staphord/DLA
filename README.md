@@ -44,7 +44,7 @@
  │  ├─ asgi.py                  # ASGI config
  │  ├─ wsgi.py                  # WSGI config
  │  ├─ urls.py                  # Root URL routing
- │  └─ settings.py              # Django settings (move secrets to env)
+ │  └─ settings.py              # Django settings 
  ├─ solicitations/              # Core app: solicitations, RFQs, email, tasks
  │  ├─ __init__.py
  │  ├─ admin.py                 # Admin registrations
