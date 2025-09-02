@@ -104,12 +104,13 @@
     - `cd DLA`
  2. Create and activate a virtual environment
     - `python -m venv venv`
-    - `venv\Scripts\Activate.ps1`
+    - `venv\Scripts\Activate`
  3. Install dependencies
     - `pip install -r requirements.txt`
  4. Configure environment variables (recommended)
     - in settings.py set django q, databases credentials, email cerdentials as seen in code file:
       ```
+ 5. Create the database and user in MySQL (example)
     - `CREATE DATABASE rfq CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
     - `CREATE USER 'rfq'@'%' IDENTIFIED BY 'your_password';`
     - `GRANT ALL PRIVILEGES ON rfq.* TO 'rfq'@'%';`
@@ -149,15 +150,6 @@
  - The `solicitations/management/commands/` directory contains custom commands for extraction, email processing, and maintenance. Run them via:
    - `python manage.py <command_name> [options]`
 
- Admin and Users
- - Admin site: `/admin/` (use the superuser created earlier)
- - Custom user model: `accounts.CustomUser` (see `accounts/models.py`)
-
- Development Tips
- - Run tests: `python manage.py test`
- - Create test users and sample data via fixtures or the admin site
- - Use a separate `.env` for local dev vs production
-
  Deployment Notes
  - Set `DEBUG=False`, configure `ALLOWED_HOSTS`, and secure `SECRET_KEY`
  - Use environment variables for all secrets (DB, SMTP)
@@ -171,15 +163,6 @@
  - Emails not sending: Verify SMTP credentials and `EMAIL_USE_TLS/PORT`
  - Background jobs not running: Ensure `python manage.py qcluster` is active and check logs
 
- Security
- - Do not commit secrets (DB credentials, SMTP passwords, secret keys)
- - Move all sensitive settings to environment variables
- - Restrict admin access and enforce strong passwords
-
- License
- - Add your license here (e.g., MIT, Apache-2.0, or proprietary)
-
- Contact
+ For more information contact
  - Email: `gilgal2020@gmail.com`
- - Project URL: add your repository link here
 
