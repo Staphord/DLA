@@ -107,9 +107,8 @@
     - `venv\Scripts\Activate`
  3. Install dependencies
     - `pip install -r requirements.txt`
- 4. Configure environment variables (recommended)
+ 4. Configure variables settings.py
     - in settings.py set django q, databases credentials, email cerdentials as seen in code file:
-      ```
  5. Create the database and user in MySQL (example)
     - `CREATE DATABASE rfq CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
     - `CREATE USER 'rfq'@'%' IDENTIFIED BY 'your_password';`
