@@ -100,7 +100,7 @@
 
  Quick Start (Windows PowerShell)
  1. Clone the repository
-    - `git clone <your_repo_url>`
+    - `git clone https://github.com/Staphord/DLA.git`
     - `cd DLA`
  2. Create and activate a virtual environment
     - `python -m venv venv`
