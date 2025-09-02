@@ -123,7 +123,7 @@
     - Visit `http://127.0.0.1:8000/`
 
  Configuration
- - Database: Defined in `RFQ/settings.py` (`DATABASES['default']`). Prefer loading from env vars as shown above.
+ - Database: Defined in `RFQ/settings.py` (`DATABASES['default']`).
  - Email: SMTP settings in `RFQ/settings.py`. Use an app password for Gmail.
  - Time zone and formats: See `TIME_ZONE`, `USE_TZ`, and `TIME_FORMAT` in `RFQ/settings.py`.
  - Static and media
