@@ -1,7 +1,7 @@
  DLA — Government Tender Extraction and RFQ System
 
- Overview
- DLA is a Django-based system that extracts government solicitations, enriches them with OEM (Original Equipment Manufacturer) data, and streamlines RFQ (Request for Quotation) workflows. It stores data in MySQL, lets users manage solicitations, send RFQs, and track OEM replies to prepare tender submissions.
+Overview
+DLA is a Django-based system that extracts government solicitations, enriches them with OEM (Original Equipment Manufacturer) data, and streamlines RFQ (Request for Quotation) workflows. It stores data in MySQL, lets users manage solicitations, send RFQs, and track OEM replies to prepare tender submissions.
 
  Key Features
  - Automated extraction: Daily/background extraction of solicitations and OEM data
