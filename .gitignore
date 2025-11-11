@@ -1,2 +1,8 @@
-gilenv/
+.cache
+.pytest_cache/
+.env
+.venv
+env/
+venv/
 media/
+__pycache__/
