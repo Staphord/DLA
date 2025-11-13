@@ -65,13 +65,18 @@ WSGI_APPLICATION = 'RFQ.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# Use environment variable to switch between local and production
+
+# Default to localhost for development
+DB_HOST = os.environ.get('DB_HOST', 'localhost')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'rfq',  # Replace with your database name
-        'USER': 'rfq',  # Replace with your database user
-        'PASSWORD': 'rfq@0213',   # Replace with your database password
-        'HOST': '168.231.66.43',           # Or the hostname of your MySQL server
+        'USER': 'root',  # Replace with your database user
+        'PASSWORD': '',   # Replace with your database password
+        'HOST': 'localhost',           # localhost for dev, 168.231.66.43 for production
         'PORT': '3306',                # Default MySQL port
     }
 }
@@ -125,37 +130,36 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
 
-#Email credentials
+# Email credentials
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'xxxx@gmail.com'  
+EMAIL_HOST_USER = 'xxxx@gmail.com'
 DEFAULT_FROM_EMAIL = 'xxxx@gmail.com'
 EMAIL_HOST_PASSWORD = 'xxxxxxxxxx'
 
-### Database credentials
-DB_HOST='168.231.66.43'
-DB_USER='rfq'
-DB_PASSWORD='rfq@0213'
+# Database credentials
+DB_HOST = 'localhost'
+DB_USER = 'root'
+DB_PASSWORD = ''
 DB_PORT = 3306
-DB_NAME='rfq'
+DB_NAME = 'rfq'
 
 # Django Q settings
 Q_CLUSTER = {
     'name': 'solicitations',
     'workers': 4,
     'recycle': 500,
-    'retry':300,
+    'retry': 300,
     'timeout': 240,  # Increased timeout for email processing
     'compress': True,
     'save_limit': 250,
     'queue_limit': 500,
     'cpu_affinity': 1,
     'label': 'Django Q',
-    'orm': 'default', 
+    'orm': 'default',
     'use_django_timezone': True,
 }
 
 BASE_URL = 'http://localhost:8000'
-

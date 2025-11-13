@@ -1116,7 +1116,7 @@ class RfqReply(models.Model):
         blank=True,
         help_text="Solicitation number extracted from email"
     )
-    rfq_id = models.CharField(
+    rfq_unique_id = models.CharField(
         max_length=100,
         blank=True,
         db_index=True,
@@ -1232,7 +1232,7 @@ class RfqReply(models.Model):
         indexes = [
             models.Index(fields=['user', '-received_date']),
             models.Index(fields=['solicitation_number']),
-            models.Index(fields=['rfq_id']),
+            models.Index(fields=['rfq_unique_id']),
             models.Index(fields=['status', '-received_date']),
             models.Index(fields=['email_message_id']),
             models.Index(fields=['oem_name']),
@@ -1240,16 +1240,16 @@ class RfqReply(models.Model):
         ]
 
     def __str__(self):
-        ref = self.rfq_id or self.solicitation_number or 'No Ref'
+        ref = self.rfq_unique_id or self.solicitation_number or 'No Ref'
         return f"Reply from {self.oem_name or 'Unknown'} - {ref} ({self.get_status_display()})"
 
     def save(self, *args, **kwargs):
-        """Try to match RFQ by rfq_id if not already linked"""
-        if not self.rfq and self.rfq_id:
+        """Try to match RFQ by rfq_unique_id if not already linked"""
+        if not self.rfq and self.rfq_unique_id:
             try:
                 # Try to find matching RFQ by unique_id
                 matched_rfq = RFQ.objects.filter(
-                    unique_id=self.rfq_id,
+                    unique_id=self.rfq_unique_id,
                     created_by=self.user
                 ).first()
                 if matched_rfq:
@@ -1271,3 +1271,171 @@ class RfqReply(models.Model):
             delta = self.received_date - self.rfq.sent_at
             return delta.days
         return None
+
+
+class ExportFieldDefinition(models.Model):
+    """
+    Defines the 121 fields for DLA export file format.
+    Each field has a position (1-121), name, type, and validation rules.
+    """
+    FIELD_TYPE_CHOICES = [
+        ('mandatory', 'Mandatory'),
+        ('conditional', 'Conditional'),
+        ('optional', 'Optional'),
+        ('reserved', 'Reserved'),
+    ]
+
+    QUOTE_LEVEL_CHOICES = [
+        ('header', 'Header'),
+        ('line', 'Line'),
+        ('product', 'Product'),
+        ('', 'Not Applicable'),
+    ]
+
+    position = models.IntegerField(
+        unique=True,
+        help_text="Field position in export file (1-121)"
+    )
+    column_name = models.CharField(
+        max_length=255,
+        help_text="Name of the field"
+    )
+    quote_level = models.CharField(
+        max_length=20,
+        choices=QUOTE_LEVEL_CHOICES,
+        blank=True,
+        help_text="Quote level: Header, Line, or Product"
+    )
+    field_type = models.CharField(
+        max_length=20,
+        choices=FIELD_TYPE_CHOICES,
+        help_text="Mandatory, Conditional, Optional, or Reserved"
+    )
+    max_length = models.IntegerField(
+        default=0,
+        help_text="Maximum length of the field value"
+    )
+    definition = models.TextField(
+        blank=True,
+        help_text="Field definition/description"
+    )
+    validation_rules = models.TextField(
+        blank=True,
+        help_text="Validation rules for this field"
+    )
+    default_value = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Default value for this field"
+    )
+    may_affect_bid_type = models.BooleanField(
+        default=False,
+        help_text="Whether this field may affect bid type"
+    )
+    predefined_choices = models.TextField(
+        blank=True,
+        help_text="JSON array of predefined choices for dropdown. Format: [{\"value\": \"Y\", \"label\": \"Small Business Set-Aside\"}, ...]"
+    )
+
+    class Meta:
+        verbose_name = 'Export Field Definition'
+        verbose_name_plural = 'Export Field Definitions'
+        ordering = ['position']
+        indexes = [
+            models.Index(fields=['position']),
+            models.Index(fields=['field_type']),
+        ]
+
+    def __str__(self):
+        return f"{self.position:03d} - {self.column_name} ({self.field_type})"
+
+    def get_choices(self):
+        """
+        Parse and return predefined choices as a list of dicts.
+        Returns empty list if no choices defined.
+        """
+        if not self.predefined_choices:
+            return []
+        try:
+            import json
+            return json.loads(self.predefined_choices)
+        except (json.JSONDecodeError, ValueError):
+            return []
+
+    def has_predefined_choices(self):
+        """Check if this field has predefined choices for dropdown."""
+        return bool(self.predefined_choices and self.predefined_choices.strip())
+
+
+class UserExportConfiguration(models.Model):
+    """
+    Per-user configuration for export field mappings.
+    Maps solicitation/RFQ data to the 121 export fields.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='export_configurations'
+    )
+    field_definition = models.ForeignKey(
+        ExportFieldDefinition,
+        on_delete=models.CASCADE,
+        related_name='user_configurations'
+    )
+
+    # Mapping configuration
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Whether to include this field in export"
+    )
+    custom_value = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Custom static value for this field (overrides mapping)"
+    )
+    source_field = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Source field from Solicitation/RFQ model (e.g., 'solicitation', 'cage', 'NSN')"
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User Export Configuration'
+        verbose_name_plural = 'User Export Configurations'
+        unique_together = ('user', 'field_definition')
+        ordering = ['field_definition__position']
+        indexes = [
+            models.Index(fields=['user', 'field_definition']),
+            models.Index(fields=['is_enabled']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - Field {self.field_definition.position}"
+
+    def get_value(self, solicitation_obj):
+        """
+        Get the value for this field from a solicitation object.
+        Returns custom_value if set, otherwise gets from source_field.
+        Returns empty string if field is disabled or no value found.
+        """
+        if not self.is_enabled:
+            return ""
+
+        # Use custom value if set
+        if self.custom_value:
+            return self.custom_value
+
+        # Get value from source field
+        if self.source_field and solicitation_obj:
+            try:
+                value = getattr(solicitation_obj, self.source_field, "")
+                return str(value) if value is not None else ""
+            except AttributeError:
+                return ""
+
+        # Return default value from field definition
+        return self.field_definition.default_value or ""

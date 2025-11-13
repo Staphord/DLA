@@ -1,0 +1,60 @@
+<div style="max-height: 600px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px;">
+  <table class="config-table">
+    <thead>
+      <tr>
+        <th style="width: 80px; text-align: center;">Pos</th>
+        <th style="width: 350px;">Field Name</th>
+        <th style="width: 350px;">Value</th>
+        <th>Definition & Properties</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for config in configs %}
+      <tr>
+        <!-- Hidden field to always enable all fields -->
+        <input type="hidden" name="is_enabled_{{ config.id }}" value="on">
+
+        <td class="pos-cell">{{ config.field_definition.position|stringformat:"03d" }}</td>
+        <td>
+          <div class="field-name">{{ config.field_definition.column_name }}</div>
+        </td>
+        <td>
+          {% if config.field_definition.has_predefined_choices %}
+          <select
+            class="select-field"
+            name="custom_value_{{ config.id }}"
+          >
+            {% for choice in config.field_definition.get_choices %}
+            <option value="{{ choice.value }}" {% if config.custom_value == choice.value %}selected{% endif %}>
+              {{ choice.label }}
+            </option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <input
+            type="text"
+            class="input-field"
+            name="custom_value_{{ config.id }}"
+            value="{{ config.custom_value }}"
+            placeholder="Enter value"
+          >
+          {% endif %}
+        </td>
+        <td>
+          <div style="font-size: 13px; color: #6c757d;">
+            {{ config.field_definition.definition|truncatewords:15 }}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" style="text-align: center; padding: 60px 20px; color: #6c757d;">
+          <div style="font-size: 48px; margin-bottom: 15px;">📭</div>
+          <div style="font-size: 16px;">No fields in this category</div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+

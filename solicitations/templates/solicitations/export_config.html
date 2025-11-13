@@ -1,0 +1,611 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+
+<style>
+/* Reset and Base Styles */
+.export-config-container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Page Header */
+.page-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.page-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.page-header .breadcrumb {
+  color: rgba(255,255,255,0.9);
+  font-size: 14px;
+  margin: 0;
+}
+
+.page-header .breadcrumb a {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.page-header .breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.field-count-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 10px;
+}
+
+/* Stats Bar */
+.stats-bar {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  flex: 1;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  border-left: 4px solid;
+}
+
+.stat-card.mandatory {
+  border-left-color: #dc3545;
+}
+
+.stat-card.conditional {
+  border-left-color: #ffc107;
+}
+
+.stat-card.optional {
+  border-left-color: #0dcaf0;
+}
+
+.stat-card.reserved {
+  border-left-color: #6c757d;
+}
+
+.stat-card .stat-number {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1;
+}
+
+.stat-card .stat-label {
+  font-size: 14px;
+  color: #6c757d;
+  margin: 5px 0 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Main Card */
+.config-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+  padding: 20px 30px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.search-box {
+  flex: 1;
+  max-width: 400px;
+  position: relative;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 10px 40px 10px 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-box .search-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  font-size: 16px;
+}
+
+
+
+/* Tabs */
+.tabs-container {
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.tabs {
+  display: flex;
+  padding: 0 30px;
+  margin: 0;
+  list-style: none;
+  gap: 5px;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  padding: 15px 25px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-button:hover {
+  color: #495057;
+  background: #f8f9fa;
+}
+
+.tab-button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.tab-badge {
+  background: #e0e0e0;
+  color: #495057;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tab-button.active .tab-badge {
+  background: #667eea;
+  color: white;
+}
+
+/* Tab Content */
+.tab-content-wrapper {
+  padding: 30px;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Table Styles */
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.config-table thead {
+  background: #f8f9fa;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.config-table th {
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.config-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s;
+}
+
+.config-table tbody tr:hover {
+  background: #f8f9ff;
+}
+
+.config-table td {
+  padding: 15px 12px;
+  vertical-align: middle;
+}
+
+/* Position Cell */
+.pos-cell {
+  text-align: center;
+  font-weight: 700;
+  color: #667eea;
+  font-size: 16px;
+}
+
+/* Field Name Cell */
+.field-name {
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 4px;
+}
+
+.field-meta {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+
+
+/* Form Inputs */
+.input-field,
+.select-field {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: all 0.3s;
+}
+
+.input-field:focus,
+.select-field:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.input-field::placeholder {
+  color: #adb5bd;
+  font-style: italic;
+}
+
+/* Info Badges */
+.info-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.info-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-default {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.badge-max {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.badge-affects {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.badge-dropdown {
+  background: #d4edda;
+  color: #155724;
+}
+
+/* Save Section */
+.save-section {
+  padding: 20px 30px;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  gap: 15px;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 9999;
+}
+
+.toast {
+  background: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast.success {
+  border-left: 4px solid #28a745;
+}
+
+.toast.error {
+  border-left: 4px solid #dc3545;
+}
+
+.toast-icon {
+  font-size: 20px;
+}
+
+.toast.success .toast-icon {
+  color: #28a745;
+}
+
+.toast.error .toast-icon {
+  color: #dc3545;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  color: #212529;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .stats-bar {
+    flex-wrap: wrap;
+  }
+
+  .stat-card {
+    flex: 1 1 calc(50% - 10px);
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box {
+    max-width: 100%;
+  }
+
+  .action-buttons {
+    justify-content: stretch;
+  }
+
+  .btn-custom {
+    flex: 1;
+  }
+
+  .tabs {
+    overflow-x: auto;
+  }
+
+  .save-section {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .btn-save {
+    width: 100%;
+    justify-content: center;
+  }
+}
+</style>
+
+<div class="export-config-container">
+
+  <!-- Main Configuration Card -->
+  <div class="config-card">
+    <form action="" method="post" id="exportConfigForm">
+      {% csrf_token %}
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-box">
+          <input
+            type="text"
+            id="searchField"
+            placeholder="Search by position or field name..."
+            onkeyup="filterTable()"
+          >
+          <span class="search-icon">🔍</span>
+        </div>
+        <div style="color: #6c757d; font-size: 14px;">
+          <strong>121 Fields</strong> - Configure values for DLA export
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs-container">
+        <ul class="tabs">
+          <li>
+            <button type="button" class="tab-button active" onclick="switchTab(event, 'mandatory')">
+              Mandatory
+              <span class="tab-badge">{{ mandatory_configs.count }}</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="tab-button" onclick="switchTab(event, 'conditional')">
+              Conditional
+              <span class="tab-badge">{{ conditional_configs.count }}</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="tab-button" onclick="switchTab(event, 'optional')">
+              Optional
+              <span class="tab-badge">{{ optional_configs.count }}</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="tab-button" onclick="switchTab(event, 'reserved')">
+              Reserved
+              <span class="tab-badge">{{ reserved_configs.count }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content-wrapper">
+        <div id="mandatory" class="tab-pane active">
+          {% include 'solicitations/clients/export_config_table.html' with configs=mandatory_configs %}
+        </div>
+        <div id="conditional" class="tab-pane">
+          {% include 'solicitations/clients/export_config_table.html' with configs=conditional_configs %}
+        </div>
+        <div id="optional" class="tab-pane">
+          {% include 'solicitations/clients/export_config_table.html' with configs=optional_configs %}
+        </div>
+        <div id="reserved" class="tab-pane">
+          {% include 'solicitations/clients/export_config_table.html' with configs=reserved_configs %}
+        </div>
+      </div>
+
+      <!-- Save Section -->
+      <div class="save-section">
+        <button type="submit" name="export_config_update" class="btn mybg hoverbg text-white">
+          Save Configuration
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+{% if messages %}
+<div class="toast-container">
+  {% for message in messages %}
+  <div class="toast {% if message.tags == 'success' %}success{% else %}error{% endif %}">
+    <div class="toast-icon">
+      {% if message.tags == 'success' %}✓{% else %}✕{% endif %}
+    </div>
+    <div class="toast-message">{{ message }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+// Switch tabs
+function switchTab(event, tabName) {
+  // Remove active class from all tabs and buttons
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabPanes = document.querySelectorAll('.tab-pane');
+
+  tabButtons.forEach(btn => btn.classList.remove('active'));
+  tabPanes.forEach(pane => pane.classList.remove('active'));
+
+  // Add active class to clicked button and corresponding pane
+  event.currentTarget.classList.add('active');
+  document.getElementById(tabName).classList.add('active');
+}
+
+// Filter table by search input
+function filterTable() {
+  const input = document.getElementById('searchField');
+  const filter = input.value.toLowerCase();
+  const activeTab = document.querySelector('.tab-pane.active');
+  const rows = activeTab.querySelectorAll('tbody tr');
+
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const isVisible = text.includes(filter);
+    row.style.display = isVisible ? '' : 'none';
+    if (isVisible) visibleCount++;
+  });
+}
+
+
+
+// Auto-hide toasts after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+  const toasts = document.querySelectorAll('.toast');
+  toasts.forEach(toast => {
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  });
+
+  // Add form submission loading state
+  const form = document.getElementById('exportConfigForm');
+  form.addEventListener('submit', function(e) {
+    const button = form.querySelector('.btn-save');
+    button.innerHTML = '⏳ Saving...';
+    button.disabled = true;
+  });
+});
+</script>
+
+{% endblock %}
+

@@ -215,11 +215,18 @@
           <i class="bi bi-file-earmark-text my-text"></i><span text-dark>RFQs Report</span>
         </a>
       </li><!-- End Components Nav -->
-<li class="nav-item rounded-3">
-    <a class="nav-link collapsed" href="{% url 'solicitations:user-tasks-list' %}">
-        <i class="bi bi-journal-text my-text"></i><span text-dark>My Logs</span>
-    </a>
-</li>
+
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="{% url 'solicitations:export-config' %}">
+          <i class="bi bi-file-earmark-spreadsheet my-text"></i><span text-dark>DLA Export Config</span>
+        </a>
+      </li><!-- End Components Nav -->
+
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="{% url 'solicitations:user-tasks-list' %}">
+          <i class="bi bi-journal-text my-text"></i><span text-dark>My Logs</span>
+        </a>
+      </li>
     </ul>
 
   </aside><!-- End Sidebar-->
