@@ -75,6 +75,14 @@ urlpatterns = [
     path('delete-single-task/', views.delete_single_task,
          name='delete-single-task'),
 
+    ###################  RFQ REPLIES (EXTRACTED FROM EMAILS) URLS  #########################
+    path('replied-rfqs/', views.replied_rfq, name='replied-rfq'),
+    path('search-replied-rfq/', views.search_replied, name='search-replied'),
+    path('replied-rfq-detail/<rfq>/',
+         views.replied_rfq_detail, name='replied-rfq-detail'),
+    path('delete-replied-rfq/<rfq>/',
+         views.delete_replied_rfq, name='delete-replied-rfq'),
+
     ####################  OEM URLS  ##########################
     path('active-oems/', views.active_oems, name='active-oems'),
     path('disabled-oems/', views.disabled_oems, name='disabled-oems'),

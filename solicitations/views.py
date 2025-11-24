@@ -966,6 +966,200 @@ def delete_rfq(request, rfq):
     delete_rfq.delete()
     return redirect('solicitations:sent-rfq')
 
+
+####################### RFQ REPLIES (EXTRACTED FROM EMAILS) VIEWS ############################
+
+@login_required
+def replied_rfq(request):
+    """
+    Display all RFQ replies extracted from emails for the current user.
+    Superusers and admins can see all users' RFQ replies.
+    """
+    from .models import RfqReply
+
+    # Debug: Print user info
+    print(f"[DEBUG] User: {request.user.username} (ID: {request.user.id})")
+    print(f"[DEBUG] Is superuser: {request.user.is_superuser}")
+    print(f"[DEBUG] User type: {getattr(request.user, 'user_type', 'N/A')}")
+
+    # Superusers and admins can see all RFQ replies, regular users see only their own
+    # Filter out replies without prices (unit_price or total_price must exist and not be null)
+    if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+        rfq_replies = RfqReply.objects.filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0)
+        ).select_related('rfq', 'user').order_by('-received_date', '-created_at')
+        print(f"[DEBUG] Admin/Superuser - showing ALL RFQ replies with prices")
+    else:
+        rfq_replies = RfqReply.objects.filter(
+            user=request.user
+        ).filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0)
+        ).select_related('rfq').order_by('-received_date', '-created_at')
+        print(f"[DEBUG] Regular user - showing only their RFQ replies with prices")
+
+    # Count total replies
+    total_replied_rfq = rfq_replies.count()
+
+    # Debug: Print count
+    print(f"[DEBUG] Total RFQ replies: {total_replied_rfq}")
+
+    # Debug: Print first 3 records
+    for reply in rfq_replies[:3]:
+        print(
+            f"[DEBUG] Reply ID: {reply.id}, User: {reply.user.username}, OEM: {reply.oem_name}, Date: {reply.received_date}")
+
+    # Paginate results
+    p = Paginator(rfq_replies, 25)
+    page = request.GET.get('page')
+    rfq = p.get_page(page)
+
+    # Debug: Print page info
+    print(f"[DEBUG] Page object count: {len(rfq.object_list)}")
+
+    context = {
+        'rfq': rfq,
+        'total_replied_rfq': total_replied_rfq,
+        'is_admin': request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin',
+    }
+
+    return render(request, 'solicitations/procurements/replied_rfq.html', context)
+
+
+@login_required
+def search_replied(request):
+    """
+    Search for RFQ replies by RFQ ID, solicitation number, NSN, nomenclature, or OEM name.
+    Superusers and admins can search all users' RFQ replies.
+    """
+    from .models import RfqReply
+
+    if request.method == "POST":
+        searched = request.POST.get('search-replied', '')
+
+        # Build base query for search
+        search_filter = (
+            Q(rfq_unique_id__icontains=searched) |  # Search by RFQ ID
+            # Search by solicitation number
+            Q(solicitation_number__icontains=searched) |
+            Q(nsn__icontains=searched) |  # Search by NSN
+            Q(nomenclature__icontains=searched) |  # Search by nomenclature
+            Q(oem_name__icontains=searched) |  # Search by OEM name
+            Q(unit__icontains=searched)  # Search by unit
+        )
+
+        # Filter for replies with prices (must have value > 0)
+        price_filter = (
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0)
+        )
+
+        # Superusers and admins can search all RFQ replies, regular users search only their own
+        if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+            replied_rfq_queryset = RfqReply.objects.filter(
+                search_filter & price_filter
+            ).select_related('rfq', 'user').order_by('-received_date', '-created_at')
+            total_replied_rfq = RfqReply.objects.filter(price_filter).count()
+        else:
+            replied_rfq_queryset = RfqReply.objects.filter(
+                Q(user=request.user) & search_filter & price_filter
+            ).select_related('rfq').order_by('-received_date', '-created_at')
+            total_replied_rfq = RfqReply.objects.filter(
+                Q(user=request.user) & price_filter).count()
+
+        context = {
+            'searched': searched,
+            'replied_rfq_queryset': replied_rfq_queryset,
+            'total_replied_rfq': total_replied_rfq,
+            'search_count': replied_rfq_queryset.count()
+        }
+
+        return render(request, 'solicitations/procurements/searched_replied.html', context)
+    else:
+        return render(request, 'solicitations/procurements/replied_rfq.html')
+
+
+@login_required
+def replied_rfq_detail(request, rfq):
+    """
+    Display detailed information about a single RFQ reply.
+    Superusers and admins can view all users' RFQ replies.
+    Also fetches the original solicitation data from the Solicitation table.
+    """
+    from .models import RfqReply, Solicitation
+
+    try:
+        # Superusers and admins can view any RFQ reply, regular users only their own
+        if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+            rfq_reply = RfqReply.objects.select_related('rfq', 'rfq__solicitation', 'rfq__oem', 'user').get(
+                pk=rfq
+            )
+        else:
+            rfq_reply = RfqReply.objects.select_related('rfq', 'rfq__solicitation', 'rfq__oem').get(
+                pk=rfq,
+                user=request.user
+            )
+    except RfqReply.DoesNotExist:
+        return HttpResponseNotFound("RFQ Reply not found")
+
+    # Try to fetch the original solicitation from the Solicitation table
+    # First try using the matched RFQ's solicitation, then try by solicitation number
+    original_solicitation = None
+
+    # Method 1: Get from matched RFQ (if available)
+    if rfq_reply.rfq and rfq_reply.rfq.solicitation:
+        original_solicitation = rfq_reply.rfq.solicitation
+
+    # Method 2: Look up by solicitation number (if RFQ not matched)
+    elif rfq_reply.solicitation_number:
+        try:
+            original_solicitation = Solicitation.objects.filter(
+                solicitation=rfq_reply.solicitation_number
+            ).first()
+        except Exception:
+            pass
+
+    # Method 3: Look up by NSN (if solicitation number not found)
+    if not original_solicitation and rfq_reply.nsn:
+        try:
+            original_solicitation = Solicitation.objects.filter(
+                NSN=rfq_reply.nsn
+            ).first()
+        except Exception:
+            pass
+
+    context = {
+        'rfq_reply': rfq_reply,
+        'original_solicitation': original_solicitation,
+    }
+
+    return render(request, 'solicitations/procurements/extracted_rfq_reply_detail.html', context)
+
+
+@login_required
+def delete_replied_rfq(request, rfq):
+    """
+    Delete an RFQ reply.
+    Superusers and admins can delete any user's RFQ reply.
+    """
+    from .models import RfqReply
+
+    try:
+        # Superusers and admins can delete any RFQ reply, regular users only their own
+        if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+            rfq_reply = RfqReply.objects.get(pk=rfq)
+        else:
+            rfq_reply = RfqReply.objects.get(pk=rfq, user=request.user)
+
+        rfq_reply.delete()
+        messages.success(request, "RFQ reply deleted successfully")
+    except RfqReply.DoesNotExist:
+        messages.error(request, "RFQ reply not found")
+
+    return redirect('solicitations:replied-rfq')
+
+
 # view to send RFQS
 
 

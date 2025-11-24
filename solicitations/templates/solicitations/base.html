@@ -195,6 +195,12 @@
         </a>
       </li><!-- End Components Nav -->
 
+      <li class="nav-item rounded-3">
+        <a class="nav-link collapsed" href="{% url 'solicitations:replied-rfq' %}">
+          <i class="bi bi-inbox-fill my-text"></i><span text-dark>Replied RFQs</span>
+        </a>
+      </li><!-- End Components Nav -->
+
 
       {% if user.user_type == "admin" %}
       <li class="nav-item rounded-3">
@@ -213,12 +219,6 @@
       <li class="nav-item rounded-3">
         <a class="nav-link collapsed" href="{% url 'solicitations:rfq-reports' %}">
           <i class="bi bi-file-earmark-text my-text"></i><span text-dark>RFQs Report</span>
-        </a>
-      </li><!-- End Components Nav -->
-
-      <li class="nav-item rounded-3">
-        <a class="nav-link collapsed" href="{% url 'solicitations:export-config' %}">
-          <i class="bi bi-file-earmark-spreadsheet my-text"></i><span text-dark>DLA Export Config</span>
         </a>
       </li><!-- End Components Nav -->
 

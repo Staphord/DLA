@@ -1,8 +1,12 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -163,3 +167,23 @@ Q_CLUSTER = {
 }
 
 BASE_URL = 'http://localhost:8000'
+
+# Azure OpenAI API Configuration
+USE_AZURE_OPENAI = os.getenv('USE_AZURE_OPENAI', 'True').lower() == 'true'
+
+# Azure OpenAI settings
+AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY', '')
+# e.g., https://your-resource.openai.azure.com/
+AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT', '')
+AZURE_OPENAI_DEPLOYMENT = os.getenv(
+    'AZURE_OPENAI_DEPLOYMENT', 'gpt-4o')  # Your deployment name
+AZURE_OPENAI_API_VERSION = os.getenv(
+    'AZURE_OPENAI_API_VERSION', '2024-02-15-preview')
+
+# Standard OpenAI settings (fallback if not using Azure)
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+OPENAI_MODEL = 'gpt-4o'
+
+# Common settings
+OPENAI_MAX_RETRIES = 3
+OPENAI_TIMEOUT = 30  # seconds

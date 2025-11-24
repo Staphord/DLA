@@ -2,7 +2,7 @@
 RFQ Reply Email Extraction Script
 
 This script connects to user email inboxes (IMAP) and extracts RFQ reply data from OEMs.
-It parses email content to extract:
+It uses GPT-4 AI to intelligently extract:
 - RFQ ID (e.g., ABC/MMDDYYYY/CAGE/000001)
 - Solicitation Number
 - NSN, Nomenclature, Quantity, Unit
@@ -10,25 +10,56 @@ It parses email content to extract:
 - OEM Name, Replied Email
 
 The extracted data is stored in the RfqReply model.
+
+Updated: Now uses GPT-4o for intelligent extraction instead of regex patterns.
 """
 
-import json
-from django.db import transaction
-from accounts.models import CustomUser
+# IMPORTANT: Do NOT move imports above django.setup() - it will break!
+from gpt4_email_extractor import extract_rfq_data_with_gpt4
 from solicitations.models import RfqReply, RFQ, UserEmailConfig
+from accounts.models import CustomUser
 from django.utils import timezone
-from django.conf import settings
+from django.db import transaction
+import io
+from typing import Dict, List, Optional, Tuple
+import traceback
+import time
+from datetime import datetime, timedelta
+import re
+from email.header import decode_header
+import email
+import imaplib
+import json
 import os
 import sys
 import django
-import imaplib
-import email
-from email.header import decode_header
-import re
-from datetime import datetime, timedelta
-import time
-import traceback
-from typing import Dict, List, Optional, Tuple
+
+# Setup Django environment FIRST
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
+django.setup()
+
+# NOW import everything else AFTER django.setup()
+
+# Django imports (MUST be after django.setup())
+
+# Import libraries for attachment processing
+try:
+    import pdfplumber
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+
+try:
+    from openpyxl import load_workbook
+    EXCEL_SUPPORT = True
+except ImportError:
+    EXCEL_SUPPORT = False
+
+# Screenshot functionality removed
+SCREENSHOT_SUPPORT = False
+
+# Import GPT-4 extractor (MUST be after django.setup())
 
 
 def safe_print(text):
@@ -41,29 +72,36 @@ def safe_print(text):
         print(safe_text)
 
 
-# Setup Django environment
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
-django.setup()
-
-
 class RfqReplyExtractor:
     """Extract RFQ replies from user email inbox"""
 
-    def __init__(self, user: CustomUser, days_back: int = 30):
+    def __init__(self, user: CustomUser, days_back: int = None, start_date=None, end_date=None, save_screenshots: bool = False):
         """
         Initialize the extractor
 
         Args:
             user: CustomUser instance
-            days_back: How many days back to search for emails (default: 30)
+            days_back: How many days back to search for emails (default: 30 if no dates provided)
+            start_date: Start date for extraction (date object)
+            end_date: End date for extraction (date object)
+            save_screenshots: Whether to save email screenshots (default: False)
         """
         self.user = user
         self.days_back = days_back
+        self.start_date = start_date
+        self.end_date = end_date
+
+        # If no parameters provided, default to 30 days back
+        if not days_back and not start_date:
+            self.days_back = 30
+
         self.email_config = None
         self.imap_connection = None
         self.extracted_count = 0
         self.error_count = 0
+        # Screenshot functionality removed
+        self.save_screenshots = False
+        self.screenshot_dir = None
 
     def connect_to_inbox(self) -> bool:
         """Connect to user's IMAP inbox"""
@@ -131,16 +169,20 @@ class RfqReplyExtractor:
             # Select inbox
             self.imap_connection.select('INBOX')
 
-            # Calculate date range
-            since_date = (datetime.now() -
-                          timedelta(days=self.days_back)).strftime("%d-%b-%Y")
-
-            # Search criteria:
-            # 1. Emails received since X days ago
-            # 2. Subject contains "RE:" or "Re:" (replies)
-            # 3. Or subject contains "RFQ" or "Quote" or "Quotation"
-
-            search_criteria = f'(SINCE {since_date})'
+            # Build search criteria based on date parameters
+            if self.start_date and self.end_date:
+                # Use specific date range
+                since_date = self.start_date.strftime("%d-%b-%Y")
+                before_date = (self.end_date + timedelta(days=1)
+                               ).strftime("%d-%b-%Y")  # BEFORE is exclusive
+                search_criteria = f'(SINCE {since_date} BEFORE {before_date})'
+                date_info = f"from {self.start_date} to {self.end_date}"
+            else:
+                # Use days_back
+                since_date = (datetime.now() -
+                              timedelta(days=self.days_back)).strftime("%d-%b-%Y")
+                search_criteria = f'(SINCE {since_date})'
+                date_info = f"in the last {self.days_back} days"
 
             status, messages = self.imap_connection.search(
                 None, search_criteria)
@@ -150,8 +192,7 @@ class RfqReplyExtractor:
                 return []
 
             email_ids = messages[0].split()
-            safe_print(
-                f"Found {len(email_ids)} emails in the last {self.days_back} days")
+            safe_print(f"Found {len(email_ids)} emails {date_info}")
 
             return email_ids
 
@@ -180,6 +221,9 @@ class RfqReplyExtractor:
             # Extract email body
             body = self._get_email_body(email_message)
 
+            # Check for attachments
+            attachment_info = self._check_attachments(email_message)
+
             # Parse received date
             try:
                 received_date = email.utils.parsedate_to_datetime(date_str)
@@ -192,6 +236,11 @@ class RfqReplyExtractor:
                 'body': body,
                 'received_date': received_date,
                 'message_id': message_id,
+                'has_attachments': attachment_info['has_attachments'],
+                'attachment_count': attachment_info['attachment_count'],
+                'attachment_names': attachment_info['attachment_names'],
+                'attachment_types': attachment_info['attachment_types'],
+                'attachment_contents': attachment_info['attachment_contents'],
             }
 
         except Exception as e:
@@ -246,111 +295,159 @@ class RfqReplyExtractor:
 
         return body
 
+    def _extract_text_from_pdf(self, file_bytes: bytes, filename: str) -> str:
+        """Extract text from PDF attachment"""
+        if not PDF_SUPPORT:
+            return f"[PDF file: {filename} - text extraction not available]"
+
+        try:
+            pdf_file = io.BytesIO(file_bytes)
+            text = ""
+
+            with pdfplumber.open(pdf_file) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+
+            return text.strip() if text.strip() else f"[PDF file: {filename} - no text extracted]"
+        except Exception as e:
+            return f"[PDF file: {filename} - extraction error: {str(e)}]"
+
+    def _extract_text_from_excel(self, file_bytes: bytes, filename: str) -> str:
+        """Extract text from Excel attachment"""
+        if not EXCEL_SUPPORT:
+            return f"[Excel file: {filename} - text extraction not available]"
+
+        try:
+            excel_file = io.BytesIO(file_bytes)
+            workbook = load_workbook(excel_file, data_only=True)
+            text = ""
+
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                text += f"\n--- Sheet: {sheet_name} ---\n"
+
+                for row in sheet.iter_rows(values_only=True):
+                    row_text = "\t".join(
+                        [str(cell) if cell is not None else "" for cell in row])
+                    if row_text.strip():
+                        text += row_text + "\n"
+
+            return text.strip() if text.strip() else f"[Excel file: {filename} - no data extracted]"
+        except Exception as e:
+            return f"[Excel file: {filename} - extraction error: {str(e)}]"
+
+    def _extract_text_from_attachment(self, file_bytes: bytes, filename: str) -> str:
+        """Extract text from attachment based on file type"""
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+        if ext == 'pdf':
+            return self._extract_text_from_pdf(file_bytes, filename)
+        elif ext in ['xlsx', 'xls']:
+            return self._extract_text_from_excel(file_bytes, filename)
+        elif ext in ['txt', 'csv']:
+            try:
+                return file_bytes.decode('utf-8', errors='ignore')
+            except:
+                return f"[Text file: {filename} - decoding error]"
+        else:
+            return f"[Unsupported file type: {filename}]"
+
+    # Screenshot functionality removed
+
+    def _check_attachments(self, email_message) -> Dict:
+        """
+        Check if email has attachments and return details
+
+        Returns:
+            {
+                'has_attachments': bool,
+                'attachment_count': int,
+                'attachment_names': list of str,
+                'attachment_types': list of str (file extensions),
+                'attachment_contents': list of str (extracted text)
+            }
+        """
+        attachments = []
+        attachment_types = []
+        attachment_contents = []
+
+        if email_message.is_multipart():
+            for part in email_message.walk():
+                content_disposition = str(part.get('Content-Disposition', ''))
+
+                # Check if this part is an attachment
+                if 'attachment' in content_disposition:
+                    filename = part.get_filename()
+                    if filename:
+                        # Decode filename if needed
+                        decoded_filename = self._decode_header(filename)
+                        attachments.append(decoded_filename)
+
+                        # Get file extension
+                        if '.' in decoded_filename:
+                            ext = decoded_filename.rsplit('.', 1)[-1].lower()
+                            attachment_types.append(ext)
+
+                        # Extract attachment content
+                        try:
+                            file_bytes = part.get_payload(decode=True)
+                            if file_bytes:
+                                extracted_text = self._extract_text_from_attachment(
+                                    file_bytes, decoded_filename)
+                                attachment_contents.append(extracted_text)
+                            else:
+                                attachment_contents.append(
+                                    f"[Could not decode: {decoded_filename}]")
+                        except Exception as e:
+                            attachment_contents.append(
+                                f"[Error extracting {decoded_filename}: {str(e)}]")
+
+        return {
+            'has_attachments': len(attachments) > 0,
+            'attachment_count': len(attachments),
+            'attachment_names': attachments,
+            'attachment_types': attachment_types,
+            'attachment_contents': attachment_contents
+        }
+
     def extract_rfq_data(self, email_data: Dict) -> Optional[Dict]:
         """
-        Extract RFQ reply data from email content
+        Extract RFQ reply data from email content using GPT-4
 
         Returns dict with:
         - rfq_unique_id, solicitation_number, nsn, nomenclature, quantity, unit
         - unit_price, total_price, oem_name, replied_email
+        - confidence_score, extraction_notes
         """
-        body = email_data['body']
-        subject = email_data['subject']
-        from_email = email_data['from_email']
+        safe_print("  [GPT-4] Extracting data using AI...")
 
-        extracted = {}
+        try:
+            # Use GPT-4 for extraction
+            extracted = extract_rfq_data_with_gpt4(email_data)
 
-        # Extract RFQ ID (ABC/MMDDYYYY/CAGE/000001)
-        rfq_id_pattern = r'[A-Z]{3}/\d{8}/[A-Z0-9]{5}/\d{6}'
-        rfq_id_match = re.search(rfq_id_pattern, body + ' ' + subject)
-        if rfq_id_match:
-            extracted['rfq_unique_id'] = rfq_id_match.group(0)
+            if extracted:
+                # Log confidence score if available
+                confidence = extracted.get('confidence_score')
+                if confidence:
+                    safe_print(
+                        f"  [GPT-4] Extraction confidence: {confidence:.2%}")
 
-        # Extract Solicitation Number (various formats)
-        sol_patterns = [
-            r'Solicitation[:\s]+([A-Z0-9\-]+)',
-            r'Sol[:\s]+([A-Z0-9\-]+)',
-            r'RFQ[:\s]+([A-Z0-9\-]+)',
-        ]
-        for pattern in sol_patterns:
-            match = re.search(pattern, body, re.IGNORECASE)
-            if match:
-                extracted['solicitation_number'] = match.group(1)
-                break
+                # Log extraction notes if available
+                notes = extracted.get('extraction_notes')
+                if notes:
+                    safe_print(f"  [GPT-4] Notes: {notes}")
 
-        # Extract NSN (13 digits with dashes: 1234-12-345-6789)
-        nsn_pattern = r'\d{4}-\d{2}-\d{3}-\d{4}'
-        nsn_match = re.search(nsn_pattern, body)
-        if nsn_match:
-            extracted['nsn'] = nsn_match.group(0)
+                return extracted
+            else:
+                safe_print("  [GPT-4] No data extracted")
+                return None
 
-        # Extract prices (various formats: $1,234.56 or 1234.56 or USD 1234.56)
-        price_patterns = [
-            r'\$\s*([0-9,]+\.?\d*)',
-            r'(?:USD|usd)\s*([0-9,]+\.?\d*)',
-            r'(?:Price|price|PRICE)[:\s]+\$?\s*([0-9,]+\.?\d*)',
-            r'(?:Total|total|TOTAL)[:\s]+\$?\s*([0-9,]+\.?\d*)',
-        ]
-
-        prices_found = []
-        for pattern in price_patterns:
-            matches = re.findall(pattern, body)
-            for match in matches:
-                try:
-                    price = float(match.replace(',', ''))
-                    prices_found.append(price)
-                except:
-                    pass
-
-        # Assign prices (first as unit price, second as total, or same if only one)
-        if len(prices_found) >= 2:
-            extracted['unit_price'] = prices_found[0]
-            extracted['total_price'] = prices_found[1]
-        elif len(prices_found) == 1:
-            extracted['unit_price'] = prices_found[0]
-            extracted['total_price'] = prices_found[0]
-
-        # Extract quantity and unit
-        qty_patterns = [
-            r'(?:Quantity|Qty|QTY)[:\s]+(\d+)\s*([A-Z]{2,4})?',
-            r'(\d+)\s+(EA|BOX|EACH|PCS|UNITS?)',
-        ]
-        for pattern in qty_patterns:
-            match = re.search(pattern, body, re.IGNORECASE)
-            if match:
-                extracted['quantity'] = match.group(1)
-                if match.lastindex >= 2 and match.group(2):
-                    extracted['unit'] = match.group(2).upper()
-                break
-
-        # Extract OEM name from email sender
-        # Format: "Company Name <email@example.com>" or just "email@example.com"
-        email_match = re.search(r'([^<]+)<([^>]+)>', from_email)
-        if email_match:
-            extracted['oem_name'] = email_match.group(1).strip()
-            extracted['replied_email'] = email_match.group(2).strip()
-        else:
-            # Just email address
-            email_only = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', from_email)
-            if email_only:
-                extracted['replied_email'] = email_only.group(0)
-                # Try to extract company from email domain
-                domain = extracted['replied_email'].split('@')[1]
-                extracted['oem_name'] = domain.split('.')[0].upper()
-
-        # Extract nomenclature (harder - look for common patterns)
-        # Usually appears after "Part" or "Item" or in a description field
-        nomenclature_patterns = [
-            r'(?:Nomenclature|Description|Item)[:\s]+([^\n]{10,100})',
-            r'(?:Part|PART)[:\s]+([^\n]{10,100})',
-        ]
-        for pattern in nomenclature_patterns:
-            match = re.search(pattern, body, re.IGNORECASE)
-            if match:
-                extracted['nomenclature'] = match.group(1).strip()
-                break
-
-        return extracted if extracted else None
+        except Exception as e:
+            safe_print(f"  [ERROR] GPT-4 extraction failed: {e}")
+            traceback.print_exc()
+            return None
 
     def save_rfq_reply(self, email_data: Dict, extracted_data: Dict) -> bool:
         """Save extracted RFQ reply to database"""
@@ -389,6 +486,11 @@ class RfqReplyExtractor:
                     email_body=email_data.get('body', ''),
                     received_date=email_data.get('received_date'),
                     email_message_id=message_id,
+
+                    # GPT-4 extraction metadata
+                    confidence_score=extracted_data.get('confidence_score'),
+                    extraction_notes=extracted_data.get(
+                        'extraction_notes', ''),
 
                     # Status
                     status='received',
@@ -444,6 +546,32 @@ class RfqReplyExtractor:
                         safe_print(f"  [SKIP] Could not fetch")
                         continue
 
+                    # Print attachment information
+                    if email_data.get('has_attachments'):
+                        attachment_count = email_data.get(
+                            'attachment_count', 0)
+                        attachment_names = email_data.get(
+                            'attachment_names', [])
+                        attachment_contents = email_data.get(
+                            'attachment_contents', [])
+
+                        safe_print(
+                            f"Has Attachments: YES ({attachment_count} file(s))")
+                        for i, name in enumerate(attachment_names, 1):
+                            # Check if content was extracted
+                            content_status = ""
+                            if i <= len(attachment_contents):
+                                content = attachment_contents[i-1]
+                                if content and not content.startswith('['):
+                                    content_preview = content[:50].replace(
+                                        '\n', ' ')
+                                    content_status = f"Extracted ({len(content)} chars)"
+                                else:
+                                    content_status = f"{content}"
+                            safe_print(f"      {i}. {name}{content_status}")
+                    else:
+                        safe_print(f"Has Attachments: NO")
+
                     # Check if this looks like an RFQ reply
                     subject = email_data.get('subject', '').lower()
                     body = email_data.get('body', '').lower()
@@ -455,7 +583,7 @@ class RfqReplyExtractor:
                                           'rfq', 'quote', 'price', 'nsn', 'solicitation'])
 
                     if not (is_reply or has_rfq_content):
-                        safe_print(f"  [SKIP] Doesn't look like RFQ reply")
+                        safe_print(f"[SKIP] Doesn't look like RFQ reply")
                         continue
 
                     # Extract RFQ data
@@ -509,20 +637,23 @@ class RfqReplyExtractor:
                     pass
 
 
-def extract_rfq_replies_for_user(user_id: int, days_back: int = 30) -> Dict:
+def extract_rfq_replies_for_user(user_id: int, days_back: int = None, start_date=None, end_date=None) -> Dict:
     """
     Extract RFQ replies for a specific user
 
     Args:
         user_id: CustomUser ID
-        days_back: How many days back to search (default: 30)
+        days_back: How many days back to search (default: 30 if no dates provided)
+        start_date: Start date for extraction (date object)
+        end_date: End date for extraction (date object)
 
     Returns:
         Dict with extraction results
     """
     try:
         user = CustomUser.objects.get(id=user_id)
-        extractor = RfqReplyExtractor(user, days_back=days_back)
+        extractor = RfqReplyExtractor(
+            user, days_back=days_back, start_date=start_date, end_date=end_date)
         return extractor.process_emails()
     except CustomUser.DoesNotExist:
         return {'success': False, 'error': f'User with ID {user_id} not found'}
@@ -530,12 +661,14 @@ def extract_rfq_replies_for_user(user_id: int, days_back: int = 30) -> Dict:
         return {'success': False, 'error': str(e)}
 
 
-def extract_rfq_replies_for_all_users(days_back: int = 30) -> Dict:
+def extract_rfq_replies_for_all_users(days_back: int = None, start_date=None, end_date=None) -> Dict:
     """
     Extract RFQ replies for all active users
 
     Args:
-        days_back: How many days back to search (default: 30)
+        days_back: How many days back to search (default: 30 if no dates provided)
+        start_date: Start date for extraction (date object)
+        end_date: End date for extraction (date object)
 
     Returns:
         Dict with extraction results for all users
@@ -550,7 +683,8 @@ def extract_rfq_replies_for_all_users(days_back: int = 30) -> Dict:
 
     for user in users:
         safe_print(f"\n--- Processing user: {user.username} ---")
-        extractor = RfqReplyExtractor(user, days_back=days_back)
+        extractor = RfqReplyExtractor(
+            user, days_back=days_back, start_date=start_date, end_date=end_date)
         results[user.username] = extractor.process_emails()
         time.sleep(1)  # Delay between users
 
@@ -594,7 +728,8 @@ if __name__ == '__main__':
         # Extract for specific user by username
         try:
             user = CustomUser.objects.get(username=args.username)
-            result = extract_rfq_replies_for_user(user.id, days_back=args.days)
+            result = extract_rfq_replies_for_user(
+                user.id, days_back=args.days)
             safe_print(f"\nResult: {json.dumps(result, indent=2)}")
         except CustomUser.DoesNotExist:
             safe_print(f"Error: User '{args.username}' not found")

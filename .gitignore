@@ -6,3 +6,6 @@ env/
 venv/
 media/
 __pycache__/
+AZURE_OPENAI_SETUP.md
+GPT4_EXTRACTION_SETUP.md
+email_screenshots/

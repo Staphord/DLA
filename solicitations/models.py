@@ -1218,6 +1218,17 @@ class RfqReply(models.Model):
         help_text="Internal notes about this reply"
     )
 
+    # GPT-4 Extraction Metadata
+    confidence_score = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="GPT-4 extraction confidence score (0.0 to 1.0)"
+    )
+    extraction_notes = models.TextField(
+        blank=True,
+        help_text="GPT-4 extraction notes (missing fields, assumptions, etc.)"
+    )
+
     # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
