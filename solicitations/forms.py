@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
 from accounts.models import CustomUser
-from solicitations.models import EmailSettings, GitHubWorkflow, UserOEMCustomization, UserEmailConfig, UserExportConfiguration, ExportFieldDefinition
+from solicitations.models import EmailSettings, RfqAutoFetchSettings, GitHubWorkflow, UserOEMCustomization, UserEmailConfig, UserExportConfiguration, ExportFieldDefinition, RfqReply
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import authenticate
 
@@ -212,6 +212,22 @@ class EmailSettingsForm(forms.ModelForm):
 
         if 'enable_time_3' in self.fields:
             self.fields['enable_time_3'].required = False
+
+
+class RfqAutoFetchSettingsForm(forms.ModelForm):
+    class Meta:
+        model = RfqAutoFetchSettings
+        fields = ['enabled', 'day', 'fetch_time']
+        widgets = {
+            'enabled': forms.HiddenInput(),
+            'day': forms.Select(attrs={
+                'class': 'form-select',
+            }),
+            'fetch_time': forms.TimeInput(attrs={
+                'class': 'form-control',
+                'type': 'time',
+            }),
+        }
 
 
 class UserUpdateForm(forms.ModelForm):
@@ -464,3 +480,63 @@ class UserExportConfigurationForm(forms.ModelForm):
         # Make fields optional
         self.fields['source_field'].required = False
         self.fields['custom_value'].required = False
+
+
+class RfqReplyEditForm(forms.ModelForm):
+    """
+    Form for editing RFQ reply data.
+    Allows users to update pricing, quantities, and other extracted information.
+    """
+    class Meta:
+        model = RfqReply
+        fields = [
+            'rfq_unique_id',
+            'solicitation_number',
+            'nsn',
+            'part_number',
+            'nomenclature',
+            'quantity',
+            'unit',
+            'unit_price',
+            'total_price',
+            'final_price',
+            'oem_name',
+            'replied_email',
+            'notes',
+        ]
+        widgets = {
+            'rfq_unique_id': forms.TextInput(attrs={'class': 'form-control'}),
+            'solicitation_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'nsn': forms.TextInput(attrs={'class': 'form-control'}),
+            'part_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'nomenclature': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'quantity': forms.TextInput(attrs={'class': 'form-control'}),
+            'unit': forms.TextInput(attrs={'class': 'form-control'}),
+            'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'total_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'final_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'oem_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'replied_email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+        labels = {
+            'rfq_unique_id': 'RFQ ID',
+            'solicitation_number': 'Solicitation Number',
+            'nsn': 'NSN',
+            'part_number': 'Part Number',
+            'nomenclature': 'Nomenclature',
+            'quantity': 'Quantity',
+            'unit': 'Unit',
+            'unit_price': 'Unit Price',
+            'total_price': 'Total Price',
+            'final_price': 'Final Price',
+            'oem_name': 'OEM Name',
+            'replied_email': 'Replied Email',
+            'notes': 'Notes',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make all fields optional
+        for field_name, field in self.fields.items():
+            field.required = False

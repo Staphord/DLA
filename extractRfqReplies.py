@@ -469,6 +469,7 @@ class RfqReplyExtractor:
                     solicitation_number=extracted_data.get(
                         'solicitation_number', ''),
                     nsn=extracted_data.get('nsn', ''),
+                    part_number=extracted_data.get('part_number', ''),
                     nomenclature=extracted_data.get('nomenclature', ''),
                     quantity=extracted_data.get('quantity', ''),
                     unit=extracted_data.get('unit', ''),
@@ -491,9 +492,6 @@ class RfqReplyExtractor:
                     confidence_score=extracted_data.get('confidence_score'),
                     extraction_notes=extracted_data.get(
                         'extraction_notes', ''),
-
-                    # Status
-                    status='received',
                 )
 
                 # The save() method will auto-match to RFQ by rfq_unique_id
@@ -537,8 +535,13 @@ class RfqReplyExtractor:
             # Process each email
             for idx, email_id in enumerate(email_ids, 1):
                 try:
-                    safe_print(
-                        f"[{idx}/{len(email_ids)}] Processing email ID: {email_id.decode()}")
+                    # Log progress periodically to keep worker alive
+                    if idx % 10 == 0 or idx == 1:
+                        safe_print(
+                            f"[{idx}/{len(email_ids)}] Processing email ID: {email_id.decode()} (Progress: {idx/len(email_ids)*100:.1f}%)")
+                    else:
+                        safe_print(
+                            f"[{idx}/{len(email_ids)}] Processing email ID: {email_id.decode()}")
 
                     # Fetch email content
                     email_data = self.fetch_email_content(email_id)
@@ -586,8 +589,13 @@ class RfqReplyExtractor:
                         safe_print(f"[SKIP] Doesn't look like RFQ reply")
                         continue
 
-                    # Extract RFQ data
+                    # Extract RFQ data (this is the slow part - GPT-4 API call)
+                    # Log before and after to track progress
+                    safe_print(f"  [EXTRACT] Starting GPT-4 extraction...")
+                    extraction_start = time.time()
                     extracted_data = self.extract_rfq_data(email_data)
+                    extraction_time = time.time() - extraction_start
+                    safe_print(f"  [EXTRACT] Completed in {extraction_time:.1f}s")
 
                     if not extracted_data:
                         safe_print(f"  [SKIP] No RFQ data found")

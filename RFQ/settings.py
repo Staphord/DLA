@@ -155,8 +155,8 @@ Q_CLUSTER = {
     'name': 'solicitations',
     'workers': 4,
     'recycle': 500,
-    'retry': 300,
-    'timeout': 240,  # Increased timeout for email processing
+    'timeout': 7200,  # 2 hours timeout for RFQ reply extraction (can process many emails)
+    'retry': 8000,  # Must be larger than timeout to prevent retriggering before completion
     'compress': True,
     'save_limit': 250,
     'queue_limit': 500,

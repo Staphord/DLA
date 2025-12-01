@@ -336,6 +336,68 @@ class EmailSettings(models.Model):
                     return True
         return False
 
+
+class RfqAutoFetchSettings(models.Model):
+    """
+    Separate configuration for automatic RFQ reply fetching from email.
+    This is intentionally independent from EmailSettings.auto_send.
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='rfq_auto_fetch_settings'
+    )
+    enabled = models.BooleanField(
+        default=False,
+        help_text="Enable automatic RFQ reply fetching from email",
+    )
+
+    DAILY = 'daily'
+    MONDAY = 'monday'
+    TUESDAY = 'tuesday'
+    WEDNESDAY = 'wednesday'
+    THURSDAY = 'thursday'
+    FRIDAY = 'friday'
+    SATURDAY = 'saturday'
+    SUNDAY = 'sunday'
+
+    DAY_CHOICES = [
+        (DAILY, 'Every day'),
+        (MONDAY, 'Monday'),
+        (TUESDAY, 'Tuesday'),
+        (WEDNESDAY, 'Wednesday'),
+        (THURSDAY, 'Thursday'),
+        (FRIDAY, 'Friday'),
+        (SATURDAY, 'Saturday'),
+        (SUNDAY, 'Sunday'),
+    ]
+
+    day = models.CharField(
+        max_length=20,
+        choices=DAY_CHOICES,
+        default=DAILY,
+        help_text="Which day(s) to run auto-fetch",
+    )
+    fetch_time = models.TimeField(
+        default=datetime.time(2, 0),  # 2:00 AM by default
+        help_text="Time of day to run auto-fetch (server timezone)",
+    )
+    days_back = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="How many days back to search for RFQ replies each run",
+    )
+    last_fetched = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When RFQ replies were last fetched for this user (prevents duplicate fetches)",
+    )
+
+    def __str__(self):
+        status = "enabled" if self.enabled else "disabled"
+        day_label = dict(self.DAY_CHOICES).get(self.day, self.day)
+        return f"{self.user.username}'s RFQ Auto-Fetch [{status}] ({day_label} at {self.fetch_time}, last {self.days_back} day(s))"
+
+
 # This model track the stattus of the email
 
 
@@ -1082,17 +1144,9 @@ class RfqReply(models.Model):
 
     Extracted fields from email:
     - NSN, Nomenclature, Solicitation Number, Qty/Unit
-    - Price, Total Price
+    - Price, Total Price, Final Price
     - OEM Name, Replied Email
     """
-
-    REPLY_STATUS_CHOICES = [
-        ('pending', 'Pending Reply'),
-        ('received', 'Reply Received'),
-        ('quoted', 'Quote Provided'),
-        ('declined', 'Declined to Quote'),
-        ('no_response', 'No Response'),
-    ]
 
     # Core relationship
     user = models.ForeignKey(
@@ -1100,14 +1154,6 @@ class RfqReply(models.Model):
         on_delete=models.CASCADE,
         related_name='rfq_replies',
         help_text="User who sent the RFQ and received this reply"
-    )
-
-    # Reply status
-    status = models.CharField(
-        max_length=20,
-        choices=REPLY_STATUS_CHOICES,
-        default='received',
-        help_text="Current status of the reply"
     )
 
     # Extracted data from email - Solicitation/RFQ Info
@@ -1126,6 +1172,11 @@ class RfqReply(models.Model):
         max_length=50,
         blank=True,
         help_text="NSN extracted from email"
+    )
+    part_number = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Part number extracted from email"
     )
     nomenclature = models.TextField(
         blank=True,
@@ -1156,6 +1207,13 @@ class RfqReply(models.Model):
         null=True,
         blank=True,
         help_text="Total price extracted from email"
+    )
+    final_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Final price after negotiations or adjustments"
     )
 
     # Extracted OEM information
@@ -1244,7 +1302,6 @@ class RfqReply(models.Model):
             models.Index(fields=['user', '-received_date']),
             models.Index(fields=['solicitation_number']),
             models.Index(fields=['rfq_unique_id']),
-            models.Index(fields=['status', '-received_date']),
             models.Index(fields=['email_message_id']),
             models.Index(fields=['oem_name']),
             models.Index(fields=['nsn']),
@@ -1252,7 +1309,7 @@ class RfqReply(models.Model):
 
     def __str__(self):
         ref = self.rfq_unique_id or self.solicitation_number or 'No Ref'
-        return f"Reply from {self.oem_name or 'Unknown'} - {ref} ({self.get_status_display()})"
+        return f"Reply from {self.oem_name or 'Unknown'} - {ref}"
 
     def save(self, *args, **kwargs):
         """Try to match RFQ by rfq_unique_id if not already linked"""
@@ -1281,6 +1338,115 @@ class RfqReply(models.Model):
         if self.received_date and self.rfq and self.rfq.sent_at:
             delta = self.received_date - self.rfq.sent_at
             return delta.days
+        return None
+
+    def find_matching_solicitation(self):
+        """
+        Find matching Solicitation using multiple criteria in priority order.
+        
+        Returns:
+            Solicitation object or None if no match found
+        """
+        # Import here to avoid circular import
+        from django.db.models import Q
+        # Solicitation is in the same module, so we can reference it directly
+        
+        # Method 1: Get from matched RFQ (highest priority)
+        if self.rfq and self.rfq.solicitation:
+            return self.rfq.solicitation
+
+        # Method 2: Look up by solicitation number
+        if self.solicitation_number:
+            try:
+                solicitation = Solicitation.objects.filter(
+                    solicitation=self.solicitation_number
+                ).first()
+                if solicitation:
+                    return solicitation
+            except Exception:
+                pass
+
+        # Method 3: Look up by NSN AND quantity (both must match if available)
+        if self.nsn and self.quantity:
+            try:
+                # Exact match on both NSN and quantity
+                solicitation = Solicitation.objects.filter(
+                    NSN=self.nsn,
+                    quantity=self.quantity
+                ).first()
+                if solicitation:
+                    return solicitation
+
+                # If no exact match, try case-insensitive / trimmed quantity
+                nsn_clean = self.nsn.strip() if self.nsn else None
+                qty_clean = self.quantity.strip() if self.quantity else None
+                if nsn_clean and qty_clean:
+                    solicitation = Solicitation.objects.filter(
+                        NSN__iexact=nsn_clean,
+                        quantity__iexact=qty_clean
+                    ).first()
+                    if solicitation:
+                        return solicitation
+            except Exception:
+                pass
+
+        # Method 4: Look up by NSN alone
+        if self.nsn:
+            try:
+                solicitation = Solicitation.objects.filter(
+                    NSN=self.nsn
+                ).first()
+                if solicitation:
+                    return solicitation
+            except Exception:
+                pass
+
+        # Method 5: Look up by part_number AND quantity (both must match for accuracy)
+        if self.part_number and self.quantity:
+            try:
+                # Try exact match first
+                solicitation = Solicitation.objects.filter(
+                    part_number=self.part_number,
+                    quantity=self.quantity
+                ).first()
+                if solicitation:
+                    return solicitation
+                
+                # If no exact match, try case-insensitive and trimmed match
+                part_num_clean = self.part_number.strip() if self.part_number else None
+                qty_clean = self.quantity.strip() if self.quantity else None
+                
+                if part_num_clean and qty_clean:
+                    solicitation = Solicitation.objects.filter(
+                        part_number__iexact=part_num_clean,
+                        quantity__iexact=qty_clean
+                    ).first()
+                    if solicitation:
+                        return solicitation
+            except Exception:
+                pass
+
+        # Method 6: Look up by part_number alone (if quantity doesn't match or is missing)
+        if self.part_number:
+            try:
+                # Try exact match first
+                solicitation = Solicitation.objects.filter(
+                    part_number=self.part_number
+                ).first()
+                if solicitation:
+                    return solicitation
+                
+                # If no exact match, try case-insensitive match
+                part_num_clean = self.part_number.strip() if self.part_number else None
+                if part_num_clean:
+                    solicitation = Solicitation.objects.filter(
+                        part_number__iexact=part_num_clean
+                    ).first()
+                    if solicitation:
+                        return solicitation
+            except Exception:
+                pass
+
         return None
 
 
@@ -1427,11 +1593,15 @@ class UserExportConfiguration(models.Model):
     def __str__(self):
         return f"{self.user.username} - Field {self.field_definition.position}"
 
-    def get_value(self, solicitation_obj):
+    def get_value(self, obj=None):
         """
-        Get the value for this field from a solicitation object.
+        Get the value for this field from an object (Solicitation or RfqReply).
         Returns custom_value if set, otherwise gets from source_field.
+        For RfqReply objects, intelligently tries to get data from related RFQ/Solicitation models.
         Returns empty string if field is disabled or no value found.
+        
+        Args:
+            obj: Solicitation or RfqReply object (optional)
         """
         if not self.is_enabled:
             return ""
@@ -1440,13 +1610,186 @@ class UserExportConfiguration(models.Model):
         if self.custom_value:
             return self.custom_value
 
+        # Helper to consistently format different value types (dates, decimals, strings)
+        def _format_value(value):
+            """
+            Normalize value for export:
+            - Dates → MM/DD/YYYY (e.g. 08/17/2022)
+            - Known date strings (e.g. 12-02-2025, 2025-12-02) → MM/DD/YYYY
+            - Decimals → plain string
+            - Everything else → str(value)
+            """
+            from datetime import datetime
+
+            if value is None:
+                return ""
+
+            # Handle date/datetime objects
+            if hasattr(value, "strftime"):
+                return value.strftime("%m/%d/%Y")
+
+            # Handle Decimal fields
+            if hasattr(value, "quantize"):
+                return str(value)
+
+            # Normalize common date string formats to MM/DD/YYYY
+            if isinstance(value, str):
+                s = value.strip()
+                if not s:
+                    return ""
+
+                # Try multiple common date formats
+                date_formats = (
+                    "%m-%d-%Y",  # 12-02-2025
+                    "%Y-%m-%d",  # 2025-12-02
+                    "%m/%d/%Y",  # 12/02/2025
+                    "%Y/%m/%d",  # 2025/12/02
+                )
+                for fmt in date_formats:
+                    try:
+                        dt = datetime.strptime(s, fmt)
+                        return dt.strftime("%m/%d/%Y")
+                    except ValueError:
+                        continue
+
+                # Normalize Unit of Issue fields to 2-letter code (e.g., "EA (EACH)" -> "EA")
+                is_unit_field = False
+                try:
+                    if (self.source_field and self.source_field.endswith("unit")) or getattr(self.field_definition, "position", None) == 48:
+                        is_unit_field = True
+                except Exception:
+                    is_unit_field = False
+
+                if is_unit_field:
+                    import re
+
+                    # Take the leading alphabetic code before any space or '('
+                    m = re.match(r"\s*([A-Za-z]{1,4})", s)
+                    if m:
+                        code = m.group(1).upper()
+                        # Most DLA unit codes are 2 characters; trim longer ones
+                        return code[:2]
+
+                return s
+
+            return str(value)
+
         # Get value from source field
-        if self.source_field and solicitation_obj:
+        if self.source_field and obj:
             try:
-                value = getattr(solicitation_obj, self.source_field, "")
-                return str(value) if value is not None else ""
-            except AttributeError:
+                # Check if obj is an RfqReply instance
+                is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
+                
+                # Handle nested attributes like "user.cage" or "rfq.solicitation.solicitation"
+                if '.' in self.source_field:
+                    parts = self.source_field.split('.')
+                    value = obj
+                    for part in parts:
+                        value = getattr(value, part, None)
+                        if value is None:
+                            break
+                    if value is not None:
+                        return _format_value(value)
+                else:
+                    # Direct attribute access
+                    # For RfqReply, try to get from related Solicitation first if available
+                    if is_rfq_reply:
+                        # Reverse mapping: RfqReply field -> Solicitation field
+                        # This allows us to try getting from Solicitation first when source_field is an RfqReply field
+                        rfq_reply_to_solicitation_map = {
+                            'solicitation_number': 'solicitation',
+                            'nsn': 'NSN',
+                            'quantity': 'quantity',
+                            'unit': 'unit',
+                            'received_date': 'return_by_date',  # Try solicitation return_by_date first
+                        }
+                        
+                        # Mapping of Solicitation field names to RfqReply field names (for when source_field is Solicitation field)
+                        solicitation_to_rfq_reply_map = {
+                            'solicitation': 'solicitation_number',
+                            'NSN': 'nsn',
+                            'nsn': 'nsn',
+                            'quantity': 'quantity',
+                            'unit': 'unit',
+                            'return_by_date': 'received_date',  # Use received_date as fallback
+                            'cage': None,  # Will try rfq.solicitation.cage, then user.cage
+                            'pr': None,  # Purchase Request - only in Solicitation
+                        }
+                        
+                        # First, try to get from related Solicitation if source_field is an RfqReply field
+                        if self.source_field in rfq_reply_to_solicitation_map:
+                            solicitation_field = rfq_reply_to_solicitation_map[self.source_field]
+                            # Try to get from related Solicitation first
+                            if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                                solicitation_value = getattr(obj.rfq.solicitation, solicitation_field, None)
+                                if solicitation_value and solicitation_value != "":
+                                    return _format_value(solicitation_value)
+                            
+                            # Fall back to RfqReply direct field if solicitation doesn't have it or RFQ not linked
+                            if hasattr(obj, self.source_field):
+                                value = getattr(obj, self.source_field, None)
+                                if value is not None and value != "":
+                                    return _format_value(value)
+                            # If we found a value from this mapping, don't continue to other checks
+                            # But if we didn't find anything, continue to check other mappings
+                        
+                        # Check if source_field maps to a Solicitation field
+                        if self.source_field in solicitation_to_rfq_reply_map:
+                            rfq_reply_field = solicitation_to_rfq_reply_map[self.source_field]
+                            # Try to get from related Solicitation first
+                            if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                                solicitation_field = self.source_field
+                                # Special handling for 'cage' - try solicitation.cage first
+                                if self.source_field == 'cage':
+                                    solicitation_value = getattr(obj.rfq.solicitation, 'cage', None)
+                                    if solicitation_value:
+                                        return str(solicitation_value)
+                                    # Fall back to user.cage
+                                    user_cage = getattr(obj.user, 'cage', None)
+                                    if user_cage:
+                                        return str(user_cage)
+                                else:
+                                    # Try to get from solicitation
+                                    solicitation_value = getattr(obj.rfq.solicitation, solicitation_field, None)
+                                    if solicitation_value and solicitation_value != "":
+                                        return _format_value(solicitation_value)
+                            
+                            # Fall back to RfqReply direct field if available
+                            if rfq_reply_field and hasattr(obj, rfq_reply_field):
+                                value = getattr(obj, rfq_reply_field, None)
+                                if value is not None and value != "":
+                                    return _format_value(value)
+                        
+                        # If not in mapping, try direct access on RfqReply
+                        if hasattr(obj, self.source_field):
+                            value = getattr(obj, self.source_field, None)
+                            if value is not None and value != "":
+                                return _format_value(value)
+                    else:
+                        # For Solicitation objects, direct attribute access
+                        value = getattr(obj, self.source_field, None)
+                        if value is not None:
+                            formatted = _format_value(value)
+                            return formatted if formatted != "" else ""
+            except (AttributeError, TypeError) as e:
                 return ""
 
         # Return default value from field definition
-        return self.field_definition.default_value or ""
+        # If default is "Blank" or placeholder text like "RFQ Requirement", return empty string instead
+        default_val = self.field_definition.default_value or ""
+        if not default_val:
+            return ""
+        
+        # Treat placeholder/default text values as empty
+        default_upper = default_val.upper().strip()
+        placeholder_texts = [
+            "BLANK",
+            "RFQ REQUIREMENT",
+            "RFQ SOLICITATION #",
+            "RFQ RETURN BY DATE",
+        ]
+        
+        if default_upper in placeholder_texts:
+            return ""
+        
+        return default_val

@@ -23,6 +23,7 @@ urlpatterns = [
     path('flitered-solicitations/', views.filtered_solicitations,
          name='filtered-solicitations'),
     path('email-settings/', views.email_settings, name='email-settings'),
+    path('rfq-auto-fetch-settings/', views.rfq_auto_fetch_settings, name='rfq-auto-fetch-settings'),
     path('check-user-profile/', views.check_user_profile,
          name='check_user_profile'),
     path('check-task-status/', views.check_task_status, name='check_task_status'),
@@ -77,9 +78,15 @@ urlpatterns = [
 
     ###################  RFQ REPLIES (EXTRACTED FROM EMAILS) URLS  #########################
     path('replied-rfqs/', views.replied_rfq, name='replied-rfq'),
+    path('add-replied-rfq/', views.add_replied_rfq, name='add-replied-rfq'),
+    path('export-replied-rfqs/', views.export_replied_rfqs, name='export-replied-rfqs'),
+    path('export-single-rfq-reply/<int:rfq_id>/', views.export_single_rfq_reply, name='export-single-rfq-reply'),
+    path('fetch-rfq-replies-by-date/', views.fetch_rfq_replies_by_date, name='fetch-rfq-replies-by-date'),
     path('search-replied-rfq/', views.search_replied, name='search-replied'),
     path('replied-rfq-detail/<rfq>/',
          views.replied_rfq_detail, name='replied-rfq-detail'),
+    path('edit-replied-rfq/<rfq>/',
+         views.edit_replied_rfq, name='edit-replied-rfq'),
     path('delete-replied-rfq/<rfq>/',
          views.delete_replied_rfq, name='delete-replied-rfq'),
 

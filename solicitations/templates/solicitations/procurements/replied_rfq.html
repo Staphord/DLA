@@ -5,11 +5,7 @@
 {% block content %}
 
 <section>
-    <div class="d-flex justify-content-between">
-        <div class="">
-            <a href="{% url 'solicitations:replied-rfq' %}" class="btn mybg myhover text-white position-relative">Replied RFQs</a>
-            <a href="{% url 'solicitations:sent-rfq' %}" class="btn bg-secondary text-white position-relative">Sent RFQs</a>
-        </div>
+    <div class="d-flex justify-content-between align-items-start">
         <div class="d-flex gap-3">
             <form action="{% url 'solicitations:search-replied' %}" method="post">
                 {% csrf_token %}
@@ -19,10 +15,57 @@
                 </div>
             </form>
         </div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <div class="d-flex gap-2">
+                <a href="{% url 'solicitations:replied-rfq' %}" class="btn mybg myhover text-white position-relative">Replied RFQs</a>
+                <a href="{% url 'solicitations:sent-rfq' %}" class="btn bg-secondary text-white position-relative">Sent RFQs</a>
+            </div>
+        </div>
     </div>
 
     <div class="mt-4">
-        Total Replied RFQs <span class="badge bg-dark text-white">{{total_replied_rfq}}</span>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                Total Replied RFQs <span class="badge bg-dark text-white">{{total_replied_rfq}}</span>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                {% if auto_fetch_enabled %}
+                    <span class="badge bg-success">
+                        <i class="bi bi-clock-history me-1"></i> Auto Fetch Enabled
+                    </span>
+                {% endif %}
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-gear me-1"></i> Actions
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'solicitations:export-replied-rfqs' %}">
+                                <i class="bi bi-download me-2"></i> Export All Replied RFQs
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#fetchRfqByDateModal">
+                                <i class="bi bi-envelope-open me-2"></i> Fetch RFQ Replies by Date
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'solicitations:rfq-auto-fetch-settings' %}">
+                                <i class="bi bi-sliders me-2"></i> Configure Auto Fetching
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'solicitations:add-replied-rfq' %}">
+                                <i class="bi bi-plus-circle me-2"></i> Add Reply
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="mb-4 mt-2">
@@ -33,6 +76,7 @@
                       <th class="text-secondary">RFQ ID / Solicitation #</th>
                       <th class="text-secondary">Unit Price</th>
                       <th class="text-secondary">Total Price</th>
+                      <th class="text-secondary">Final Price</th>
                       <th class="text-secondary">Replied Date</th>
                       <th class="text-secondary text-center">Operation</th>
                     </thead>
@@ -66,7 +110,18 @@
                                     <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>{{rfqs.received_date|date:"M d, Y"|default:rfqs.created_at|date:"M d, Y"}}</td>
+                            <td>
+                                <span class="text-primary fw-bold">
+                                    ${{ rfqs.final_price|default_if_none:"0" }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if rfqs.received_date %}
+                                    {{rfqs.received_date|date:"M d, Y"}}
+                                {% else %}
+                                    {{rfqs.created_at|date:"M d, Y"}}
+                                {% endif %}
+                            </td>
 
                             <td>
                                 <div class="dropdown text-center">
@@ -76,6 +131,12 @@
 
                                 <ul class="dropdown-menu">
                                   <li><a class="dropdown-item" href="{% url 'solicitations:replied-rfq-detail' rfqs.id %}">View More</a></li>
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:edit-replied-rfq' rfqs.id %}" onclick="event.stopPropagation();">Edit</a></li>
+                                  <li><hr class="dropdown-divider"></li>
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:export-single-rfq-reply' rfqs.id %}" onclick="event.stopPropagation();">
+                                     Export
+                                  </a></li>
+                                  <li><hr class="dropdown-divider"></li>
                                   <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{rfqs.id}}" onclick="event.stopPropagation();">Delete</a></li>
                                 </ul>
                               </div>
@@ -132,6 +193,112 @@
             </div>
         </div>
     </div>
+
+    <!-- Fetch RFQ Replies By Date Modal -->
+    <div class="modal fade" id="fetchRfqByDateModal" tabindex="-1" aria-labelledby="fetchRfqByDateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fetchRfqByDateModalLabel">Choose Date</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="fetchRfqByDateForm">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <input type="date" id="fetchDateInput" name="fetch_date" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="startFetchRfqRepliesByDate()">Fetch Now</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification (similar to sending RFQs) -->
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div id="rfqFetchToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <!-- Message will be filled dynamically -->
+                </div>
+                <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
 </section>
+
+<script>
+function showRfqFetchToast(message, type = "info") {
+    const toastElement = document.getElementById('rfqFetchToast');
+    const body = toastElement.querySelector('.toast-body');
+    body.textContent = message;
+
+    toastElement.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-info');
+    if (type === 'success') {
+        toastElement.classList.add('text-bg-success');
+    } else if (type === 'error') {
+        toastElement.classList.add('text-bg-danger');
+    } else {
+        toastElement.classList.add('text-bg-info');
+    }
+
+    const delay = Math.min(10000, Math.max(3000, message.length * 80));
+    const toast = new bootstrap.Toast(toastElement, { delay: delay });
+    toast.show();
+}
+
+function startFetchRfqRepliesByDate() {
+    const dateInput = document.getElementById('fetchDateInput');
+    const dateValue = dateInput.value;
+    if (!dateValue) {
+        alert('Please select a date first.');
+        return;
+    }
+
+    // Close the date modal
+    const fetchModalEl = document.getElementById('fetchRfqByDateModal');
+    const fetchModalInstance = bootstrap.Modal.getInstance(fetchModalEl);
+    if (fetchModalInstance) {
+        fetchModalInstance.hide();
+    }
+
+    const csrfToken = document.querySelector('#fetchRfqByDateForm [name=csrfmiddlewaretoken]').value;
+
+    fetch("{% url 'solicitations:fetch-rfq-replies-by-date' %}", {
+        method: "POST",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+        },
+        body: JSON.stringify({ fetch_date: dateValue }),
+    })
+    .then(response => response.json().then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+        if (ok && data.success) {
+            showRfqFetchToast(data.message || 'Fetch task started successfully.', 'success');
+        } else {
+            showRfqFetchToast(
+                (data && data.error) ? data.error : 'Failed to start fetch task.',
+                'error'
+            );
+        }
+    })
+    .catch(error => {
+        console.error('RFQ fetch error:', error);
+        showRfqFetchToast(`Error: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        setTimeout(() => {
+            // Refresh to show any newly fetched replies
+            window.location.reload();
+        }, 8000);
+    });
+}
+</script>
 
 {% endblock content %}

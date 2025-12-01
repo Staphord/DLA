@@ -3,14 +3,14 @@ import os
 from django.core.mail import send_mail, get_connection
 from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
-from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse
+from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse, HttpResponse
 from accounts.models import CustomUser, Invitation, VerificationToken
-from . models import RFQ, EmailSettings, UserEmailConfig, RFQTaskSummary, UserSelectionState, RFQScriptLog, RFQScriptSession, MailTemplate, OEMUser, Solicitation, OEM, GitHubWorkflow, SolicitationEmailStatus, UserOEMCustomization
+from . models import RFQ, EmailSettings, RfqAutoFetchSettings, UserEmailConfig, RFQTaskSummary, UserSelectionState, RFQScriptLog, RFQScriptSession, MailTemplate, OEMUser, Solicitation, OEM, GitHubWorkflow, SolicitationEmailStatus, UserOEMCustomization
 from django.contrib import messages
 import subprocess
 import threading
 from django.utils.timezone import now
-from . forms import EmailSettingsForm, EmailConfigForm, LogoUpdateForm, CustomPasswordChangeForm, UserOEMCustomizationForm, UserRegistrationForm, GitHubWorkflowForm, UserUpdateForm
+from . forms import EmailSettingsForm, RfqAutoFetchSettingsForm, EmailConfigForm, LogoUpdateForm, CustomPasswordChangeForm, UserOEMCustomizationForm, UserRegistrationForm, GitHubWorkflowForm, UserUpdateForm
 from django.core.paginator import Paginator
 from django.contrib.auth import update_session_auth_hash
 from django.db.models import Q, Exists, OuterRef, Case, When, BooleanField, Prefetch, Value, IntegerField, Avg, Count, Sum
@@ -801,6 +801,48 @@ def email_settings(request):
     }
 
     return render(request, 'solicitations/email_settings.html', context)
+
+
+@login_required
+def rfq_auto_fetch_settings(request):
+    """
+    Separate configuration page for RFQ auto-fetching.
+    """
+    settings_obj, _ = RfqAutoFetchSettings.objects.get_or_create(
+        user=request.user,
+        defaults={'days_back': 2}  # Default to 2 days (today and yesterday)
+    )
+
+    if request.method == 'POST':
+        form = RfqAutoFetchSettingsForm(request.POST, instance=settings_obj)
+        action = request.POST.get('action', 'save')
+
+        if form.is_valid():
+            cfg = form.save(commit=False)
+
+            if action == 'enable':
+                cfg.enabled = True
+                message = "RFQ auto-fetching has been enabled. The system will periodically fetch RFQ replies from your email."
+            elif action == 'disable':
+                cfg.enabled = False
+                message = "RFQ auto-fetching has been disabled."
+            else:  # action == 'save'
+                # Keep the current enabled status, just save the schedule
+                message = "Auto-fetch schedule has been saved."
+
+            cfg.user = request.user
+            cfg.save()
+
+            messages.success(request, message)
+            return redirect('solicitations:rfq-auto-fetch-settings')
+    else:
+        form = RfqAutoFetchSettingsForm(instance=settings_obj)
+
+    return render(
+        request,
+        'solicitations/procurements/rfq_auto_fetch_settings.html',
+        {'form': form},
+    )
 #######################  CLIENT RELATED VIEWS  #########################
 # view to show all clients
 
@@ -1002,6 +1044,14 @@ def replied_rfq(request):
     # Count total replies
     total_replied_rfq = rfq_replies.count()
 
+    # Check if RFQ auto-fetching is enabled (separate from email auto-send)
+    auto_fetch_enabled = False
+    try:
+        auto_cfg = RfqAutoFetchSettings.objects.get(user=request.user)
+        auto_fetch_enabled = auto_cfg.enabled
+    except RfqAutoFetchSettings.DoesNotExist:
+        auto_fetch_enabled = False
+
     # Debug: Print count
     print(f"[DEBUG] Total RFQ replies: {total_replied_rfq}")
 
@@ -1022,10 +1072,192 @@ def replied_rfq(request):
         'rfq': rfq,
         'total_replied_rfq': total_replied_rfq,
         'is_admin': request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin',
+        'auto_fetch_enabled': auto_fetch_enabled,
     }
 
     return render(request, 'solicitations/procurements/replied_rfq.html', context)
 
+
+@login_required
+def export_replied_rfqs(request):
+    """
+    Export RFQ replies to a text file using the user's export configuration.
+    Uses the settings from /solicitations/export-config/ to map RfqReply data to the 121 export fields.
+    """
+    from .models import RfqReply
+    from .export_utils import export_rfq_replies_to_file
+    from django.db.models import Q
+    from django.http import FileResponse
+    import os
+    
+    user = request.user
+    
+    # Get RFQ replies based on user permissions (same logic as replied_rfq view)
+    # Prefetch related RFQ and Solicitation data for efficient access during export
+    if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
+        rfq_replies = RfqReply.objects.filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0)
+        ).select_related('rfq', 'rfq__solicitation', 'user').order_by('-received_date', '-created_at')
+    else:
+        rfq_replies = RfqReply.objects.filter(
+            user=user
+        ).filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0)
+        ).select_related('rfq', 'rfq__solicitation').order_by('-received_date', '-created_at')
+    
+    if not rfq_replies.exists():
+        messages.warning(request, "No RFQ replies found to export.")
+        return redirect('solicitations:replied-rfq')
+    
+    try:
+        # Export to file using user's export configuration
+        result = export_rfq_replies_to_file(user, rfq_replies)
+        
+        # Return file as download
+        file_path = result['file_path']
+        if os.path.exists(file_path):
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type='text/plain'
+            )
+            response['Content-Disposition'] = f'attachment; filename="{result["filename"]}"'
+            messages.success(
+                request, 
+                f'Successfully exported {result["count"]} RFQ replies to {result["filename"]}'
+            )
+            return response
+        else:
+            messages.error(request, "Export file was not created successfully.")
+            return redirect('solicitations:replied-rfq')
+            
+    except Exception as e:
+        messages.error(request, f"Error exporting RFQ replies: {str(e)}")
+        return redirect('solicitations:replied-rfq')
+
+
+@login_required
+def export_single_rfq_reply(request, rfq_id):
+    """
+    Export a single RFQ reply to a text file using the user's export configuration.
+    """
+    from .models import RfqReply
+    from .export_utils import export_rfq_replies_to_file
+    from django.http import FileResponse
+    import os
+    
+    user = request.user
+    
+    try:
+        # Get the single RFQ reply based on user permissions
+        if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
+            rfq_reply = RfqReply.objects.select_related('rfq', 'rfq__solicitation', 'user').get(pk=rfq_id)
+        else:
+            rfq_reply = RfqReply.objects.select_related('rfq', 'rfq__solicitation').get(pk=rfq_id, user=user)
+    except RfqReply.DoesNotExist:
+        messages.error(request, "RFQ reply not found.")
+        return redirect('solicitations:replied-rfq')
+    
+    try:
+        # Export single reply to file using user's export configuration
+        result = export_rfq_replies_to_file(user, [rfq_reply])
+        
+        # Return file as download
+        file_path = result['file_path']
+        if os.path.exists(file_path):
+            response = FileResponse(
+                open(file_path, 'rb'),
+                content_type='text/plain'
+            )
+            # Generate filename with RFQ ID for single export
+            filename = f"rfq_reply_{rfq_reply.id}_{result['filename']}"
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            messages.success(
+                request, 
+                f'Successfully exported RFQ reply to {filename}'
+            )
+            return response
+        else:
+            messages.error(request, "Export file was not created successfully.")
+            return redirect('solicitations:replied-rfq')
+            
+    except Exception as e:
+        messages.error(request, f"Error exporting RFQ reply: {str(e)}")
+        return redirect('solicitations:replied-rfq')
+
+
+@login_required
+def fetch_rfq_replies_by_date(request):
+    """
+    Trigger background extraction of RFQ replies for a specific date
+    for the current user.
+    """
+    from datetime import datetime
+    from django.http import JsonResponse
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "Invalid request method."},
+            status=405,
+        )
+
+    # Support both JSON body (AJAX) and form-encoded POST
+    fetch_date_str = ""
+    if request.headers.get("Content-Type", "").startswith("application/json"):
+        try:
+            payload = json.loads(request.body or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {"success": False, "error": "Invalid JSON payload."},
+                status=400,
+            )
+        fetch_date_str = (payload.get("fetch_date") or "").strip()
+    else:
+        fetch_date_str = request.POST.get("fetch_date", "").strip()
+
+    if not fetch_date_str:
+        return JsonResponse(
+            {"success": False, "error": "Please select a date to fetch RFQ replies."},
+            status=400,
+        )
+
+    # Validate date format (HTML date input returns YYYY-MM-DD)
+    try:
+        datetime.strptime(fetch_date_str, "%Y-%m-%d")
+    except ValueError:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "Invalid date format. Please select a valid date.",
+            },
+            status=400,
+        )
+
+    # Schedule background task
+    try:
+        async_task(
+            "solicitations.tasks.extract_user_rfq_replies_for_date",
+            request.user.id,
+            fetch_date_str,
+        )
+        return JsonResponse(
+            {
+                "success": True,
+                "message": (
+                    f"RFQ reply fetching started for {fetch_date_str}. "
+                    "You can continue working; new replies will appear once processing finishes."
+                ),
+            }
+        )
+    except Exception as e:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": f"Could not start RFQ reply fetching task: {str(e)}",
+            },
+            status=500,
+        )
 
 @login_required
 def search_replied(request):
@@ -1103,31 +1335,14 @@ def replied_rfq_detail(request, rfq):
     except RfqReply.DoesNotExist:
         return HttpResponseNotFound("RFQ Reply not found")
 
-    # Try to fetch the original solicitation from the Solicitation table
-    # First try using the matched RFQ's solicitation, then try by solicitation number
-    original_solicitation = None
-
-    # Method 1: Get from matched RFQ (if available)
-    if rfq_reply.rfq and rfq_reply.rfq.solicitation:
-        original_solicitation = rfq_reply.rfq.solicitation
-
-    # Method 2: Look up by solicitation number (if RFQ not matched)
-    elif rfq_reply.solicitation_number:
-        try:
-            original_solicitation = Solicitation.objects.filter(
-                solicitation=rfq_reply.solicitation_number
-            ).first()
-        except Exception:
-            pass
-
-    # Method 3: Look up by NSN (if solicitation number not found)
-    if not original_solicitation and rfq_reply.nsn:
-        try:
-            original_solicitation = Solicitation.objects.filter(
-                NSN=rfq_reply.nsn
-            ).first()
-        except Exception:
-            pass
+    # Try to fetch the original solicitation using the model's helper method
+    # This method tries multiple matching strategies in priority order:
+    # 1. Matched RFQ's solicitation
+    # 2. Solicitation number
+    # 3. NSN
+    # 4. Part number + Quantity (both must match)
+    # 5. Part number alone
+    original_solicitation = rfq_reply.find_matching_solicitation()
 
     context = {
         'rfq_reply': rfq_reply,
@@ -1135,6 +1350,76 @@ def replied_rfq_detail(request, rfq):
     }
 
     return render(request, 'solicitations/procurements/extracted_rfq_reply_detail.html', context)
+
+
+@login_required
+def add_replied_rfq(request):
+    """
+    Add a new RFQ reply manually.
+    """
+    from .models import RfqReply
+    from .forms import RfqReplyEditForm
+
+    if request.method == 'POST':
+        form = RfqReplyEditForm(request.POST)
+        if form.is_valid():
+            rfq_reply = form.save(commit=False)
+            # Set the user to the current user
+            rfq_reply.user = request.user
+            # Set received_date to now if not provided
+            if not rfq_reply.received_date:
+                rfq_reply.received_date = timezone.now()
+            rfq_reply.save()
+            messages.success(request, "RFQ reply added successfully")
+            return redirect('solicitations:replied-rfq-detail', rfq=rfq_reply.id)
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = RfqReplyEditForm()
+
+    context = {
+        'form': form,
+    }
+
+    return render(request, 'solicitations/procurements/add_rfq_reply.html', context)
+
+
+@login_required
+def edit_replied_rfq(request, rfq):
+    """
+    Edit an RFQ reply.
+    Superusers and admins can edit any user's RFQ reply.
+    """
+    from .models import RfqReply
+    from .forms import RfqReplyEditForm
+
+    try:
+        # Superusers and admins can edit any RFQ reply, regular users only their own
+        if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+            rfq_reply = RfqReply.objects.get(pk=rfq)
+        else:
+            rfq_reply = RfqReply.objects.get(pk=rfq, user=request.user)
+    except RfqReply.DoesNotExist:
+        messages.error(request, "RFQ reply not found")
+        return redirect('solicitations:replied-rfq')
+
+    if request.method == 'POST':
+        form = RfqReplyEditForm(request.POST, instance=rfq_reply)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "RFQ reply updated successfully")
+            return redirect('solicitations:replied-rfq-detail', rfq=rfq_reply.id)
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = RfqReplyEditForm(instance=rfq_reply)
+
+    context = {
+        'form': form,
+        'rfq_reply': rfq_reply,
+    }
+
+    return render(request, 'solicitations/procurements/edit_rfq_reply.html', context)
 
 
 @login_required
@@ -2807,7 +3092,8 @@ def export_config(request):
 
                 # Update configuration - all fields are always enabled
                 config.is_enabled = True  # Always enabled
-                config.source_field = ''  # Not used anymore
+                # Don't clear source_field - it's needed for mapping RfqReply data
+                # Only update custom_value if provided
                 config.custom_value = custom_value
 
                 try:

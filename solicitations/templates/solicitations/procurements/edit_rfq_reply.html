@@ -1,0 +1,208 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <p class="text-uppercase text-muted mb-1">Edit RFQ Reply</p>
+            <h4 class="fw-semibold mb-0">
+                {% if rfq_reply.rfq_unique_id %}
+                    {{ rfq_reply.rfq_unique_id }}
+                {% else %}
+                    <span class="text-muted">No RFQ ID available</span>
+                {% endif %}
+            </h4>
+            <small class="text-muted">Update extracted data before exporting or sending to the client.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'solicitations:replied-rfq-detail' rfq_reply.id %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left-short"></i> Back to reply
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted">Quick Snapshot</h6>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <small class="text-muted text-uppercase">OEM</small>
+                                <p class="mb-0 fw-medium">{{ rfq_reply.oem_name|default:"N/A" }}</p>
+                            </div>
+                            <span class="badge bg-info text-dark">{{ rfq_reply.received_date|date:"M d, Y" }}</span>
+                        </div>
+                        <div class="border rounded-3 p-3 bg-light">
+                            <small class="text-muted text-uppercase d-block">Item Summary</small>
+                            <p class="fw-semibold mb-0">{{ rfq_reply.nomenclature|default:"No description" }}</p>
+                            <div class="d-flex gap-3 mt-2">
+                                <div>
+                                    <small class="text-muted text-uppercase">Qty</small>
+                                    <p class="mb-0">{{ rfq_reply.quantity|default:"-" }}</p>
+                                </div>
+                                <div>
+                                    <small class="text-muted text-uppercase">Unit</small>
+                                    <p class="mb-0">{{ rfq_reply.unit|default:"-" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3 border rounded-3 p-3">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Unit Price</small>
+                                <span class="fw-semibold">${{ rfq_reply.unit_price|default_if_none:"0.00" }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Total Price</small>
+                                <span class="fw-semibold">${{ rfq_reply.total_price|default_if_none:"0.00" }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Final Price</small>
+                                <span class="fw-semibold text-primary">${{ rfq_reply.final_price|default_if_none:"0.00" }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="{{ form.rfq_unique_id.id_for_label }}" class="form-label text-muted text-uppercase small">RFQ ID</label>
+                                {{ form.rfq_unique_id }}
+                                {% if form.rfq_unique_id.errors %}
+                                    <div class="text-danger small">{{ form.rfq_unique_id.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.solicitation_number.id_for_label }}" class="form-label text-muted text-uppercase small">Solicitation #</label>
+                                {{ form.solicitation_number }}
+                                {% if form.solicitation_number.errors %}
+                                    <div class="text-danger small">{{ form.solicitation_number.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.nsn.id_for_label }}" class="form-label text-muted text-uppercase small">NSN</label>
+                                {{ form.nsn }}
+                                {% if form.nsn.errors %}
+                                    <div class="text-danger small">{{ form.nsn.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.part_number.id_for_label }}" class="form-label text-muted text-uppercase small">Part Number</label>
+                                {{ form.part_number }}
+                                {% if form.part_number.errors %}
+                                    <div class="text-danger small">{{ form.part_number.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.unit.id_for_label }}" class="form-label text-muted text-uppercase small">Unit</label>
+                                {{ form.unit }}
+                                {% if form.unit.errors %}
+                                    <div class="text-danger small">{{ form.unit.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ form.nomenclature.id_for_label }}" class="form-label text-muted text-uppercase small">Nomenclature</label>
+                                {{ form.nomenclature }}
+                                {% if form.nomenclature.errors %}
+                                    <div class="text-danger small">{{ form.nomenclature.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.quantity.id_for_label }}" class="form-label text-muted text-uppercase small">Quantity</label>
+                                {{ form.quantity }}
+                                {% if form.quantity.errors %}
+                                    <div class="text-danger small">{{ form.quantity.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="border rounded-3 p-3 mt-4">
+                            <p class="text-muted text-uppercase small mb-3">Pricing Overview</p>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.unit_price.id_for_label }}" class="form-label small text-muted">Unit Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.unit_price }}
+                                    </div>
+                                    {% if form.unit_price.errors %}
+                                        <div class="text-danger small">{{ form.unit_price.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.total_price.id_for_label }}" class="form-label small text-muted">Total Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.total_price }}
+                                    </div>
+                                    {% if form.total_price.errors %}
+                                        <div class="text-danger small">{{ form.total_price.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.final_price.id_for_label }}" class="form-label small text-muted">Final Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.final_price }}
+                                    </div>
+                                    <small class="text-muted">Use for negotiated totals.</small>
+                                    {% if form.final_price.errors %}
+                                        <div class="text-danger small">{{ form.final_price.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.oem_name.id_for_label }}" class="form-label text-muted text-uppercase small">OEM Name</label>
+                                {{ form.oem_name }}
+                                {% if form.oem_name.errors %}
+                                    <div class="text-danger small">{{ form.oem_name.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.replied_email.id_for_label }}" class="form-label text-muted text-uppercase small">Replied Email</label>
+                                {{ form.replied_email }}
+                                {% if form.replied_email.errors %}
+                                    <div class="text-danger small">{{ form.replied_email.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <label for="{{ form.notes.id_for_label }}" class="form-label text-muted text-uppercase small">Internal Notes</label>
+                            {{ form.notes }}
+                            <small class="text-muted">Keep track of negotiation context, delivery conditions, or quality notes.</small>
+                            {% if form.notes.errors %}
+                                <div class="text-danger small">{{ form.notes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mt-4 d-flex gap-2">
+                            <button type="submit" class="btn mybg myhover text-white px-4">
+                                <i class="bi bi-check-circle me-1"></i> Save Changes
+                            </button>
+                            <a href="{% url 'solicitations:replied-rfq-detail' rfq_reply.id %}" class="btn btn-outline-secondary px-4">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock content %}
+

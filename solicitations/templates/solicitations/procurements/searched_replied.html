@@ -34,6 +34,7 @@
                       <th class="text-secondary">RFQ ID / Solicitation #</th>
                       <th class="text-secondary">Unit Price</th>
                       <th class="text-secondary">Total Price</th>
+                      <th class="text-secondary">Final Price</th>
                       <th class="text-secondary">Replied Date</th>
                       <th class="text-secondary text-center">Operation</th>
                     </thead>
@@ -66,7 +67,18 @@
                                     <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>{{rfqs.received_date|date:"M d, Y"|default:rfqs.created_at|date:"M d, Y"}}</td>
+                            <td>
+                                <span class="text-primary fw-bold">
+                                    ${{ rfqs.final_price|default_if_none:"0" }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if rfqs.received_date %}
+                                    {{rfqs.received_date|date:"M d, Y"}}
+                                {% else %}
+                                    {{rfqs.created_at|date:"M d, Y"}}
+                                {% endif %}
+                            </td>
                             <td>
                                 <div class="dropdown text-center">
                                 <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
@@ -75,6 +87,12 @@
 
                                 <ul class="dropdown-menu">
                                   <li><a class="dropdown-item" href="{% url 'solicitations:replied-rfq-detail' rfqs.id %}">View More</a></li>
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:edit-replied-rfq' rfqs.id %}" onclick="event.stopPropagation();">Edit</a></li>
+                                  <li><hr class="dropdown-divider"></li>
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:export-single-rfq-reply' rfqs.id %}" onclick="event.stopPropagation();">
+                                    <i class="bi bi-download me-2"></i> Export
+                                  </a></li>
+                                  <li><hr class="dropdown-divider"></li>
                                   <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{rfqs.id}}" onclick="event.stopPropagation();">Delete</a></li>
                                 </ul>
                               </div>

@@ -5,7 +5,7 @@ from django.db.models import Q, F
 from django_q.models import OrmQ, Task
 from django.conf import settings
 from django.core.cache import cache
-from .models import EmailSettings, Solicitation, OEM, OEMUser, MailTemplate, SolicitationEmailStatus
+from .models import EmailSettings, RfqAutoFetchSettings, Solicitation, OEM, OEMUser, MailTemplate, SolicitationEmailStatus
 from django.db import transaction
 import json
 from django_q.tasks import async_task
@@ -219,6 +219,7 @@ def _create_schedules():
     Schedule.objects.filter(name='check_scheduled_emails').delete()
     Schedule.objects.filter(name='create_solicitation_email_statuses').delete()
     Schedule.objects.filter(name='cleanup_stale_user_locks').delete()
+    Schedule.objects.filter(name='check_rfq_auto_fetch').delete()
 
     # Create schedules with all required fields for django-q2
     check_schedule = Schedule.objects.create(
@@ -265,6 +266,28 @@ def _create_schedules():
         cluster=None,
         intended_date_kwarg=None
     )
+
+    # Auto-fetch RFQ replies schedule (runs every 2 minutes to check window)
+    try:
+        rfq_fetch_schedule = Schedule.objects.create(
+            name='check_rfq_auto_fetch',
+            func='solicitations.tasks.check_rfq_auto_fetch',
+            hook=None,
+            args=None,
+            kwargs=None,
+            schedule_type=Schedule.MINUTES,
+            minutes=1,
+            repeats=-1,
+            cron=None,
+            task=None,
+            cluster=None,
+            intended_date_kwarg=None
+        )
+        logger.info(
+            f"Created RFQ auto-fetch schedule: {rfq_fetch_schedule.name} (runs every {rfq_fetch_schedule.minutes} minutes)")
+    except Exception as e:
+        logger.error(f"Error creating RFQ auto-fetch schedule: {e}")
+        raise
 
     logger.info("Django-Q2 scheduled tasks created successfully")
 
@@ -1229,6 +1252,22 @@ def check_scheduled_emails():
                 )
                 logger.info(
                     f"  Scheduled ENHANCED email processing task with ID: {task_id} (scope: {setting.send_scope})")
+
+                # ALSO: Schedule RFQ reply extraction (auto-fetch) for this user
+                try:
+                    async_task(
+                        'solicitations.tasks.extract_user_rfq_replies',
+                        setting.user.id,
+                        1,  # days_back: roughly last day of replies
+                        task_name=f"AUTOMATED RFQ reply extraction for {setting.user.username}",
+                    )
+                    logger.info(
+                        f"  Scheduled RFQ reply auto-fetch for user {setting.user.username}"
+                    )
+                except Exception as fetch_e:
+                    logger.warning(
+                        f"  Failed to schedule RFQ reply auto-fetch for user {setting.user.username}: {fetch_e}"
+                    )
             else:
                 logger.info(
                     f"  Not processing user {setting.user.username} - outside time window")
@@ -1759,6 +1798,56 @@ def extract_user_rfq_replies(user_id, days_back=30):
         return {'success': False, 'error': str(e)}
 
 
+def extract_user_rfq_replies_for_date(user_id, target_date_str):
+    """
+    Background task to extract RFQ replies for a specific calendar date
+    for a single user.
+
+    Args:
+        user_id: CustomUser ID
+        target_date_str: Date string in YYYY-MM-DD format
+    """
+    logger.info(
+        f"Starting RFQ reply extraction for user ID {user_id} on date {target_date_str}"
+    )
+
+    if extract_rfq_replies_for_user is None:
+        logger.error("extractRfqReplies module not available")
+        return {'success': False, 'error': 'Extraction module not available'}
+
+    try:
+        target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+    except Exception as e:
+        logger.error(f"Invalid target_date_str '{target_date_str}': {e}")
+        return {'success': False, 'error': 'Invalid date format'}
+
+    try:
+        result = extract_rfq_replies_for_user(
+            user_id, days_back=None, start_date=target_date, end_date=target_date
+        )
+
+        if result.get('success'):
+            logger.info(
+                f"RFQ reply extraction for user {user_id} on {target_date}: "
+                f"{result.get('extracted', 0)} extracted, "
+                f"{result.get('errors', 0)} errors"
+            )
+        else:
+            logger.error(
+                f"RFQ reply extraction failed for user {user_id} on {target_date}: "
+                f"{result.get('error', 'Unknown error')}"
+            )
+
+        return result
+
+    except Exception as e:
+        logger.error(
+            f"Error in RFQ reply extraction (by date) for user {user_id}: {e}"
+        )
+        logger.error(traceback.format_exc())
+        return {'success': False, 'error': str(e)}
+
+
 def extract_all_users_rfq_replies(days_back=30):
     """
     Background task to extract RFQ replies for all active users
@@ -1793,3 +1882,267 @@ def extract_all_users_rfq_replies(days_back=30):
         logger.error(f"Error in RFQ reply extraction task for all users: {e}")
         logger.error(traceback.format_exc())
         return {'success': False, 'error': str(e)}
+
+
+def rfq_fetch_completion_hook(task):
+    """
+    Hook called when RFQ fetch task completes (success or failure).
+    CRITICAL: Releases the Redis lock that was acquired during scheduling.
+    
+    The lock is kept active during the entire task execution to prevent
+    duplicate instances. This hook ensures it's released when done.
+    """
+    try:
+        # Extract user_id from task args
+        if hasattr(task, 'args') and task.args:
+            args_str = str(task.args)
+            # Parse user_id from args string - handle various formats
+            import re
+            # Try multiple patterns: (123, or [123, or "123" or '123'
+            match = re.search(r'[(\[](\d+)[,)]', args_str) or re.search(r'["\'](\d+)["\']', args_str)
+            if match:
+                user_id = int(match.group(1))
+                
+                # Always try to release the lock (it should exist)
+                released = lock_manager.release_user_lock(
+                    user_id, "rfq_auto_fetch")
+                
+                if released:
+                    logger.info(
+                        f"COMPLETION HOOK: Released lock for user {user_id} (task completed)")
+                else:
+                    # Lock might have already expired or been released
+                    lock_status = lock_manager.check_user_lock_status(
+                        user_id, "rfq_auto_fetch")
+                    if lock_status:
+                        logger.warning(
+                            f"COMPLETION HOOK: Lock still exists for user {user_id} "
+                            f"(TTL: {lock_status['ttl_seconds']}s) - force deleting")
+                        # Force delete
+                        lock_key = f"user_processing_lock:{user_id}:rfq_auto_fetch"
+                        lock_manager.redis.delete(lock_key)
+                        logger.warning(f"COMPLETION HOOK: Force-deleted lock for user {user_id}")
+                    else:
+                        logger.debug(
+                            f"COMPLETION HOOK: Lock already released for user {user_id} (normal)")
+            else:
+                logger.warning(
+                    f"COMPLETION HOOK: Could not parse user_id from args: {args_str}")
+
+    except Exception as e:
+        logger.error(f"COMPLETION HOOK: Error processing task completion: {e}")
+        logger.error(traceback.format_exc())
+
+
+def check_rfq_auto_fetch():
+    """
+    Check RFQ auto-fetch settings and schedule extraction tasks.
+
+    TRIPLE-LAYER PROTECTION:
+    1. Redis lock (fast, prevents scheduler race conditions)
+    2. Database lock (prevents database-level race conditions)  
+    3. Task deduplication (prevents queue duplicates)
+    """
+    try:
+        now = timezone.now()
+        local_tz = pytz.timezone(settings.TIME_ZONE)
+        now_local = now.astimezone(local_tz)
+        current_time = now_local.time()
+        current_day = now_local.strftime("%A").lower()
+
+        # CRITICAL: 30-second window (was 2 minutes - too wide!)
+        fifteen_sec_ago = (datetime.combine(
+            date.today(), current_time) - timedelta(seconds=15)).time()
+        fifteen_sec_ahead = (datetime.combine(
+            date.today(), current_time) + timedelta(seconds=15)).time()
+
+        logger.info("=== RFQ AUTO-FETCH CHECK ===")
+        logger.info(
+            f"Time: {now_local.strftime('%Y-%m-%d %H:%M:%S')} ({current_day})")
+        logger.info(
+            f"Window: {fifteen_sec_ago.strftime('%H:%M:%S')} - {fifteen_sec_ahead.strftime('%H:%M:%S')}")
+
+        settings_qs = RfqAutoFetchSettings.objects.filter(
+            enabled=True
+        ).filter(
+            Q(day=RfqAutoFetchSettings.DAILY) | Q(day=current_day)
+        ).select_related('user')
+
+        logger.info(f"Candidates: {settings_qs.count()} users")
+
+        for cfg in settings_qs:
+            fetch_time = cfg.fetch_time
+            user_id = cfg.user.id
+            username = cfg.user.username
+
+            # Quick time check
+            in_window = False
+            if fifteen_sec_ahead < fifteen_sec_ago:  # Midnight wrap
+                in_window = fetch_time <= fifteen_sec_ahead or fetch_time >= fifteen_sec_ago
+            else:
+                in_window = fifteen_sec_ago <= fetch_time <= fifteen_sec_ahead
+
+            if not in_window:
+                continue
+
+            logger.info(f"[{username}] IN WINDOW - acquiring lock...")
+
+            # ==========================================
+            # LAYER 1: REDIS LOCK (Immediate protection)
+            # ==========================================
+            lock_id = lock_manager.acquire_user_lock(
+                user_id,
+                "rfq_auto_fetch",
+                timeout=7200  # 2 hours
+            )
+
+            if not lock_id:
+                logger.warning(f"[{username}] REDIS LOCK EXISTS - skipping")
+                continue
+
+            try:
+                logger.info(f"[{username}] Redis lock acquired: {lock_id}")
+
+                # ==========================================
+                # LAYER 2: DATABASE LOCK + COOLDOWN CHECK
+                # ==========================================
+                skip_reason = None
+
+                with transaction.atomic():
+                    # Database-level row lock
+                    cfg = RfqAutoFetchSettings.objects.select_for_update().get(id=cfg.id)
+
+                    # Aggressive cooldown: 50 minutes minimum
+                    if cfg.last_fetched:
+                        last_fetched_local = cfg.last_fetched.astimezone(
+                            local_tz)
+                        time_since = now_local - last_fetched_local
+                        minutes_ago = int(time_since.total_seconds() / 60)
+
+                        if time_since.total_seconds() < 3000:  # 50 minutes
+                            skip_reason = f"cooldown active ({minutes_ago} min ago, need 50 min)"
+
+                if skip_reason:
+                    logger.warning(f"[{username}] {skip_reason}")
+                    continue
+
+                # ==========================================
+                # LAYER 3: TASK DEDUPLICATION CHECK
+                # ==========================================
+                from django_q.models import OrmQ
+
+                # Check ALL task states comprehensively
+                user_id_patterns = [
+                    f'"{user_id}"',
+                    f"'{user_id}'",
+                    f'({user_id},',
+                    f'[{user_id},',
+                    str(user_id)
+                ]
+
+                # Build complex query
+                task_q = Q()
+                for pattern in user_id_patterns:
+                    task_q |= Q(args__contains=pattern)
+
+                # Running tasks (not stopped)
+                running = Task.objects.filter(
+                    func='solicitations.tasks.extract_user_rfq_replies',
+                    stopped__isnull=True
+                ).filter(task_q).count()
+
+                # Recently started (last 15 minutes - catching stragglers)
+                recent = Task.objects.filter(
+                    func='solicitations.tasks.extract_user_rfq_replies',
+                    started__gte=timezone.now() - timedelta(minutes=15)
+                ).filter(task_q).count()
+
+                # Queued tasks
+                queued = OrmQ.objects.filter(
+                    func='solicitations.tasks.extract_user_rfq_replies'
+                ).filter(task_q).count()
+
+                if running > 0 or recent > 0 or queued > 0:
+                    logger.warning(
+                        f"[{username}] TASKS EXIST - "
+                        f"running:{running}, recent:{recent}, queued:{queued}"
+                    )
+                    continue
+
+                logger.info(f"[{username}] No existing tasks found")
+
+                # ==========================================
+                # COMMIT POINT: Update timestamp FIRST
+                # ==========================================
+                with transaction.atomic():
+                    cfg.refresh_from_db()
+                    cfg.last_fetched = timezone.now()
+                    cfg.save(update_fields=['last_fetched'])
+
+                logger.info(f"[{username}] Updated last_fetched timestamp")
+
+                # ==========================================
+                # SCHEDULE TASK
+                # ==========================================
+                task_timestamp = now_local.strftime(
+                    '%Y%m%d_%H%M%S_%f')  # Include microseconds
+
+                task_id = async_task(
+                    'solicitations.tasks.extract_user_rfq_replies',
+                    user_id,
+                    cfg.days_back,
+                    task_name=f"RFQ_AF_{username}_{task_timestamp}",
+                    group=f'RFQ_AutoFetch_U{user_id}',
+                    timeout=7200,
+                    hook='solicitations.tasks.rfq_fetch_completion_hook',  # Add completion hook
+                )
+
+                logger.info(
+                    f"[{username}] SCHEDULED - Task:{task_id}, Days:{cfg.days_back}"
+                )
+
+                # Brief sleep to ensure task is committed to queue
+                time.sleep(0.1)
+                
+                # CRITICAL: DO NOT release lock here!
+                # The lock must stay active until the task completes.
+                # The completion hook (rfq_fetch_completion_hook) will release it.
+                # Lock timeout (2 hours) acts as safety net if task crashes.
+                logger.info(
+                    f"[{username}] Lock {lock_id} will be released by completion hook when task finishes"
+                )
+                # Set lock_id to None so finally block doesn't release it
+                lock_id = None
+
+            except Exception as e:
+                logger.error(f"[{username}] ERROR: {e}")
+                logger.error(traceback.format_exc())
+
+                # Rollback last_fetched on failure
+                try:
+                    with transaction.atomic():
+                        cfg = RfqAutoFetchSettings.objects.select_for_update().get(id=cfg.id)
+                        if cfg.last_fetched and (timezone.now() - cfg.last_fetched).total_seconds() < 15:
+                            cfg.last_fetched = None
+                            cfg.save(update_fields=['last_fetched'])
+                            logger.info(
+                                f"[{username}] Rolled back last_fetched")
+                except Exception as rb_err:
+                    logger.error(f"[{username}] Rollback error: {rb_err}")
+
+            finally:
+                # Only release lock if scheduling failed (lock_id still set)
+                # If scheduling succeeded, lock stays active for task duration
+                if lock_id:
+                    released = lock_manager.release_user_lock(
+                        user_id, "rfq_auto_fetch", lock_id)
+                    if released:
+                        logger.warning(f"[{username}] Lock released due to scheduling failure")
+                    else:
+                        logger.error(f"[{username}] Lock release FAILED")
+
+        logger.info("=== AUTO-FETCH CHECK COMPLETE ===")
+
+    except Exception as e:
+        logger.error(f"Fatal error in check_rfq_auto_fetch: {e}")
+        logger.error(traceback.format_exc())

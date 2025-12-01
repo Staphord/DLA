@@ -8,4 +8,6 @@ media/
 __pycache__/
 AZURE_OPENAI_SETUP.md
 GPT4_EXTRACTION_SETUP.md
+TIMEOUT_ANALYSIS.md
 email_screenshots/
+test_email_extraction.py

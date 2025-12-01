@@ -94,30 +94,31 @@ class RfqReplyAdmin(admin.ModelAdmin):
         'oem_name',
         'rfq_unique_id',
         'solicitation_number',
-        'status',
         'received_date',
+        'final_price',
         'has_pricing'
     ]
-    list_filter = ['status', 'user', 'received_date']
+    list_filter = ['user', 'received_date']
     search_fields = [
         'rfq_unique_id',
         'solicitation_number',
         'oem_name',
         'replied_email',
-        'nsn'
+        'nsn',
+        'part_number'
     ]
     ordering = ['-received_date', '-created_at']
     readonly_fields = ['created_at', 'updated_at', 'email_message_id']
 
     fieldsets = (
         ('Basic Information', {
-            'fields': ('user', 'status', 'rfq', 'rfq_unique_id', 'solicitation_number')
+            'fields': ('user', 'rfq', 'rfq_unique_id', 'solicitation_number')
         }),
         ('Product Details', {
-            'fields': ('nsn', 'nomenclature', 'quantity', 'unit')
+            'fields': ('nsn', 'part_number', 'nomenclature', 'quantity', 'unit')
         }),
         ('Pricing', {
-            'fields': ('unit_price', 'total_price')
+            'fields': ('unit_price', 'total_price', 'final_price')
         }),
         ('Vendor Information', {
             'fields': ('oem_name', 'replied_email')

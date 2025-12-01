@@ -4,7 +4,7 @@ from . import views
 
 urlpatterns = [
     path('',views.login_user, name = 'login-user'),
-    path('logout-user/',views.logout_user, name = 'logout'),
+    path('logout-user/',views.logout_user, name = 'logout-user'),
     path('verify-email/<str:token>/', views.verify_email, name='verify_email'),
     path('register-user/',views.register, name = 'register'),
     path('register/<uuid:token>/', views.register_with_invitation, name='register_with_invitation'),

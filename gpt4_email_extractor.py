@@ -9,7 +9,6 @@ Features:
 - Extracts data even with typos and variations
 - Understands context and intent
 - Can process multiple line items
-- Provides confidence scores
 - Supports both Azure OpenAI and standard OpenAI API
 """
 
@@ -30,6 +29,7 @@ class RFQExtraction:
 
     # Item Details
     nsn: Optional[str] = None
+    part_number: Optional[str] = None
     nomenclature: Optional[str] = None
     quantity: Optional[str] = None
     unit: Optional[str] = None
@@ -184,36 +184,40 @@ EXTRACT THE FOLLOWING FIELDS:
 3. nsn: National Stock Number in format 1234-12-345-6789 (13 digits with dashes)
    - Look for keywords: "NSN", "Stock Number", "National Stock"
 
-4. nomenclature: Item description or part name
+4. part_number: Part number or part identifier
+   - Look for keywords: "Part Number", "Part No", "Part #", "PN", "P/N", "Part"
+   - Can be alphanumeric (e.g., "ABC123", "12345-67", "PN-456")
+
+5. nomenclature: Item description or part name
    - Look for keywords: "Description", "Item", "Part Name", "Nomenclature"
 
-5. quantity: Quantity being quoted (just the number)
+6. quantity: Quantity being quoted (just the number)
    - Look for keywords: "Qty", "Quantity", "QTY"
 
-6. unit: Unit of measure (EA, BOX, EACH, PCS, etc.)
+7. unit: Unit of measure (EA, BOX, EACH, PCS, etc.)
    - Look for keywords: "Unit", "UOM", "U/M"
 
-7. unit_price: Price per unit (decimal number only, no currency symbols or commas)
+8. unit_price: Price per unit (decimal number only, no currency symbols or commas)
    - Extract numeric value only (e.g., from "$1,250.00" extract 1250.00)
    - Look for keywords: "Unit Price", "Price Each", "Price/EA"
 
-8. total_price: Total price (decimal number only, no currency symbols or commas)
+9. total_price: Total price (decimal number only, no currency symbols or commas)
    - Extract numeric value only (e.g., from "$12,500.00" extract 12500.00)
    - Look for keywords: "Total", "Total Price", "Extended Price"
 
-9. oem_name: Company/vendor name
-   - Extract from email signature or header
+10. oem_name: Company/vendor name
+    - Extract from email signature or header
 
-10. replied_email: Email address of the sender
+11. replied_email: Email address of the sender
     - Use the "From" email address
 
-11. confidence_score: Your confidence in the extraction (0.0 to 1.0)
+12. confidence_score: Your confidence in the extraction (0.0 to 1.0)
     - 0.9-1.0: All key fields found with high certainty
     - 0.7-0.9: Most fields found, some assumptions made
     - 0.5-0.7: Several fields missing or uncertain
     - Below 0.5: Very limited data extracted
 
-12. extraction_notes: Any notes about the extraction
+13. extraction_notes: Any notes about the extraction
     - Note missing fields, assumptions, or if this is a "no quote" / declined response
 
 IMPORTANT RULES:
@@ -231,6 +235,7 @@ Return ONLY valid JSON in this exact format:
     "rfq_unique_id": "GTS-DLA-090125-1T615-018637",
     "solicitation_number": "SPEFA5-26-T-0169",
     "nsn": "5305-01-234-5678",
+    "part_number": "PN-12345",
     "nomenclature": "SCREW, MACHINE",
     "quantity": "100",
     "unit": "EA",
