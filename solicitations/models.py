@@ -1638,6 +1638,37 @@ class UserExportConfiguration(models.Model):
                 if not s:
                     return ""
 
+                # For solicitation number exports, remove hyphens so
+                # e.g. "SPE8E8-26-T-0810" becomes "SPE8E826T0810"
+                try:
+                    # Detect solicitation number fields (usually position 1)
+                    is_solicitation_number_field = (
+                        (self.source_field and self.source_field.lower() in ("solicitation", "solicitation_number"))
+                        or getattr(self.field_definition, "position", None) == 1
+                    )
+                except Exception:
+                    is_solicitation_number_field = False
+
+                # Detect part number fields by common source/column names
+                try:
+                    is_part_number_field = False
+                    if self.source_field:
+                        sf = self.source_field.lower()
+                        if sf in ("part_number", "partnumber", "part_no", "part"):
+                            is_part_number_field = True
+                        elif "part" in sf and "department" not in sf:
+                            is_part_number_field = True
+
+                    if not is_part_number_field:
+                        col_name = getattr(self.field_definition, "column_name", "")
+                        if isinstance(col_name, str) and "part" in col_name.lower():
+                            is_part_number_field = True
+                except Exception:
+                    is_part_number_field = False
+
+                if is_solicitation_number_field or is_part_number_field:
+                    s = s.replace("-", "")
+
                 # Try multiple common date formats
                 date_formats = (
                     "%m-%d-%Y",  # 12-02-2025
