@@ -89,10 +89,6 @@
                                   <li><a class="dropdown-item" href="{% url 'solicitations:replied-rfq-detail' rfqs.id %}">View More</a></li>
                                   <li><a class="dropdown-item" href="{% url 'solicitations:edit-replied-rfq' rfqs.id %}" onclick="event.stopPropagation();">Edit</a></li>
                                   <li><hr class="dropdown-divider"></li>
-                                  <li><a class="dropdown-item" href="{% url 'solicitations:export-single-rfq-reply' rfqs.id %}" onclick="event.stopPropagation();">
-                                    <i class="bi bi-download me-2"></i> Export
-                                  </a></li>
-                                  <li><hr class="dropdown-divider"></li>
                                   <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{rfqs.id}}" onclick="event.stopPropagation();">Delete</a></li>
                                 </ul>
                               </div>

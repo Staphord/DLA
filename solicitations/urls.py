@@ -78,9 +78,14 @@ urlpatterns = [
 
     ###################  RFQ REPLIES (EXTRACTED FROM EMAILS) URLS  #########################
     path('replied-rfqs/', views.replied_rfq, name='replied-rfq'),
+    path('archived-replied-rfqs/', views.archived_replied_rfq, name='archived-replied-rfqs'),
     path('add-replied-rfq/', views.add_replied_rfq, name='add-replied-rfq'),
     path('export-replied-rfqs/', views.export_replied_rfqs, name='export-replied-rfqs'),
+    path('export-selected-rfqs/', views.export_selected_rfqs, name='export-selected-rfqs'),
+    path('preview-selected-rfqs/', views.preview_selected_rfqs, name='preview-selected-rfqs'),
+    path('download-export-file/', views.download_export_file, name='download-export-file'),
     path('export-single-rfq-reply/<int:rfq_id>/', views.export_single_rfq_reply, name='export-single-rfq-reply'),
+    path('export-single-rfq-reply-preview/<int:rfq_id>/', views.preview_single_rfq_export, name='export-single-rfq-reply-preview'),
     path('fetch-rfq-replies-by-date/', views.fetch_rfq_replies_by_date, name='fetch-rfq-replies-by-date'),
     path('search-replied-rfq/', views.search_replied, name='search-replied'),
     path('replied-rfq-detail/<rfq>/',
@@ -89,6 +94,8 @@ urlpatterns = [
          views.edit_replied_rfq, name='edit-replied-rfq'),
     path('delete-replied-rfq/<rfq>/',
          views.delete_replied_rfq, name='delete-replied-rfq'),
+    path('update-final-price/<int:rfq_id>/', views.update_final_price, name='update-final-price'),
+    path('bulk-delete-replied-rfqs/', views.bulk_delete_replied_rfqs, name='bulk-delete-replied-rfqs'),
 
     ####################  OEM URLS  ##########################
     path('active-oems/', views.active_oems, name='active-oems'),

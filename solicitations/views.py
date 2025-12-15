@@ -5,7 +5,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse, HttpResponse
 from accounts.models import CustomUser, Invitation, VerificationToken
-from . models import RFQ, EmailSettings, RfqAutoFetchSettings, UserEmailConfig, RFQTaskSummary, UserSelectionState, RFQScriptLog, RFQScriptSession, MailTemplate, OEMUser, Solicitation, OEM, GitHubWorkflow, SolicitationEmailStatus, UserOEMCustomization
+from . models import RFQ, EmailSettings, RfqAutoFetchSettings, UserEmailConfig, RFQTaskSummary, UserSelectionState, RFQScriptLog, RFQScriptSession, MailTemplate, OEMUser, Solicitation, OEM, GitHubWorkflow, SolicitationEmailStatus, UserOEMCustomization, RfqReplyExportOverride
 from django.contrib import messages
 import subprocess
 import threading
@@ -13,7 +13,7 @@ from django.utils.timezone import now
 from . forms import EmailSettingsForm, RfqAutoFetchSettingsForm, EmailConfigForm, LogoUpdateForm, CustomPasswordChangeForm, UserOEMCustomizationForm, UserRegistrationForm, GitHubWorkflowForm, UserUpdateForm
 from django.core.paginator import Paginator
 from django.contrib.auth import update_session_auth_hash
-from django.db.models import Q, Exists, OuterRef, Case, When, BooleanField, Prefetch, Value, IntegerField, Avg, Count, Sum
+from django.db.models import Q, Exists, OuterRef, Case, When, BooleanField, Prefetch, Value, IntegerField, Avg, Count, Sum, F
 from django.template.loader import render_to_string
 from datetime import datetime, timedelta, date
 from django.utils import timezone
@@ -40,6 +40,9 @@ import re
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from io import StringIO
+import csv
 
 logger = logging.getLogger('rfq')
 
@@ -1016,33 +1019,27 @@ def replied_rfq(request):
     """
     Display all RFQ replies extracted from emails for the current user.
     Superusers and admins can see all users' RFQ replies.
+    Optimized for performance with bulk matching solicitation lookups.
     """
-    from .models import RfqReply
-
-    # Debug: Print user info
-    print(f"[DEBUG] User: {request.user.username} (ID: {request.user.id})")
-    print(f"[DEBUG] Is superuser: {request.user.is_superuser}")
-    print(f"[DEBUG] User type: {getattr(request.user, 'user_type', 'N/A')}")
+    from .models import RfqReply, Solicitation
 
     # Superusers and admins can see all RFQ replies, regular users see only their own
     # Filter out replies without prices (unit_price or total_price must exist and not be null)
+    # Use select_related to prefetch rfq and its solicitation to avoid N+1 queries
     if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
         rfq_replies = RfqReply.objects.filter(
             Q(unit_price__isnull=False, unit_price__gt=0) | Q(
-                total_price__isnull=False, total_price__gt=0)
-        ).select_related('rfq', 'user').order_by('-received_date', '-created_at')
-        print(f"[DEBUG] Admin/Superuser - showing ALL RFQ replies with prices")
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
+        ).select_related('rfq', 'rfq__solicitation', 'user').order_by('-received_date', '-created_at')
     else:
         rfq_replies = RfqReply.objects.filter(
             user=request.user
         ).filter(
             Q(unit_price__isnull=False, unit_price__gt=0) | Q(
-                total_price__isnull=False, total_price__gt=0)
-        ).select_related('rfq').order_by('-received_date', '-created_at')
-        print(f"[DEBUG] Regular user - showing only their RFQ replies with prices")
-
-    # Count total replies
-    total_replied_rfq = rfq_replies.count()
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
+        ).select_related('rfq', 'rfq__solicitation').order_by('-received_date', '-created_at')
 
     # Check if RFQ auto-fetching is enabled (separate from email auto-send)
     auto_fetch_enabled = False
@@ -1052,30 +1049,218 @@ def replied_rfq(request):
     except RfqAutoFetchSettings.DoesNotExist:
         auto_fetch_enabled = False
 
-    # Debug: Print count
-    print(f"[DEBUG] Total RFQ replies: {total_replied_rfq}")
+    # Paginate results (this will execute the query and get count efficiently)
+    p = Paginator(rfq_replies, 50)
+    page = request.GET.get('page')
+    rfq_page = p.get_page(page)
+    
+    # Use paginator's count instead of separate query (more efficient)
+    total_replied_rfq = p.count
 
-    # Debug: Print first 3 records
-    for reply in rfq_replies[:3]:
-        print(
-            f"[DEBUG] Reply ID: {reply.id}, User: {reply.user.username}, OEM: {reply.oem_name}, Date: {reply.received_date}")
+    # OPTIMIZATION: Pre-compute matching solicitations in bulk to avoid N+1 queries
+    # Get all RFQ replies from current page
+    rfq_replies_list = list(rfq_page)
+    
+    if rfq_replies_list:
+        # Extract all unique values for bulk lookup
+        solicitation_numbers = [r.solicitation_number for r in rfq_replies_list if r.solicitation_number]
+        nsns = [r.nsn for r in rfq_replies_list if r.nsn]
+        part_numbers = [r.part_number for r in rfq_replies_list if r.part_number]
+        quantities = [r.quantity for r in rfq_replies_list if r.quantity]
+        
+        # Bulk fetch matching solicitations using the same logic as find_matching_solicitation
+        # Method 1: Already handled by select_related('rfq__solicitation')
+        
+        # Method 2: By solicitation number
+        solicitation_matches_by_number = {}
+        if solicitation_numbers:
+            matches = Solicitation.objects.filter(solicitation__in=solicitation_numbers).values_list('solicitation', flat=True)
+            solicitation_matches_by_number = {num: True for num in matches}
+        
+        # Method 3 & 4: By NSN and quantity (simplified bulk queries)
+        nsn_qty_matches = set()
+        nsn_matches = set()
+        if nsns:
+            # Get unique, cleaned NSNs (normalize to uppercase for matching)
+            unique_nsns = [n.strip() for n in set(nsns) if n and n.strip()]
+            
+            # Method 4: By NSN alone - fetch all matching solicitations and check case-insensitively
+            if unique_nsns:
+                # Fetch all solicitations with matching NSNs (case-insensitive)
+                all_solicitations = Solicitation.objects.filter(
+                    NSN__in=unique_nsns
+                ).values_list('NSN', flat=True)
+                # Normalize to uppercase for matching
+                nsn_matches = {str(nsn).upper().strip() for nsn in all_solicitations if nsn}
+            
+            # Method 3: By NSN + quantity
+            if quantities:
+                unique_quantities = [q.strip() for q in set(quantities) if q and q.strip()]
+                if unique_nsns and unique_quantities:
+                    # Fetch exact matches
+                    matches = Solicitation.objects.filter(
+                        NSN__in=unique_nsns, quantity__in=unique_quantities
+                    ).values_list('NSN', 'quantity')
+                    nsn_qty_matches.update((str(nsn).upper().strip(), str(qty).upper().strip()) for nsn, qty in matches if nsn and qty)
+        
+        # Method 5 & 6: By part_number and quantity, then part_number alone
+        part_qty_matches = set()
+        part_matches = set()
+        if part_numbers:
+            # Get unique, cleaned part numbers
+            unique_parts = [p.strip() for p in set(part_numbers) if p and p.strip()]
+            
+            # Method 6: Part number alone - fetch all and match case-insensitively in Python
+            if unique_parts:
+                # Fetch all solicitations with matching part numbers (will match case-insensitively in Python)
+                all_part_solicitations = Solicitation.objects.filter(
+                    part_number__in=unique_parts
+                ).values_list('part_number', flat=True)
+                # Also try case-insensitive lookup for parts that didn't match exactly
+                part_matches = {str(p).upper().strip() for p in all_part_solicitations if p}
+                # Add any parts from unique_parts that match (case-insensitive check)
+                for part in unique_parts:
+                    part_upper = part.upper().strip()
+                    if any(p.upper().strip() == part_upper for p in all_part_solicitations if p):
+                        part_matches.add(part_upper)
+            
+            # Method 5: Part number + quantity
+            if quantities:
+                unique_quantities = [q.strip() for q in set(quantities) if q and q.strip()]
+                if unique_parts and unique_quantities:
+                    # Fetch exact matches
+                    matches = Solicitation.objects.filter(
+                        part_number__in=unique_parts, quantity__in=unique_quantities
+                    ).values_list('part_number', 'quantity')
+                    part_qty_matches.update((str(p).upper().strip(), str(q).upper().strip()) for p, q in matches if p and q)
+        
+        # Pre-compute has_matching_solicitation for each RFQ reply
+        matching_cache = {}
+        for rfq_reply in rfq_replies_list:
+            has_match = False
+            
+            # Method 1: Check if rfq.solicitation exists (already prefetched)
+            if rfq_reply.rfq and rfq_reply.rfq.solicitation:
+                has_match = True
+            # Method 2: Check solicitation number match
+            elif rfq_reply.solicitation_number and rfq_reply.solicitation_number in solicitation_matches_by_number:
+                has_match = True
+            # Method 3: Check NSN + quantity match
+            elif rfq_reply.nsn and rfq_reply.quantity:
+                nsn_key = str(rfq_reply.nsn).upper().strip()
+                qty_key = str(rfq_reply.quantity).upper().strip()
+                if (nsn_key, qty_key) in nsn_qty_matches:
+                    has_match = True
+            # Method 4: Check NSN alone
+            elif rfq_reply.nsn:
+                nsn_key = str(rfq_reply.nsn).upper().strip()
+                if nsn_key in nsn_matches:
+                    has_match = True
+            # Method 5: Check part_number + quantity
+            elif rfq_reply.part_number and rfq_reply.quantity:
+                part_key = str(rfq_reply.part_number).upper().strip()
+                qty_key = str(rfq_reply.quantity).upper().strip()
+                if (part_key, qty_key) in part_qty_matches:
+                    has_match = True
+            # Method 6: Check part_number alone
+            elif rfq_reply.part_number:
+                part_key = str(rfq_reply.part_number).upper().strip()
+                if part_key in part_matches:
+                    has_match = True
+            
+            matching_cache[rfq_reply.id] = has_match
+        
+        # Attach the cached matching status to each RFQ reply object
+        for rfq_reply in rfq_replies_list:
+            rfq_reply._cached_has_matching_solicitation = matching_cache.get(rfq_reply.id, False)
 
-    # Paginate results
+    # Check for pending download from export
+    pending_download = request.session.get('pending_download')
+    has_pending_download = pending_download is not None
+
+    # Check for export error message in session (passed from export_replied_rfqs)
+    export_error_message = request.session.pop('export_error_message', None)
+
+    context = {
+        'rfq': rfq_page,
+        'total_replied_rfq': total_replied_rfq,
+        'is_admin': request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin',
+        'auto_fetch_enabled': auto_fetch_enabled,
+        'has_pending_download': has_pending_download,
+        'export_error_message': export_error_message,  # Pass error message via context (not Django messages)
+    }
+
+    return render(request, 'solicitations/procurements/replied_rfq.html', context)
+
+
+@login_required
+def archived_replied_rfq(request):
+    """
+    Display RFQ replies that have already been exported (archived) for the current user.
+    """
+    from .models import RfqReply
+
+    if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+        rfq_replies = RfqReply.objects.filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=True
+        ).select_related('rfq', 'user').order_by('-exported_at', '-received_date', '-created_at')
+    else:
+        rfq_replies = RfqReply.objects.filter(
+            user=request.user
+        ).filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=True
+        ).select_related('rfq').order_by('-exported_at', '-received_date', '-created_at')
+
+    total_exported_rfq = rfq_replies.count()
+
     p = Paginator(rfq_replies, 25)
     page = request.GET.get('page')
     rfq = p.get_page(page)
 
-    # Debug: Print page info
-    print(f"[DEBUG] Page object count: {len(rfq.object_list)}")
-
     context = {
         'rfq': rfq,
-        'total_replied_rfq': total_replied_rfq,
-        'is_admin': request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin',
-        'auto_fetch_enabled': auto_fetch_enabled,
+        'total_exported_rfq': total_exported_rfq,
     }
 
-    return render(request, 'solicitations/procurements/replied_rfq.html', context)
+    return render(request, 'solicitations/procurements/archived_replied_rfq.html', context)
+
+
+@login_required
+def download_export_file(request):
+    """
+    Serve a pending export file for download, then clear the session.
+    This is called via JavaScript after redirecting to the list page.
+    """
+    from django.http import FileResponse
+    import os
+    
+    pending = request.session.get('pending_download')
+    if not pending:
+        messages.error(request, "No file available for download.")
+        return redirect('solicitations:replied-rfq')
+    
+    file_path = pending.get('file_path')
+    filename = pending.get('filename', 'export.txt')
+    
+    if not file_path or not os.path.exists(file_path):
+        messages.error(request, "Export file not found.")
+        del request.session['pending_download']
+        return redirect('solicitations:replied-rfq')
+    
+    # Clear the session
+    del request.session['pending_download']
+    
+    # Serve the file
+    response = FileResponse(
+        open(file_path, 'rb'),
+        content_type='text/plain'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @login_required
@@ -1092,49 +1277,338 @@ def export_replied_rfqs(request):
     
     user = request.user
     
+    # Check if we're exporting selected RFQs from preview flow
+    selected_ids = request.session.get('rfq_export_ids', None)
+    
+    # Debug logging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[EXPORT_REPLIED_RFQS] User: {user.username}, Session rfq_export_ids: {selected_ids}, Type: {type(selected_ids)}")
+    
     # Get RFQ replies based on user permissions (same logic as replied_rfq view)
     # Prefetch related RFQ and Solicitation data for efficient access during export
     if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
-        rfq_replies = RfqReply.objects.filter(
+        base_queryset = RfqReply.objects.filter(
             Q(unit_price__isnull=False, unit_price__gt=0) | Q(
-                total_price__isnull=False, total_price__gt=0)
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
         ).select_related('rfq', 'rfq__solicitation', 'user').order_by('-received_date', '-created_at')
     else:
-        rfq_replies = RfqReply.objects.filter(
+        base_queryset = RfqReply.objects.filter(
             user=user
         ).filter(
             Q(unit_price__isnull=False, unit_price__gt=0) | Q(
-                total_price__isnull=False, total_price__gt=0)
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
         ).select_related('rfq', 'rfq__solicitation').order_by('-received_date', '-created_at')
+    
+    # If we have selected IDs from preview flow, filter by those
+    if selected_ids:
+        # Ensure selected_ids is a list of integers
+        try:
+            selected_ids_int = [int(id) for id in selected_ids] if isinstance(selected_ids, list) else []
+            logger.info(f"[EXPORT_REPLIED_RFQS] Parsed selected_ids_int: {selected_ids_int}, Count: {len(selected_ids_int)}")
+            if selected_ids_int:
+                rfq_replies = base_queryset.filter(id__in=selected_ids_int)
+                count_before = base_queryset.count()
+                count_after = rfq_replies.count()
+                logger.info(f"[EXPORT_REPLIED_RFQS] Filtered: {count_before} -> {count_after} RFQs (selected {len(selected_ids_int)} IDs)")
+                # Clear session after use
+                if 'rfq_export_ids' in request.session:
+                    del request.session['rfq_export_ids']
+            else:
+                logger.warning(f"[EXPORT_REPLIED_RFQS] selected_ids_int is empty, exporting all RFQs")
+                rfq_replies = base_queryset
+        except (ValueError, TypeError) as e:
+            # If there's an error parsing IDs, fall back to all RFQs
+            logger.error(f"[EXPORT_REPLIED_RFQS] Error parsing selected_ids: {e}, Type: {type(selected_ids)}")
+            rfq_replies = base_queryset
+            messages.warning(request, f"Error processing selected RFQ IDs. Exporting all RFQs instead.")
+            if 'rfq_export_ids' in request.session:
+                del request.session['rfq_export_ids']
+    else:
+        logger.info(f"[EXPORT_REPLIED_RFQS] No selected_ids in session, exporting all RFQs (total: {base_queryset.count()})")
+        rfq_replies = base_queryset
     
     if not rfq_replies.exists():
         messages.warning(request, "No RFQ replies found to export.")
         return redirect('solicitations:replied-rfq')
     
     try:
-        # Export to file using user's export configuration
-        result = export_rfq_replies_to_file(user, rfq_replies)
+        # Debug logging
+        logger.info(f"[EXPORT_REPLIED_RFQS] Starting export for {rfq_replies.count()} RFQ replies")
         
-        # Return file as download
-        file_path = result['file_path']
-        if os.path.exists(file_path):
-            response = FileResponse(
-                open(file_path, 'rb'),
-                content_type='text/plain'
-            )
-            response['Content-Disposition'] = f'attachment; filename="{result["filename"]}"'
-            messages.success(
-                request, 
-                f'Successfully exported {result["count"]} RFQ replies to {result["filename"]}'
-            )
-            return response
+        # Export to file using user's export configuration
+        result = export_rfq_replies_to_file(user, rfq_replies, validate_mandatory=True)
+        
+        logger.info(f"[EXPORT_REPLIED_RFQS] Export result: count={result.get('count')}, errors={len(result.get('errors', []))}, file_path={result.get('file_path')}")
+
+        # Handle validation errors
+        if result.get('errors'):
+            errors = result['errors']
+            error_count = len(errors)
+            
+            logger.warning(f"[EXPORT_REPLIED_RFQS] Validation failed: {error_count} RFQ(s) have errors")
+            
+            # Build error message - format for modal display (include ID for linking)
+            error_msg_parts = [f"Export failed: {error_count} RFQ reply(ies) have missing mandatory fields. All RFQs must be valid to export."]
+            for error in errors:  # Show all errors (no limit for modal)
+                rfq_ref = error['rfq_reply_ref']
+                rfq_id = error.get('rfq_reply_id', '')
+                missing = [f"Position {f['position']} ({f['column_name']})" for f in error['missing_fields']]
+                # Include ID in format: "RFQ_REF|ID:123" for JavaScript parsing
+                error_msg_parts.append(f"  • {rfq_ref}|ID:{rfq_id}: Missing {', '.join(missing)}")
+            
+            error_message = '\n'.join(error_msg_parts)
+            logger.warning(f"[EXPORT_REPLIED_RFQS] Error message: {error_message}")
+            # Store error message in session for JavaScript to display in modal
+            request.session['export_error_message'] = error_message
+            request.session.modified = True
+            messages.error(request, error_message)  # Keep for fallback
+            # Don't mark any RFQs as exported since export failed
+            return redirect('solicitations:replied-rfq')
+        
+        # All RFQs passed validation - mark all as exported
+        if result.get('count', 0) > 0:
+            all_ids = list(rfq_replies.values_list('id', flat=True))
+            RfqReply.objects.filter(id__in=all_ids).update(is_exported=True, exported_at=timezone.now())
+            logger.info(f"[EXPORT_REPLIED_RFQS] Marked {len(all_ids)} RFQs as exported")
+        
+        # Store file info in session for auto-download after redirect (if file was created)
+        file_path = result.get('file_path')
+        if file_path and os.path.exists(file_path):
+            request.session['pending_download'] = {
+                'file_path': file_path,
+                'filename': result['filename'],
+                'type': 'bulk_export'
+            }
+            if result.get('count', 0) > 0:
+                messages.success(
+                    request, 
+                    f'Successfully exported {result["count"]} RFQ reply(ies) to {result["filename"]}. Download will start automatically.'
+                )
+            return redirect('solicitations:replied-rfq')
         else:
-            messages.error(request, "Export file was not created successfully.")
+            # No file was created - this could mean validation failed or other error
+            if result.get('errors'):
+                # Already handled above, but just in case
+                messages.error(request, "Export failed due to validation errors.")
+            elif result.get('count', 0) == 0:
+                messages.error(request, "No RFQ replies were exported. All RFQs have missing mandatory fields.")
+            else:
+                messages.error(request, "Export file was not created successfully.")
+            logger.error(f"[EXPORT_REPLIED_RFQS] No file created: count={result.get('count')}, errors={len(result.get('errors', []))}, file_path={file_path}")
             return redirect('solicitations:replied-rfq')
             
     except Exception as e:
         messages.error(request, f"Error exporting RFQ replies: {str(e)}")
         return redirect('solicitations:replied-rfq')
+
+
+@login_required
+def export_selected_rfqs(request):
+    """
+    Export selected RFQ replies to a text file using the user's export configuration.
+    Accepts RFQ IDs via POST request (JSON).
+    """
+    from .models import RfqReply
+    from .export_utils import export_rfq_replies_to_file
+    from django.db.models import Q
+    from django.http import JsonResponse
+    import json
+    import os
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
+    
+    user = request.user
+    
+    try:
+        data = json.loads(request.body)
+        rfq_ids = data.get('rfq_ids', [])
+        all_selected = data.get('all_selected', False)
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
+    
+    # Get RFQ replies based on user permissions and selection
+    if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
+        base_queryset = RfqReply.objects.filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
+        ).select_related('rfq', 'rfq__solicitation', 'user').order_by('-received_date', '-created_at')
+    else:
+        base_queryset = RfqReply.objects.filter(
+            user=user
+        ).filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
+        ).select_related('rfq', 'rfq__solicitation').order_by('-received_date', '-created_at')
+    
+    # Filter by selected IDs if not selecting all
+    if all_selected:
+        rfq_replies = base_queryset
+    else:
+        if not rfq_ids:
+            return JsonResponse({'success': False, 'error': 'No RFQ IDs provided'}, status=400)
+        # Convert to integers and filter
+        try:
+            rfq_ids_int = [int(id) for id in rfq_ids]
+        except (ValueError, TypeError):
+            return JsonResponse({'success': False, 'error': 'Invalid RFQ ID format'}, status=400)
+        rfq_replies = base_queryset.filter(id__in=rfq_ids_int)
+    
+    if not rfq_replies.exists():
+        return JsonResponse({'success': False, 'error': 'No RFQ replies found to export'}, status=404)
+    
+    try:
+        # Export to file using user's export configuration
+        result = export_rfq_replies_to_file(user, rfq_replies, validate_mandatory=True)
+
+        # Handle validation errors
+        if result.get('errors'):
+            errors = result['errors']
+            error_count = len(errors)
+            
+            # Build error message - show all errors since export failed
+            error_details = [f"Export failed: {error_count} RFQ reply(ies) have missing mandatory fields. All RFQs must be valid to export."]
+            for error in errors[:20]:  # Show first 20 errors
+                rfq_ref = error['rfq_reply_ref']
+                missing = [f"Position {f['position']} ({f['column_name']})" for f in error['missing_fields']]
+                error_details.append(f"{rfq_ref}: Missing {', '.join(missing)}")
+            
+            if len(errors) > 20:
+                error_details.append(f"... and {len(errors) - 20} more RFQ(s) with missing mandatory fields")
+            
+            return JsonResponse({
+                'success': False,
+                'error': 'Export failed due to missing mandatory fields',
+                'errors': error_details,
+                'error_count': error_count
+            }, status=400)
+        
+        # All RFQs passed validation - mark all as exported
+        if result.get('count', 0) > 0:
+            all_ids = list(rfq_replies.values_list('id', flat=True))
+            RfqReply.objects.filter(id__in=all_ids).update(is_exported=True, exported_at=timezone.now())
+        
+        # Clear session RFQ IDs if they were stored (from preview flow)
+        if 'rfq_export_ids' in request.session:
+            del request.session['rfq_export_ids']
+        
+        # Store file info in session for auto-download after redirect (if file was created)
+        file_path = result.get('file_path')
+        if file_path and os.path.exists(file_path):
+            request.session['pending_download'] = {
+                'file_path': file_path,
+                'filename': result['filename'],
+                'type': 'selected_export'
+            }
+            response_data = {
+                'success': True,
+                'message': f'Successfully exported {result["count"]} RFQ reply(ies) to {result["filename"]}.',
+                'count': result['count'],
+                'filename': result['filename']
+            }
+            if error_details:
+                response_data['errors'] = error_details
+                response_data['skipped_count'] = result.get('skipped_count', 0)
+                response_data['warning'] = f"{result.get('skipped_count', 0)} RFQ reply(ies) skipped due to missing mandatory fields."
+            return JsonResponse(response_data)
+        else:
+            if result.get('count', 0) == 0:
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'No RFQ replies were exported. All RFQs have missing mandatory fields.',
+                    'errors': error_details
+                }, status=400)
+            else:
+                return JsonResponse({'success': False, 'error': 'Export file was not created successfully'}, status=500)
+            
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Error exporting RFQ replies: {str(e)}'}, status=500)
+
+
+@login_required
+def preview_selected_rfqs(request):
+    """
+    Start a sequential preview of selected RFQ replies.
+    Stores selected RFQ IDs in session and redirects to first RFQ preview.
+    """
+    from .models import RfqReply
+    from django.db.models import Q
+    from django.http import JsonResponse
+    import json
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
+    
+    user = request.user
+    
+    try:
+        data = json.loads(request.body)
+        rfq_ids = data.get('rfq_ids', [])
+        all_selected = data.get('all_selected', False)
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON data'}, status=400)
+    
+    # Get RFQ replies based on user permissions and selection
+    if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
+        base_queryset = RfqReply.objects.filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
+        ).order_by('-received_date', '-created_at')
+    else:
+        base_queryset = RfqReply.objects.filter(
+            user=user
+        ).filter(
+            Q(unit_price__isnull=False, unit_price__gt=0) | Q(
+                total_price__isnull=False, total_price__gt=0),
+            is_exported=False
+        ).order_by('-received_date', '-created_at')
+    
+    # Filter by selected IDs if not selecting all
+    if all_selected:
+        rfq_replies = base_queryset
+    else:
+        if not rfq_ids:
+            return JsonResponse({'success': False, 'error': 'No RFQ IDs provided'}, status=400)
+        # Convert to integers and filter
+        try:
+            rfq_ids_int = [int(id) for id in rfq_ids]
+        except (ValueError, TypeError):
+            return JsonResponse({'success': False, 'error': 'Invalid RFQ ID format'}, status=400)
+        rfq_replies = base_queryset.filter(id__in=rfq_ids_int)
+    
+    if not rfq_replies.exists():
+        return JsonResponse({'success': False, 'error': 'No RFQ replies found to preview'}, status=404)
+    
+    # Store RFQ IDs in session for batch navigation
+    rfq_ids_list = list(rfq_replies.values_list('id', flat=True))
+    request.session['rfq_export_ids'] = rfq_ids_list
+    request.session.modified = True  # Ensure session is saved
+    
+    # Debug logging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[PREVIEW_SELECTED_RFQS] Stored {len(rfq_ids_list)} RFQ IDs in session: {rfq_ids_list[:10]}...")
+    
+    # Get first RFQ ID
+    first = rfq_replies.first()
+    if not first:
+        return JsonResponse({'success': False, 'error': 'No RFQ replies found'}, status=404)
+    
+    from django.urls import reverse as _reverse
+    url = _reverse('solicitations:export-single-rfq-reply-preview', args=[first.id])
+    redirect_url = f"{url}?mode=batch&selected=true"
+    
+    return JsonResponse({
+        'success': True,
+        'redirect_url': redirect_url,
+        'count': len(rfq_ids_list)
+    })
 
 
 @login_required
@@ -1160,24 +1634,49 @@ def export_single_rfq_reply(request, rfq_id):
         return redirect('solicitations:replied-rfq')
     
     try:
-        # Export single reply to file using user's export configuration
-        result = export_rfq_replies_to_file(user, [rfq_reply])
+        # Validate mandatory fields first
+        from .export_utils import validate_mandatory_fields
+        is_valid, missing_fields = validate_mandatory_fields(user, rfq_reply)
         
-        # Return file as download
+        if not is_valid:
+            missing_list = [f"Position {f['position']} ({f['column_name']})" for f in missing_fields]
+            messages.error(
+                request, 
+                f"Cannot export RFQ reply: Missing mandatory fields - {', '.join(missing_list)}"
+            )
+            return redirect('solicitations:replied-rfq-detail', rfq_id)
+        
+        # Export single reply to file using user's export configuration
+        result = export_rfq_replies_to_file(user, [rfq_reply], validate_mandatory=True)
+
+        # Check if export was successful
+        if result.get('errors'):
+            missing_list = [f"Position {f['position']} ({f['column_name']})" for f in result['errors'][0]['missing_fields']]
+            messages.error(
+                request, 
+                f"Cannot export RFQ reply: Missing mandatory fields - {', '.join(missing_list)}"
+            )
+            return redirect('solicitations:replied-rfq-detail', rfq_id)
+
+        # Mark this RFQ reply as exported
+        rfq_reply.is_exported = True
+        rfq_reply.exported_at = timezone.now()
+        rfq_reply.save(update_fields=['is_exported', 'exported_at'])
+        
+        # Store file info in session for auto-download after redirect
         file_path = result['file_path']
         if os.path.exists(file_path):
-            response = FileResponse(
-                open(file_path, 'rb'),
-                content_type='text/plain'
-            )
-            # Generate filename with RFQ ID for single export
             filename = f"rfq_reply_{rfq_reply.id}_{result['filename']}"
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            request.session['pending_download'] = {
+                'file_path': file_path,
+                'filename': filename,
+                'type': 'single_export'
+            }
             messages.success(
                 request, 
-                f'Successfully exported RFQ reply to {filename}'
+                f'Successfully exported RFQ reply to {filename}. Download will start automatically.'
             )
-            return response
+            return redirect('solicitations:replied-rfq')
         else:
             messages.error(request, "Export file was not created successfully.")
             return redirect('solicitations:replied-rfq')
@@ -1186,6 +1685,268 @@ def export_single_rfq_reply(request, rfq_id):
         messages.error(request, f"Error exporting RFQ reply: {str(e)}")
         return redirect('solicitations:replied-rfq')
 
+
+@login_required
+def preview_single_rfq_export(request, rfq_id):
+    """
+    Preview and optionally edit a single RFQ reply's DLA export line
+    without changing the user's global export configuration.
+    """
+    from .models import RfqReply, UserExportConfiguration
+    from .export_utils import build_rfq_reply_values
+
+    user = request.user
+    batch_mode = request.GET.get('mode') == 'batch'
+
+    # Permission-aware fetch of the RFQ reply (same as export_single_rfq_reply)
+    try:
+        if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
+            rfq_reply = RfqReply.objects.select_related('rfq', 'rfq__solicitation', 'user').get(pk=rfq_id)
+        else:
+            rfq_reply = RfqReply.objects.select_related('rfq', 'rfq__solicitation').get(pk=rfq_id, user=user)
+    except RfqReply.DoesNotExist:
+        messages.error(request, "RFQ reply not found.")
+        return redirect('solicitations:replied-rfq')
+
+    if request.method == 'POST':
+        # Determine mode from POST when navigating between RFQs
+        batch_mode = request.POST.get('mode') == 'batch'
+        # If user cancels, go back to detail view
+        if 'cancel' in request.POST:
+            return redirect('solicitations:replied-rfq-detail', rfq_id)
+
+        # Collect edited values for all 121 positions
+        values = []
+        for position in range(1, 122):
+            field_name = f'field_{position}'
+            values.append(request.POST.get(field_name, '').strip())
+
+        # Save per-RFQ override (does not touch global configuration)
+        override, _ = RfqReplyExportOverride.objects.get_or_create(rfq_reply=rfq_reply)
+        override.data = values
+        override.save()
+
+        # If user clicked "save and continue", move to next RFQ in the batch if available
+        if 'save_and_continue' in request.POST:
+            next_id = request.POST.get('next_rfq_id')
+            if next_id:
+                messages.success(request, "Export data saved. Moving to next RFQ reply.")
+                from django.urls import reverse as _reverse
+                next_url = _reverse('solicitations:export-single-rfq-reply-preview', args=[next_id])
+                if batch_mode:
+                    is_selected_mode = request.POST.get('selected') == 'true'
+                    if is_selected_mode:
+                        next_url = f"{next_url}?mode=batch&selected=true"
+                    else:
+                        next_url = f"{next_url}?mode=batch"
+                return redirect(next_url)
+            else:
+                messages.success(request, "Export data saved. No more RFQ replies in this batch.")
+                return redirect('solicitations:replied-rfq')
+
+        # If user clicked "save and export"
+        if 'save_and_export' in request.POST:
+            # In batch mode, export the selected batch using overrides + global config
+            if batch_mode:
+                is_selected_mode = request.POST.get('selected') == 'true'
+                # Debug logging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"[PREVIEW_SAVE_EXPORT] is_selected_mode: {is_selected_mode}, Session keys: {list(request.session.keys())}")
+                
+                if is_selected_mode:
+                    # Check if we have selected IDs in session
+                    selected_ids = request.session.get('rfq_export_ids', [])
+                    logger.info(f"[PREVIEW_SAVE_EXPORT] Found {len(selected_ids) if selected_ids else 0} selected IDs in session: {selected_ids[:10] if selected_ids else 'None'}...")
+                    if selected_ids:
+                        messages.success(request, f"Export data saved. Exporting {len(selected_ids)} selected RFQ replies.")
+                    else:
+                        messages.warning(request, "No selected RFQ IDs found in session. Exporting all replied RFQs.")
+                    # Redirect to export endpoint (it will check session for selected IDs)
+                    return redirect('solicitations:export-replied-rfqs')
+                else:
+                    # Export all RFQs (original behavior)
+                    messages.success(request, "Export data saved. Exporting all replied RFQs.")
+                    return redirect('solicitations:export-replied-rfqs')
+
+            # In single-RFQ mode, validate mandatory fields using the edited values
+            from .export_utils import ExportFieldDefinition
+            mandatory_fields = ExportFieldDefinition.objects.filter(field_type='mandatory').order_by('position')
+            missing_fields = []
+            
+            for field_def in mandatory_fields:
+                position = field_def.position
+                value_index = position - 1
+                if value_index < len(values):
+                    value = values[value_index]
+                    if not value or (isinstance(value, str) and not value.strip()):
+                        missing_fields.append({
+                            'position': position,
+                            'column_name': field_def.column_name
+                        })
+            
+            if missing_fields:
+                missing_list = [f"Position {f['position']} ({f['column_name']})" for f in missing_fields]
+                messages.error(
+                    request, 
+                    f"Cannot export RFQ reply: Missing mandatory fields - {', '.join(missing_list)}"
+                )
+                return redirect('solicitations:export-single-rfq-reply-preview', rfq_id)
+            
+            # In single-RFQ mode, create a temporary file and store in session for download
+            import tempfile
+            filename = f"rfq_reply_{rfq_reply.id}_manual.txt"
+            temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+            
+            output = StringIO()
+            writer = csv.writer(output, quoting=csv.QUOTE_ALL, lineterminator='')
+            writer.writerow(values)
+            line = output.getvalue()
+
+            if line.count(',') != 120:
+                quoted_values = [f'"{str(v)}"' for v in values]
+                line = ','.join(quoted_values)
+
+            temp_file.write(line + '\n')
+            temp_file.close()
+
+            # Mark this RFQ reply as exported when doing single manual export
+            rfq_reply.is_exported = True
+            rfq_reply.exported_at = timezone.now()
+            rfq_reply.save(update_fields=['is_exported', 'exported_at'])
+
+            # Store file info in session for auto-download after redirect
+            request.session['pending_download'] = {
+                'file_path': temp_file.name,
+                'filename': filename,
+                'type': 'single_manual_export'
+            }
+            messages.success(
+                request, 
+                f'Successfully exported RFQ reply to {filename}. Download will start automatically.'
+            )
+            return redirect('solicitations:replied-rfq')
+
+        messages.success(request, "Export data saved for this RFQ reply.")
+        from django.urls import reverse as _reverse
+        self_url = _reverse('solicitations:export-single-rfq-reply-preview', args=[rfq_reply.id])
+        if batch_mode:
+            is_selected_mode = request.POST.get('selected') == 'true'
+            if is_selected_mode:
+                self_url = f"{self_url}?mode=batch&selected=true"
+            else:
+                self_url = f"{self_url}?mode=batch"
+        return redirect(self_url)
+
+    # GET: build default values using global config, then apply per-RFQ overrides
+    # Logic: Global config applies to all RFQs, but user can override specific fields per RFQ
+    import sys
+    sys.stderr.write(f"[PREVIEW] Building values for RFQ reply {rfq_reply.id}\n")
+    sys.stderr.flush()
+    
+    # First, build base values from global configurations
+    values = build_rfq_reply_values(user, rfq_reply)
+    
+    # Then, apply per-RFQ overrides (if any exist)
+    override = getattr(rfq_reply, 'export_override', None)
+    if override and override.data and len(override.data) == 121:
+        # Apply overrides: use override value if it's not empty, otherwise keep global config value
+        override_count = 0
+        for i in range(121):
+            override_value = override.data[i]
+            # Only use override if it has a non-empty value
+            if override_value and (not isinstance(override_value, str) or override_value.strip()):
+                values[i] = override_value
+                override_count += 1
+        
+        sys.stderr.write(f"[PREVIEW] Applied {override_count} field override(s) from per-RFQ configuration\n")
+        sys.stderr.flush()
+    else:
+        sys.stderr.write(f"[PREVIEW] No per-RFQ overrides found, using global configuration only\n")
+        sys.stderr.flush()
+
+    # Compute previous/next RFQ ids within the same exportable set
+    # Check if we're in "selected" mode (from preview_selected_rfqs)
+    is_selected_mode = request.GET.get('selected') == 'true'
+    
+    if is_selected_mode and 'rfq_export_ids' in request.session:
+        # Use session-stored IDs for selected RFQs
+        nav_ids = request.session.get('rfq_export_ids', [])
+    else:
+        # Use same logic as export_replied_rfqs (all exportable RFQs)
+        from .models import RfqReply as RfqReplyModel
+        from django.db.models import Q as QLocal
+
+        if user.is_superuser or getattr(user, 'user_type', None) == 'admin':
+            nav_qs = RfqReplyModel.objects.filter(
+                QLocal(unit_price__isnull=False, unit_price__gt=0) | QLocal(
+                    total_price__isnull=False, total_price__gt=0),
+                is_exported=False
+            ).order_by('-received_date', '-created_at')
+        else:
+            nav_qs = RfqReplyModel.objects.filter(
+                user=user
+            ).filter(
+                QLocal(unit_price__isnull=False, unit_price__gt=0) | QLocal(
+                    total_price__isnull=False, total_price__gt=0),
+                is_exported=False
+            ).order_by('-received_date', '-created_at')
+
+        nav_ids = list(nav_qs.values_list('id', flat=True))
+        # Only store in session if we're NOT in selected mode (to avoid overwriting selected IDs)
+        if not is_selected_mode:
+            request.session['rfq_export_ids'] = nav_ids
+            request.session.modified = True
+    
+    prev_id = next_id = None
+    current_index = None
+    total_in_batch = len(nav_ids)
+
+    if rfq_reply.id in nav_ids:
+        current_index = nav_ids.index(rfq_reply.id)
+        if current_index > 0:
+            prev_id = nav_ids[current_index - 1]
+        if current_index < total_in_batch - 1:
+            next_id = nav_ids[current_index + 1]
+
+    # Load field metadata for display
+    configs = UserExportConfiguration.objects.filter(
+        user=user
+    ).select_related('field_definition').order_by('field_definition__position')
+
+    rows = []
+    mandatory_positions = []  # Track mandatory field positions for validation
+    for config in configs:
+        pos = config.field_definition.position
+        idx = pos - 1
+        field_type = config.field_definition.field_type
+        value = values[idx] if 0 <= idx < len(values) else ''
+        
+        # Track mandatory fields
+        if field_type == 'mandatory':
+            mandatory_positions.append(pos)
+        
+        rows.append({
+            'position': pos,
+            'name': config.field_definition.column_name,
+            'value': value,
+            'field_type': field_type,
+            'is_mandatory': field_type == 'mandatory',
+            'is_empty': not value or (isinstance(value, str) and not value.strip()),
+        })
+
+    context = {
+        'rfq_reply': rfq_reply,
+        'rows': rows,
+        'prev_rfq_id': prev_id,
+        'next_rfq_id': next_id,
+        'current_index': (current_index + 1) if current_index is not None else None,
+        'total_in_batch': total_in_batch,
+        'batch_mode': batch_mode,
+        'mandatory_positions': mandatory_positions,  # Pass to template for JavaScript
+    }
+
+    return render(request, 'solicitations/procurements/preview_rfq_export.html', context)
 
 @login_required
 def fetch_rfq_replies_by_date(request):
@@ -1423,6 +2184,54 @@ def edit_replied_rfq(request, rfq):
 
 
 @login_required
+def update_final_price(request, rfq_id):
+    """Update final_price for an RFQ reply via AJAX"""
+    from django.http import JsonResponse
+    from .models import RfqReply
+    
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
+    
+    try:
+        # Get the RFQ reply
+        if request.user.is_superuser or getattr(request.user, 'user_type', None) == 'admin':
+            rfq_reply = RfqReply.objects.get(pk=rfq_id)
+        else:
+            rfq_reply = RfqReply.objects.get(pk=rfq_id, user=request.user)
+        
+        # Get the new final_price value
+        final_price_str = request.POST.get('final_price', '').strip()
+        
+        if not final_price_str:
+            # Empty string means clear the value
+            rfq_reply.final_price = None
+        else:
+            try:
+                final_price = float(final_price_str)
+                if final_price < 0:
+                    return JsonResponse({'success': False, 'error': 'Final price cannot be negative'}, status=400)
+                rfq_reply.final_price = final_price
+            except ValueError:
+                return JsonResponse({'success': False, 'error': 'Invalid price format'}, status=400)
+        
+        rfq_reply.save(update_fields=['final_price'])
+        
+        return JsonResponse({
+            'success': True,
+            'final_price': str(rfq_reply.final_price) if rfq_reply.final_price else '0',
+            'message': 'Final price updated successfully'
+        })
+        
+    except RfqReply.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'RFQ reply not found'}, status=404)
+    except Exception as e:
+        import traceback
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error updating final_price for RFQ {rfq_id}: {str(e)}\n{traceback.format_exc()}")
+        return JsonResponse({'success': False, 'error': f'An error occurred: {str(e)}'}, status=500)
+
+
 def delete_replied_rfq(request, rfq):
     """
     Delete an RFQ reply.
@@ -1442,6 +2251,77 @@ def delete_replied_rfq(request, rfq):
     except RfqReply.DoesNotExist:
         messages.error(request, "RFQ reply not found")
 
+    return redirect('solicitations:replied-rfq')
+
+
+@login_required
+def bulk_delete_replied_rfqs(request):
+    """
+    Delete multiple RFQ replies.
+    Superusers and admins can delete any user's RFQ replies.
+    Regular users can only delete their own RFQ replies.
+    """
+    from .models import RfqReply
+    from django.db import transaction
+    from django.contrib import messages
+    
+    if request.method == 'POST':
+        try:
+            rfq_ids = request.POST.get('rfq_ids', '')
+            if not rfq_ids:
+                messages.error(request, "No RFQ replies selected for deletion.")
+                return redirect('solicitations:replied-rfq')
+            
+            # Parse the comma-separated IDs
+            try:
+                rfq_id_list = [int(id.strip()) for id in rfq_ids.split(',') if id.strip()]
+            except ValueError:
+                messages.error(request, "Invalid RFQ reply IDs provided.")
+                return redirect('solicitations:replied-rfq')
+            
+            if not rfq_id_list:
+                messages.error(request, "No valid RFQ replies selected for deletion.")
+                return redirect('solicitations:replied-rfq')
+            
+            # Get user permissions
+            user = request.user
+            is_admin = user.is_superuser or getattr(user, 'user_type', None) == 'admin'
+            
+            deleted_count = 0
+            skipped_count = 0
+            
+            with transaction.atomic():
+                for rfq_id in rfq_id_list:
+                    try:
+                        # Get the RFQ reply with appropriate permissions
+                        if is_admin:
+                            rfq_reply = RfqReply.objects.get(pk=rfq_id)
+                        else:
+                            rfq_reply = RfqReply.objects.get(pk=rfq_id, user=user)
+                        
+                        rfq_reply.delete()
+                        deleted_count += 1
+                    except RfqReply.DoesNotExist:
+                        skipped_count += 1
+                        continue
+                    except Exception as e:
+                        skipped_count += 1
+                        continue
+            
+            # Success message
+            if deleted_count > 0:
+                messages.success(
+                    request,
+                    f"Successfully deleted {deleted_count} RFQ reply(ies)."
+                )
+            if skipped_count > 0:
+                messages.warning(
+                    request,
+                    f"{skipped_count} RFQ reply(ies) could not be deleted (not found or no permission)."
+                )
+        except Exception as e:
+            messages.error(request, f"Error deleting RFQ replies: {str(e)}")
+    
     return redirect('solicitations:replied-rfq')
 
 
@@ -3050,17 +3930,41 @@ def user_profile(request, client):
 def export_config(request):
     from solicitations.models import UserExportConfiguration, ExportFieldDefinition
     from solicitations.export_utils import create_default_configurations
+    import logging
+    import traceback
 
     user = request.user
+    logger = logging.getLogger(__name__)
+    
+    # CRITICAL: Ensure ExportFieldDefinition records exist FIRST and are up-to-date
+    # This ensures all users can configure fields even if management command wasn't run
+    # Also updates existing records with correct field types from embedded definitions
+    if ExportFieldDefinition.objects.count() != 121:
+        logger.info(f"Ensuring ExportFieldDefinition records exist for user {user.username}")
+        ExportFieldDefinition.ensure_all_fields_exist()
+    else:
+        # Even if count is 121, ensure records are up-to-date with correct field types
+        # This fixes any existing records that may have incorrect field_type values
+        logger.info(f"Updating ExportFieldDefinition records to ensure correct field types for user {user.username}")
+        ExportFieldDefinition.ensure_all_fields_exist()
 
     # Get or create export configurations
     export_configs = UserExportConfiguration.objects.filter(
         user=user
     ).select_related('field_definition').order_by('field_definition__position')
 
-    # If no configurations exist, create defaults
+    # If no configurations exist, create defaults (for both GET and POST requests)
     if not export_configs.exists():
-        create_default_configurations(user)
+        success = create_default_configurations(user)
+        if not success:
+            messages.error(
+                request, 
+                "Unable to create export configurations. Please contact administrator. "
+                "Error: Missing field definitions."
+            )
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to create configurations for user {user.username}")
+        # Refresh the queryset after creating defaults
         export_configs = UserExportConfiguration.objects.filter(
             user=user
         ).select_related('field_definition').order_by('field_definition__position')
@@ -3075,40 +3979,184 @@ def export_config(request):
     reserved_configs = export_configs.filter(
         field_definition__field_type='reserved')
 
+    # Positions whose values are fully dynamic/system-controlled and must not be overridden
+    locked_positions = [
+        1, 5, 6, 7, 19, 26, 27, 30, 31, 33, 37, 38,
+        44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 59, 60,
+        63, 76, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87,
+        88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+        101, 103, 104, 107, 108, 109, 111, 112, 113, 114,
+        115, 116, 119, 121,
+    ]
+
     if request.method == 'POST':
         if 'export_config_update' in request.POST:
             # Handle export configuration updates
+            logger = logging.getLogger(__name__)
             updated_count = 0
             errors = []
-
-            for config in export_configs:
+            
+            # Ensure ExportFieldDefinition records exist first and are up-to-date
+            if ExportFieldDefinition.objects.count() != 121:
+                logger.info(f"Ensuring ExportFieldDefinition records exist for user {user.username} during POST")
+                ExportFieldDefinition.ensure_all_fields_exist()
+            else:
+                # Even if count is 121, ensure records are up-to-date with correct field types
+                ExportFieldDefinition.ensure_all_fields_exist()
+            
+            # Ensure configurations exist before processing POST
+            # (This handles the case where user POSTs without visiting the page first)
+            if not export_configs.exists():
+                logger.info(f"Creating default configurations for user {user.username} during POST request")
+                success = create_default_configurations(user)
+                if not success:
+                    messages.error(
+                        request,
+                        "Unable to create export configurations. Please refresh the page and try again."
+                    )
+                    return redirect('solicitations:export-config')
+                # Refresh the queryset after creating defaults
+                export_configs = UserExportConfiguration.objects.filter(
+                    user=user
+                ).select_related('field_definition').order_by('field_definition__position')
+            
+            # Convert queryset to list to avoid stale data issues
+            configs_list = list(export_configs)
+            
+            # Debug: Log all positions being processed
+            positions_in_list = [c.field_definition.position for c in configs_list]
+            logger.info(f"[SAVE DEBUG] Processing {len(configs_list)} configurations. Positions: {sorted(positions_in_list)}")
+            logger.info(f"[SAVE DEBUG] Field 13 in list: {13 in positions_in_list}")
+            
+            # Debug: Log all POST keys related to custom_value
+            post_keys = [k for k in request.POST.keys() if k.startswith('custom_value_')]
+            logger.info(f"[SAVE DEBUG] POST keys with custom_value: {len(post_keys)} keys")
+            if len(post_keys) < len(configs_list):
+                logger.warning(f"[SAVE DEBUG] Mismatch: {len(post_keys)} POST keys but {len(configs_list)} configs")
+            
+            # Debug: Log POST data for field 13 specifically
+            field13_config = next((c for c in configs_list if c.field_definition.position == 13), None)
+            if field13_config:
+                field13_post_key = f'custom_value_{field13_config.id}'
+                field13_post_value = request.POST.get(field13_post_key, 'NOT_FOUND')
+                logger.info(f"[FIELD 13 DEBUG] Config ID: {field13_config.id}, POST key: {field13_post_key}, POST value: {repr(field13_post_value)}")
+                logger.info(f"[FIELD 13 DEBUG] Current DB value before save: {repr(field13_config.custom_value)}")
+            
+            # Check if we have configurations to save
+            if not configs_list:
+                error_msg = (
+                    "No export configurations found. Please refresh the page to create default configurations."
+                )
+                messages.error(request, error_msg)
+                logger.error(
+                    f"User {user.username} attempted to save configurations but none exist. "
+                    f"ExportFieldDefinition count: {ExportFieldDefinition.objects.count()}"
+                )
+                return redirect('solicitations:export-config')
+            
+            # Save configurations individually to allow partial saves
+            # (If one fails, others can still succeed)
+            for config in configs_list:
                 config_id = str(config.id)
+                position = config.field_definition.position
 
                 # Get values from POST data
-                is_enabled = request.POST.get(
-                    f'is_enabled_{config_id}') == 'on'
                 custom_value = request.POST.get(
                     f'custom_value_{config_id}', '').strip()
 
+                # Debug logging for field 13
+                if position == 13:
+                    logger.info(
+                        f"[FIELD 13 DEBUG] Config ID: {config_id}, "
+                        f"POST value: {repr(custom_value)}, "
+                        f"Current custom_value: {repr(config.custom_value)}, "
+                        f"Field type: {config.field_definition.field_type}, "
+                        f"In locked_positions: {position in locked_positions}, "
+                        f"Has predefined choices: {config.field_definition.has_predefined_choices}"
+                    )
+
+                # Validate custom_value length (max_length=255)
+                if len(custom_value) > 255:
+                    errors.append(
+                        f"Field {position} ({config.field_definition.column_name}): "
+                        f"Custom value exceeds maximum length of 255 characters (got {len(custom_value)} characters)"
+                    )
+                    continue
+
                 # Update configuration - all fields are always enabled
                 config.is_enabled = True  # Always enabled
-                # Don't clear source_field - it's needed for mapping RfqReply data
-                # Only update custom_value if provided
-                config.custom_value = custom_value
+
+                # Locked fields (dynamic or reserved) must not be overridden
+                if (
+                    config.field_definition.field_type == 'reserved'
+                    or position in locked_positions
+                ):
+                    config.custom_value = ""
+                    if position == 13:
+                        logger.info(f"[FIELD 13 DEBUG] Field is locked/reserved, setting custom_value to empty string")
+                else:
+                    # Don't clear source_field - it's needed for mapping RfqReply data
+                    # If custom_value is empty/whitespace, set to empty string to use source_field mapping
+                    # If custom_value has content, use it (overrides source_field)
+                    config.custom_value = custom_value if custom_value else ""
+                    if position == 13:
+                        logger.info(f"[FIELD 13 DEBUG] Setting custom_value to: {repr(config.custom_value)}")
 
                 try:
-                    config.save()
+                    # Use update_fields for efficiency and to avoid updating unnecessary fields
+                    config.save(update_fields=['is_enabled', 'custom_value', 'updated_at'])
+                    
+                    # Verify the save worked by refreshing and checking
+                    config.refresh_from_db()
+                    if position == 13:
+                        logger.info(f"[FIELD 13 DEBUG] After save - custom_value in DB: {repr(config.custom_value)}, is_enabled: {config.is_enabled}")
+                    
                     updated_count += 1
+                    if position == 13:
+                        logger.info(f"[FIELD 13 DEBUG] Successfully saved field 13 with custom_value: {repr(config.custom_value)}")
                 except Exception as e:
-                    errors.append(
-                        f"Error updating field {config.field_definition.position}: {str(e)}")
+                    error_msg = (
+                        f"Field {position} ({config.field_definition.column_name}): {str(e)}"
+                    )
+                    errors.append(error_msg)
+                    logger.error(
+                        f"Error saving UserExportConfiguration ID {config.id} (Position {position}) "
+                        f"for user {user.username}: {str(e)}\n"
+                        f"Traceback: {traceback.format_exc()}"
+                    )
+                    if position == 13:
+                        logger.error(f"[FIELD 13 DEBUG] Exception occurred: {str(e)}")
 
             if errors:
-                for error in errors:
-                    messages.error(request, error)
+                # Show all errors to the user
+                error_summary = f"Failed to save {len(errors)} configuration(s) out of {len(configs_list)}:"
+                messages.error(request, error_summary)
+                # Show first 10 errors in detail to avoid overwhelming the user
+                for error in errors[:10]:
+                    messages.error(request, f"  • {error}")
+                if len(errors) > 10:
+                    messages.warning(
+                        request, 
+                        f"  ... and {len(errors) - 10} more error(s). Check server logs for details."
+                    )
+                logger.error(f"[SAVE DEBUG] Save completed with {len(errors)} errors. Updated {updated_count} configs.")
             else:
                 messages.success(
                     request, f'Export configuration updated successfully! ({updated_count} fields configured)')
+                logger.info(f"[SAVE DEBUG] Save completed successfully. Updated {updated_count} out of {len(configs_list)} configs.")
+                
+                # Verify field 13 was saved
+                try:
+                    field13_config = UserExportConfiguration.objects.filter(
+                        user=user,
+                        field_definition__position=13
+                    ).first()
+                    if field13_config:
+                        logger.info(f"[SAVE DEBUG] Field 13 verification - custom_value: {repr(field13_config.custom_value)}, is_enabled: {field13_config.is_enabled}")
+                    else:
+                        logger.warning(f"[SAVE DEBUG] Field 13 configuration not found after save!")
+                except Exception as e:
+                    logger.error(f"[SAVE DEBUG] Error verifying field 13: {str(e)}")
 
             return redirect('solicitations:export-config')
 
@@ -3118,6 +4166,7 @@ def export_config(request):
         'conditional_configs': conditional_configs,
         'optional_configs': optional_configs,
         'reserved_configs': reserved_configs,
+        'locked_positions': locked_positions,
     }
 
     return render(request, 'solicitations/export_config.html', context)
@@ -3860,18 +4909,20 @@ def check_rfq_task_status(request):
 def rfq_reports_view(request):
     """
     Display RFQ task summary reports for the current user
+    Optimized for performance with database-level filtering
     """
     user = request.user
 
-    # Get all summaries for the current user
-    summaries = RFQTaskSummary.objects.filter(
-        user=user).order_by('-start_time')
+    # Base queryset with select_related for user (if needed in template)
+    base_queryset = RFQTaskSummary.objects.filter(user=user).select_related('user')
 
     # Apply filters
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
-    status_filter = request.GET.get('status')  # Renamed to avoid conflict
+    status_filter = request.GET.get('status')
     mode = request.GET.get('mode')
+
+    summaries = base_queryset
 
     if date_from:
         try:
@@ -3887,35 +4938,44 @@ def rfq_reports_view(request):
         except ValueError:
             pass
 
-    # Filter by status using your model's status property
-    if status_filter:
-        # Convert queryset to list to use the status property
-        all_summaries_list = list(summaries)
-        if status_filter == 'completed':
-            summaries = [
-                s for s in all_summaries_list if s.status == 'completed']
-        elif status_filter == 'partial':
-            summaries = [
-                s for s in all_summaries_list if s.status == 'partial']
-        elif status_filter == 'failed':
-            summaries = [s for s in all_summaries_list if s.status == 'failed']
-
-        # Convert back to queryset for pagination
-        filtered_ids = [s.id for s in summaries]
-        summaries = RFQTaskSummary.objects.filter(
-            id__in=filtered_ids).order_by('-start_time')
-
     if mode:
         summaries = summaries.filter(processing_mode=mode)
 
-    # Calculate statistics
-    all_summaries = RFQTaskSummary.objects.filter(user=user)
+    # Filter by status using database-level filtering instead of Python
+    # Status logic: completed = total_successful_sent == requested_solicitations
+    #              failed = total_successful_sent == 0
+    #              partial = everything else
+    if status_filter:
+        if status_filter == 'completed':
+            summaries = summaries.filter(
+                total_successful_sent=F('requested_solicitations')
+            )
+        elif status_filter == 'failed':
+            summaries = summaries.filter(total_successful_sent=0)
+        elif status_filter == 'partial':
+            # Partial = not completed and not failed
+            summaries = summaries.exclude(
+                total_successful_sent=F('requested_solicitations')
+            ).exclude(total_successful_sent=0)
+
+    # Order by start_time descending (uses existing index)
+    summaries = summaries.order_by('-start_time')
+
+    # Calculate statistics using a single aggregated query
+    # Reuse base_queryset for stats to avoid duplicate queries
+    stats_queryset = base_queryset
+    stats_aggregate = stats_queryset.aggregate(
+        total_tasks=Count('id'),
+        total_sent=Sum('total_successful_sent'),
+        total_failed=Sum('total_failed'),
+        total_requested=Sum('requested_solicitations'),
+    )
 
     stats = {
-        'total_tasks': all_summaries.count(),
-        'total_sent': all_summaries.aggregate(total=Sum('total_successful_sent'))['total'] or 0,
-        'total_failed': all_summaries.aggregate(total=Sum('total_failed'))['total'] or 0,
-        'total_requested': all_summaries.aggregate(total=Sum('requested_solicitations'))['total'] or 0,
+        'total_tasks': stats_aggregate['total_tasks'] or 0,
+        'total_sent': stats_aggregate['total_sent'] or 0,
+        'total_failed': stats_aggregate['total_failed'] or 0,
+        'total_requested': stats_aggregate['total_requested'] or 0,
     }
 
     # Calculate success rate
@@ -3925,14 +4985,15 @@ def rfq_reports_view(request):
     else:
         stats['success_rate'] = 0
 
-    # This month statistics
+    # This month statistics (optimized with single query)
     current_month = timezone.now().replace(
         day=1, hour=0, minute=0, second=0, microsecond=0)
-    this_month_summaries = all_summaries.filter(start_time__gte=current_month)
-    stats['this_month_sent'] = this_month_summaries.aggregate(
-        total=Sum('total_successful_sent'))['total'] or 0
+    this_month_aggregate = base_queryset.filter(
+        start_time__gte=current_month
+    ).aggregate(total=Sum('total_successful_sent'))
+    stats['this_month_sent'] = this_month_aggregate['total'] or 0
 
-    # Pagination
+    # Pagination (only queries the current page, not all records)
     paginator = Paginator(summaries, 25)  # Show 25 reports per page
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)

@@ -1,0 +1,302 @@
+{% extends 'solicitations/base.html' %}
+
+{% block content %}
+
+<section class="mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      {% if total_in_batch and current_index %}
+        <div class="text-muted" style="font-size: 0.8rem;">
+          RFQ {{ current_index }} of {{ total_in_batch }} in export set
+        </div>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      {% if batch_mode %}
+        {% if prev_rfq_id %}
+        <a href="{% url 'solicitations:export-single-rfq-reply-preview' prev_rfq_id %}?mode=batch{% if request.GET.selected == 'true' %}&selected=true{% endif %}" class="btn btn-outline-secondary btn-sm" id="prevButton">
+          &laquo; Previous
+        </a>
+        {% endif %}
+        {% if next_rfq_id %}
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="nextButton" data-next-url="{% url 'solicitations:export-single-rfq-reply-preview' next_rfq_id %}?mode=batch{% if request.GET.selected == 'true' %}&selected=true{% endif %}">
+          Next &raquo;
+        </button>
+        {% endif %}
+      {% endif %}
+      <a href="{% url 'solicitations:replied-rfq' %}" class="btn btn-outline-secondary">
+        Back to Replied RFQs
+      </a>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if batch_mode %}
+      <input type="hidden" name="mode" value="batch">
+      {% if request.GET.selected == 'true' %}
+        <input type="hidden" name="selected" value="true">
+      {% endif %}
+    {% endif %}
+    {% if next_rfq_id %}
+      <input type="hidden" name="next_rfq_id" value="{{ next_rfq_id }}">
+    {% endif %}
+
+    <div class="card">
+      <div class="card-body">
+        <div style="max-height: 600px; overflow-y: auto;">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 70px;" class="text-center">Pos</th>
+                <th style="width: 260px;">Field Name</th>
+                <th>Value (this export only)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              <tr id="row_{{ row.position }}" class="{% if row.is_mandatory and row.is_empty %}missing-mandatory{% endif %}">
+                <td class="text-center fw-semibold">
+                  {% if row.is_mandatory %}
+                    <span class="text-danger" title="Mandatory field">*</span>
+                  {% endif %}
+                  {{ row.position|stringformat:"03d" }}
+                </td>
+                <td>
+                  {% if row.is_mandatory %}
+                    <strong class="text-danger">{{ row.name }}</strong>
+                  {% else %}
+                    {{ row.name }}
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.field_type == 'reserved' %}
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           value="{{ row.value }}"
+                           readonly
+                           disabled>
+                    <input type="hidden" name="field_{{ row.position }}" value="{{ row.value }}">
+                  {% else %}
+                    <input type="text"
+                           class="form-control form-control-sm field-input"
+                           data-position="{{ row.position }}"
+                           data-mandatory="{% if row.is_mandatory %}true{% else %}false{% endif %}"
+                           name="field_{{ row.position }}"
+                           value="{{ row.value }}"
+                           {% if row.is_mandatory and row.is_empty %}style="border: 2px solid #dc3545; box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);"{% endif %}>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <button type="submit" name="cancel" class="btn btn-outline-secondary">
+        Cancel
+      </button>
+      <div class="d-flex gap-2">
+        {% if not batch_mode %}
+          <button type="submit" name="save" class="btn btn-secondary">
+            Save Changes
+          </button>
+          <button type="submit" name="save_and_export" class="btn mybg hoverbg text-white">
+            Save &amp; Export
+          </button>
+        {% else %}
+          {% if next_rfq_id %}
+          <button type="submit" name="save_and_continue" class="btn mybg hoverbg text-white">
+            Save &amp; Continue
+          </button>
+          {% else %}
+          <button type="submit" name="save_and_export" class="btn mybg hoverbg text-white">
+            Save &amp; Export
+          </button>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </form>
+</section>
+
+<style>
+.missing-mandatory {
+  background-color: #fff5f5 !important;
+}
+.missing-mandatory td {
+  border-color: #fecaca !important;
+}
+.field-input.missing-mandatory-field {
+  border: 2px solid #dc3545 !important;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 0.4rem rgba(220, 53, 69, 0.4);
+  }
+}
+</style>
+
+{{ mandatory_positions|json_script:"mandatory-positions" }}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.querySelector('form');
+  if (!form) return;
+  
+  // Get mandatory positions from template
+  const mandatoryPositionsElement = document.getElementById('mandatory-positions');
+  const mandatoryPositions = mandatoryPositionsElement ? JSON.parse(mandatoryPositionsElement.textContent) : [];
+  
+  // Function to validate mandatory fields and highlight missing ones
+  function validateMandatoryFields() {
+    // Clear previous validation states
+    document.querySelectorAll('.missing-mandatory-field').forEach(function(input) {
+      input.classList.remove('missing-mandatory-field');
+    });
+    document.querySelectorAll('.missing-mandatory').forEach(function(row) {
+      row.classList.remove('missing-mandatory');
+    });
+    
+    // Find missing mandatory fields
+    const missingFields = [];
+    mandatoryPositions.forEach(function(position) {
+      const input = document.querySelector('input[name="field_' + position + '"]');
+      if (input && (!input.value || !input.value.trim())) {
+        missingFields.push({
+          position: position,
+          input: input,
+          row: input.closest('tr')
+        });
+      }
+    });
+    
+    // If there are missing mandatory fields, highlight them and scroll to first one
+    if (missingFields.length > 0) {
+      // Add red border class to all missing mandatory fields
+      missingFields.forEach(function(field) {
+        field.input.classList.add('missing-mandatory-field');
+        if (field.row) {
+          field.row.classList.add('missing-mandatory');
+        }
+      });
+      
+      // Scroll to first missing mandatory field
+      const firstMissingField = missingFields[0];
+      if (firstMissingField.input) {
+        // Scroll the container to show the field
+        const scrollContainer = firstMissingField.input.closest('div[style*="overflow-y"]');
+        if (scrollContainer) {
+          // Calculate position relative to container
+          const containerTop = scrollContainer.getBoundingClientRect().top;
+          const fieldTop = firstMissingField.input.getBoundingClientRect().top;
+          const scrollPosition = scrollContainer.scrollTop + (fieldTop - containerTop) - 100; // 100px offset from top
+          
+          scrollContainer.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth'
+          });
+        } else {
+          // Fallback: scroll the field into view
+          firstMissingField.input.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+        }
+        
+        // Focus the input after a short delay to ensure scroll completes
+        setTimeout(function() {
+          firstMissingField.input.focus();
+        }, 500);
+      }
+      
+      return false; // Validation failed
+    }
+    
+    return true; // Validation passed
+  }
+  
+  // Flag to track if validation was already performed (to avoid double validation)
+  let validationAlreadyPerformed = false;
+  
+  // Validate on form submit (for Save & Export and Save & Continue buttons)
+  form.addEventListener('submit', function(e) {
+    // Skip validation if it was already performed (e.g., via Next button)
+    if (validationAlreadyPerformed) {
+      validationAlreadyPerformed = false; // Reset flag
+      return true; // Allow form submission
+    }
+    
+    // Check if it's a save and export or save and continue button
+    const submitButton = document.activeElement;
+    const isSaveAndExport = submitButton && (
+      submitButton.name === 'save_and_export' || 
+      submitButton.name === 'save_and_continue'
+    );
+    
+    // Only validate for save_and_export and save_and_continue buttons
+    if (isSaveAndExport) {
+      if (!validateMandatoryFields()) {
+        e.preventDefault(); // Prevent form submission
+        return false;
+      }
+    }
+  });
+  
+  // Handle Next button click with validation
+  const nextButton = document.getElementById('nextButton');
+  if (nextButton) {
+    nextButton.addEventListener('click', function(e) {
+      e.preventDefault();
+      
+      // Validate mandatory fields before allowing navigation
+      // The validateMandatoryFields() function already highlights missing fields
+      // and scrolls to the first one, so we just need to check if validation passed
+      if (!validateMandatoryFields()) {
+        // Validation failed - fields are already highlighted and scrolled to
+        // No alert needed, user can see the highlighted fields
+        return false;
+      }
+      
+      // If validation passes, trigger the save_and_continue button to save and navigate
+      const saveAndContinueBtn = document.querySelector('button[name="save_and_continue"]');
+      if (saveAndContinueBtn) {
+        // Set flag to skip validation on form submit since we already validated
+        validationAlreadyPerformed = true;
+        
+        // Click the save_and_continue button which will save and navigate
+        saveAndContinueBtn.click();
+      } else {
+        // Fallback: if save_and_continue button doesn't exist, just navigate
+        // (This shouldn't happen in batch mode, but just in case)
+        window.location.href = nextButton.getAttribute('data-next-url');
+      }
+    });
+  }
+  
+  // Remove red border when user starts typing in a mandatory field
+  document.querySelectorAll('input.field-input[data-mandatory="true"]').forEach(function(input) {
+    input.addEventListener('input', function() {
+      if (this.value && this.value.trim()) {
+        this.classList.remove('missing-mandatory-field');
+        const row = this.closest('tr');
+        if (row) {
+          row.classList.remove('missing-mandatory');
+        }
+      }
+    });
+  });
+});
+</script>
+
+{% endblock %}
+
+

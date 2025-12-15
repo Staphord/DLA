@@ -19,31 +19,60 @@
           <div class="field-name">{{ config.field_definition.column_name }}</div>
         </td>
         <td>
-          {% if config.field_definition.has_predefined_choices %}
-          <select
-            class="select-field"
-            name="custom_value_{{ config.id }}"
-          >
-            {% for choice in config.field_definition.get_choices %}
-            <option value="{{ choice.value }}" {% if config.custom_value == choice.value %}selected{% endif %}>
-              {{ choice.label }}
-            </option>
-            {% endfor %}
-          </select>
-          {% else %}
-          <input
-            type="text"
-            class="input-field"
-            name="custom_value_{{ config.id }}"
-            value="{{ config.custom_value }}"
-            placeholder="Enter value"
-          >
-          {% endif %}
+          {% with pos=config.field_definition.position field_type=config.field_definition.field_type %}
+            {# Locked fields (dynamic or reserved) are not editable #}
+            {% if field_type == 'reserved' or pos in locked_positions %}
+              <input
+                type="text"
+                class="input-field"
+                value="Locked – system controlled value"
+                readonly
+                disabled
+              >
+              {# Ensure backend receives an empty custom_value for locked fields #}
+              <input type="hidden" name="custom_value_{{ config.id }}" value="">
+            {% else %}
+              {% if config.field_definition.has_predefined_choices %}
+              <select
+                class="select-field"
+                name="custom_value_{{ config.id }}"
+              >
+                {% for choice in config.field_definition.get_choices %}
+                <option value="{{ choice.value }}" {% if config.custom_value == choice.value %}selected{% endif %}>
+                  {{ choice.label }}
+                </option>
+                {% endfor %}
+              </select>
+              {% else %}
+              <input
+                type="text"
+                class="input-field"
+                name="custom_value_{{ config.id }}"
+                value="{{ config.custom_value }}"
+                placeholder="{% if config.source_field %}Leave empty to use: {{ config.source_field }}{% else %}Enter value{% endif %}"
+                title="{% if config.source_field %}Leave empty to use field mapping: {{ config.source_field }}{% else %}Enter a custom value{% endif %}"
+              >
+              {% endif %}
+            {% endif %}
+          {% endwith %}
         </td>
         <td>
           <div style="font-size: 13px; color: #6c757d;">
             {{ config.field_definition.definition|truncatewords:15 }}
           </div>
+          {% if config.source_field and not config.custom_value %}
+            <div style="font-size: 12px; color: #28a745; margin-top: 5px; font-weight: 500;">
+              📍 Mapped from: <code style="background: #e8f5e9; padding: 2px 6px; border-radius: 3px;">{{ config.source_field }}</code>
+            </div>
+          {% elif config.custom_value %}
+            <div style="font-size: 12px; color: #ff9800; margin-top: 5px; font-weight: 500;">
+              ✏️ Using custom value (overrides field mapping)
+            </div>
+          {% elif config.source_field %}
+            <div style="font-size: 12px; color: #6c757d; margin-top: 5px;">
+              💡 Leave empty to use: <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">{{ config.source_field }}</code>
+            </div>
+          {% endif %}
         </td>
       </tr>
       {% empty %}

@@ -138,8 +138,8 @@ print("STARTING OPTIMIZED SCRIPT WITH COMPLETE DATA EXTRACTION------------------
 last_active = time.time()
 TIMEOUT_THRESHOLD = 1800  # 30 minutes
 
-# ENHANCED CACHING SYSTEM WITH 90-DAY EXPIRATION
-CACHE_DURATION_DAYS = 90  # 90 days cache duration
+# ENHANCED CACHING SYSTEM WITH 180-DAY EXPIRATION
+CACHE_DURATION_DAYS = 180  # 180 days cache duration
 CACHE_FILE_PATH = 'cage_cache_90day.pkl'
 
 
@@ -268,8 +268,8 @@ def get_cache_info():
             '0-7 days': 0,
             '8-30 days': 0,
             '31-60 days': 0,
-            '61-90 days': 0,
-            '90+ days (expired)': 0
+            '61-120 days': 0,
+            '180+ days (expired)': 0
         }
 
         for cage_code, cache_entry in cached_data.items():
@@ -285,13 +285,13 @@ def get_cache_info():
                     elif days_old <= 60:
                         age_distribution['31-60 days'] += 1
                     else:
-                        age_distribution['61-90 days'] += 1
+                        age_distribution['61-120 days'] += 1
                 else:
                     expired_entries += 1
-                    age_distribution['90+ days (expired)'] += 1
+                    age_distribution['180+ days (expired)'] += 1
             else:
                 expired_entries += 1
-                age_distribution['90+ days (expired)'] += 1
+                age_distribution['180+ days (expired)'] += 1
 
         info = f"""
 Cache Information:
@@ -400,7 +400,9 @@ def retry(max_attempts=2, delay=2, cleanup_func=None):
 
                     if cleanup_func:
                         try:
-                            cleanup_func()
+                            # Pass the driver (first positional arg) to cleanup, if available
+                            driver_arg = args[0] if args else None
+                            cleanup_func(driver_arg) if driver_arg is not None else cleanup_func()
                         except Exception as ce:
                             print(f"Cleanup failed: {ce}")
 
@@ -1158,16 +1160,28 @@ def handle_pagination(driver, wait):
 
 
 @retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
-def process_nsn_links_comprehensive(driver, start_time):
-    """Process each unique NSN and create separate records for each CAGE+Part combination"""
+def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None):
+    """Process each unique NSN and create separate records for each CAGE+Part combination.
+
+    If nsns_to_process is provided (list or set of NSN strings), only those NSNs are processed.
+    """
     total_rows = len(row_data_list)
     successful_saves = 0
     failed_saves = 0
+
+    # Track per-NSN status
+    nsn_status = {}          # nsn -> "success" / "failed"
+    nsn_failed_reasons = {}  # nsn -> reason string
 
     # Group rows by NSN to avoid re-processing the same NSN page
     nsn_groups = {}
     for row_data in row_data_list:
         nsn = row_data.get('nsn', 'Unknown')
+
+        # Optional filter: only process selected NSNs in this run
+        if nsns_to_process is not None and nsn not in nsns_to_process:
+            continue
+
         if nsn not in nsn_groups:
             nsn_groups[nsn] = []
         nsn_groups[nsn].append(row_data)
@@ -1198,6 +1212,9 @@ def process_nsn_links_comprehensive(driver, start_time):
         print(
             f"Total quantity across all solicitations: {total_quantity_all_solicitations}")
 
+        # count how many records are persisted for this NSN in this run
+        records_saved_for_nsn = 0
+
         try:
             # Use the first row to get the NSN link and other common data
             first_row = nsn_rows[0]
@@ -1207,6 +1224,8 @@ def process_nsn_links_comprehensive(driver, start_time):
             if not safe_get(driver, nsn_link):
                 print(f"Failed to load NSN page for {nsn}")
                 failed_saves += 1
+                nsn_status[nsn] = "failed"
+                nsn_failed_reasons[nsn] = "Failed to load NSN page"
                 continue
 
             # Extract CAGE codes and part numbers ONCE
@@ -1243,6 +1262,8 @@ def process_nsn_links_comprehensive(driver, start_time):
             except Exception as cage_error:
                 print(f"Error finding CAGE table for NSN {nsn}: {cage_error}")
                 failed_saves += 1
+                nsn_status[nsn] = "failed"
+                nsn_failed_reasons[nsn] = f"CAGE table error: {cage_error}"
                 continue
 
             # Get CAGE details ONCE
@@ -1280,11 +1301,12 @@ def process_nsn_links_comprehensive(driver, start_time):
             if unit == 'N/A' or unit_code == 'N/A':
                 print(f"SKIPPING NSN {nsn}: Unit is N/A")
                 failed_saves += 1
+                nsn_status[nsn] = "failed"
+                nsn_failed_reasons[nsn] = "Unit is N/A after PDF extraction"
                 continue
 
             # NEW LOGIC: Create records for each solicitation-CAGE-part combination
             print(f"Creating records for each solicitation-CAGE-part combination...")
-            records_saved_for_nsn = 0
 
             # Process each solicitation separately
             for solicitation_data in nsn_rows:
@@ -1338,9 +1360,18 @@ def process_nsn_links_comprehensive(driver, start_time):
             print(
                 f"Overall progress: {successful_saves} saved, {failed_saves} failed")
 
+            # Mark NSN status based on whether we saved any records
+            if records_saved_for_nsn > 0:
+                nsn_status[nsn] = "success"
+            else:
+                nsn_status[nsn] = "failed"
+                nsn_failed_reasons[nsn] = "No records were saved for this NSN"
+
         except Exception as e:
             print(f"ERROR processing NSN {nsn}: {e}")
             failed_saves += 1
+            nsn_status[nsn] = "failed"
+            nsn_failed_reasons[nsn] = str(e)
 
     print(f"\nFINAL RESULTS:")
     print(f"   Unique NSNs processed: {len(nsn_groups)}")
@@ -1348,7 +1379,18 @@ def process_nsn_links_comprehensive(driver, start_time):
     print(f"   Individual records saved: {successful_saves}")
     print(f"   Failed saves: {failed_saves}")
 
-    return successful_saves
+    # Report failed NSNs for this run
+    failed_nsns = [n for n, status in nsn_status.items() if status == "failed"]
+    if failed_nsns:
+        print("\nNSNs that failed in this run:")
+        for n in failed_nsns:
+            reason = nsn_failed_reasons.get(n, "unknown error")
+            print(f"  - {n}: {reason}")
+    else:
+        print("\nAll NSNs processed successfully in this run.")
+
+    # Return both count and detailed per-NSN status so caller can optionally retry
+    return successful_saves, nsn_status
 
 
 @retry(max_attempts=2, delay=3, cleanup_func=cleanup_resources)
@@ -1361,7 +1403,7 @@ def extract_cage_details_comprehensive(driver, cage_codes):
     cached_results = []
     uncached_cages = []
 
-    print(f"\n90-Day Cache Status Check with Data Validation:")
+    print(f"\n180-Day Cache Status Check with Data Validation:")
     print("=" * 50)
 
     for cage_code in unique_cages:
@@ -1424,6 +1466,8 @@ def extract_cage_details_comprehensive(driver, cage_codes):
 
     # Process uncached CAGE codes (including empty cached ones)
     for i, cage_code in enumerate(uncached_cages, 1):
+        # Track whether this CAGE had a (possibly empty) cached entry before re-scraping
+        was_cached = cage_code in cage_cache
         cage_data = {
             "CAGE Code": cage_code,
             "Organization Name": "N/A",
@@ -1703,7 +1747,7 @@ def extract_cage_details_comprehensive(driver, cage_codes):
             print(
                 f"Updating cache for CAGE {cage_code} (was previously empty)")
         else:
-            print(f"Adding CAGE {cage_code} to cache for 90 days")
+            print(f"Adding CAGE {cage_code} to cache for 180 days")
 
         cage_cache[cage_code] = cage_data
         extracted_data.append(cage_data)
@@ -2077,7 +2121,7 @@ def main():
 
     # Display cache information at startup
     print("="*80)
-    print("COMPREHENSIVE WEB SCRAPER WITH 90-DAY CAGE CACHE SYSTEM")
+    print("COMPREHENSIVE WEB SCRAPER WITH 180-DAY CAGE CACHE SYSTEM")
     print("="*80)
     print(get_cache_info())
     print("="*80)
@@ -2203,11 +2247,42 @@ def main():
                 print("No data extracted. Exiting.")
                 return
 
-            # Process NSN links and save each record immediately
-            print("Processing NSN links and saving each record immediately...")
-            total_saved = process_nsn_links_comprehensive(driver, start_time)
+            # Process NSN links and save each record immediately (first pass)
+            print("Processing NSN links and saving each record immediately (first pass)...")
+            total_saved_first, nsn_status_first = process_nsn_links_comprehensive(
+                driver, start_time
+            )
 
-            print(f"Completed: {total_saved} records saved to database")
+            print(
+                f"First pass completed: {total_saved_first} records saved to database")
+
+            # Determine which NSNs failed in the first pass
+            failed_nsns_first = [
+                nsn for nsn, status in nsn_status_first.items() if status == "failed"
+            ]
+
+            total_saved_second = 0
+            nsn_status_second = {}
+
+            # Optional second pass: retry only failed NSNs once more
+            if failed_nsns_first:
+                print("\nStarting second pass to retry failed NSNs...")
+                print("NSNs to retry:")
+                for nsn in failed_nsns_first:
+                    print(f"  - {nsn}")
+
+                total_saved_second, nsn_status_second = process_nsn_links_comprehensive(
+                    driver, start_time, nsns_to_process=set(failed_nsns_first)
+                )
+
+                print(
+                    f"Second pass completed: {total_saved_second} additional records saved to database"
+                )
+            else:
+                print("\nNo NSNs failed in first pass; skipping second pass.")
+
+            overall_saved = total_saved_first + total_saved_second
+            print(f"Completed: {overall_saved} total records saved to database")
 
             end_time = time.time()
             total_time = end_time - start_time
@@ -2221,7 +2296,7 @@ def main():
             print("\n" + "="*60)
             print("PERFORMANCE SUMMARY:")
             print(f"Processed {len(row_data_list)} total records")
-            print(f"Successfully saved {total_saved} records to database")
+            print(f"Successfully saved {overall_saved} records to database")
             print(
                 f"Average time per record: {total_time/len(row_data_list):.2f} seconds" if row_data_list else "No records processed")
 
@@ -2250,11 +2325,11 @@ def main():
 
 if __name__ == "__main__":
     print("="*80)
-    print("COMPREHENSIVE WEB SCRAPER WITH 90-DAY CAGE CACHE SYSTEM")
+    print("COMPREHENSIVE WEB SCRAPER WITH 180-DAY CAGE CACHE SYSTEM")
     print("Expected Performance: High-speed processing with comprehensive data")
     print("Key Features:")
     print("Complete PDF data extraction (unit, buyer info, delivery details)")
-    print("90-day CAGE code caching system for maximum efficiency")
+    print("180-day CAGE code caching system for maximum efficiency")
     print("Comprehensive CAGE code processing")
     print("Optimized single-window navigation")
     print("Enhanced error handling and recovery")

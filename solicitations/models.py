@@ -38,6 +38,9 @@ class Solicitation(models.Model):
     deliver_fob = models.CharField(max_length=255, blank=True)
     deliver_days = models.CharField(max_length=255, blank=True)
     buyer_info = models.CharField(max_length=255, blank=True)
+    solicitation_line_number = models.CharField(max_length=255, blank=True)
+    purchase_request_number = models.CharField(max_length=255, blank=True)
+    is_set_aside = models.BooleanField(default=False)
 
     class Meta:
         indexes = [
@@ -1294,6 +1297,17 @@ class RfqReply(models.Model):
     )
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Export / Archiving
+    is_exported = models.BooleanField(
+        default=False,
+        help_text="Whether this RFQ reply has been exported (archived)"
+    )
+    exported_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this RFQ reply was last exported"
+    )
+
     class Meta:
         verbose_name = "RFQ Reply"
         verbose_name_plural = "RFQ Replies"
@@ -1343,14 +1357,14 @@ class RfqReply(models.Model):
     def find_matching_solicitation(self):
         """
         Find matching Solicitation using multiple criteria in priority order.
-        
+
         Returns:
             Solicitation object or None if no match found
         """
         # Import here to avoid circular import
         from django.db.models import Q
         # Solicitation is in the same module, so we can reference it directly
-        
+
         # Method 1: Get from matched RFQ (highest priority)
         if self.rfq and self.rfq.solicitation:
             return self.rfq.solicitation
@@ -1411,11 +1425,11 @@ class RfqReply(models.Model):
                 ).first()
                 if solicitation:
                     return solicitation
-                
+
                 # If no exact match, try case-insensitive and trimmed match
                 part_num_clean = self.part_number.strip() if self.part_number else None
                 qty_clean = self.quantity.strip() if self.quantity else None
-                
+
                 if part_num_clean and qty_clean:
                     solicitation = Solicitation.objects.filter(
                         part_number__iexact=part_num_clean,
@@ -1435,7 +1449,7 @@ class RfqReply(models.Model):
                 ).first()
                 if solicitation:
                     return solicitation
-                
+
                 # If no exact match, try case-insensitive match
                 part_num_clean = self.part_number.strip() if self.part_number else None
                 if part_num_clean:
@@ -1449,11 +1463,222 @@ class RfqReply(models.Model):
 
         return None
 
+    @property
+    def has_matching_solicitation(self):
+        """
+        Convenience flag for templates/views: True if any Solicitation can be
+        found using the same multi-step matching logic as the detail page.
+        Uses cached value if available (set by view for performance).
+        """
+        # Check if view has pre-computed this value (performance optimization)
+        if hasattr(self, '_cached_has_matching_solicitation'):
+            return self._cached_has_matching_solicitation
+        # Fallback to original method if not cached
+        return self.find_matching_solicitation() is not None
+
+
+# Embedded field definitions - all 121 DLA export fields
+# This eliminates the need for management commands
+# Field types and definitions extracted from index.html
+EXPORT_FIELD_DEFINITIONS = {
+    1: {'column_name': 'Solicitation Number', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 13, 'definition': ''},
+    2: {'column_name': 'Solicitation Type Indicator', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    3: {'column_name': 'Small Business Set Aside Indicator', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    4: {'column_name': 'Additional Clause Fill-Ins Indicator', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    5: {'column_name': 'Return By Date', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 10, 'definition': ''},
+    6: {'column_name': 'Quoter CAGE Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 5, 'definition': ''},
+    7: {'column_name': 'Quote for CAGE Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 5, 'definition': ''},
+    8: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    9: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    10: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    11: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    12: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    13: {'column_name': 'Small Business and Other Contractor Representations Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    14: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    15: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    16: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    17: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    18: {'column_name': 'Joint Venture', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    19: {'column_name': 'Joint Venture Remarks', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 255, 'definition': ''},
+    20: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    21: {'column_name': 'Affirmative Action Compliance Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    22: {'column_name': 'Previous Contracts and Compliance Reports Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    23: {'column_name': 'Alternate Disputes Resolution', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    24: {'column_name': 'Bid Type Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    25: {'column_name': 'Prompt Payment Discount Terms Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    26: {'column_name': 'Vendor Quote Number', 'field_type': 'optional', 'quote_level': 'header', 'max_length': 15, 'definition': ''},
+    27: {'column_name': 'Days Quote Valid', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 3, 'definition': '', 'default_value': '90'},
+    28: {'column_name': 'Meets Packaging Requirement', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    29: {'column_name': 'Basic Ordering Agreement (BOA)/ Federal Supply Schedule (FSS)/Blanket Purchase Agreement (BPA).', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 3, 'definition': ''},
+    30: {'column_name': 'BOA/FSS/BPA Contract Number', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 17, 'definition': ''},
+    31: {'column_name': 'BOA/FSS/BPA Contract Expiration Date', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 10, 'definition': ''},
+    32: {'column_name': 'FOB Point', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    33: {'column_name': 'FOB City', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 30, 'definition': ''},
+    34: {'column_name': 'FOB State/Province', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    35: {'column_name': 'FOB Country', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
+    36: {'column_name': 'Inspection Point Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    37: {'column_name': 'Place of Government Inspection - Packaging CAGE code', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 5, 'definition': ''},
+    38: {'column_name': 'Place of Government Inspection - Supplies CAGE code', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 5, 'definition': ''},
+    39: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    40: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    41: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    42: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    43: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    44: {'column_name': 'Solicitation Line Number', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 4, 'definition': ''},
+    45: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    46: {'column_name': 'Purchase Request Number', 'field_type': 'mandatory', 'quote_level': 'line', 'max_length': 10, 'definition': ''},
+    47: {'column_name': 'National Stock Number / Part Number', 'field_type': 'mandatory', 'quote_level': 'line', 'max_length': 45, 'definition': ''},
+    48: {'column_name': 'Unit of Issue', 'field_type': 'mandatory', 'quote_level': 'line', 'max_length': 2, 'definition': ''},
+    49: {'column_name': 'Quantity', 'field_type': 'conditional', 'quote_level': 'line', 'max_length': 10, 'definition': ''},
+    50: {'column_name': 'Unit Price', 'field_type': 'conditional', 'quote_level': 'line', 'max_length': 13, 'definition': ''},
+    51: {'column_name': 'Delivery Days', 'field_type': 'conditional', 'quote_level': 'line', 'max_length': 4, 'definition': ''},
+    52: {'column_name': 'GuaranteedMinimum', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 7, 'definition': ''},
+    53: {'column_name': 'DO Minimum', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 8, 'definition': ''},
+    54: {'column_name': 'Contract Maximum', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 12, 'definition': ''},
+    55: {'column_name': 'Annual Frequency of Buys (AFB)', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 4, 'definition': ''},
+    56: {'column_name': 'No DO Minimum Quantity?', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    57: {'column_name': 'HUBZone Preference Indicator', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    58: {'column_name': 'Waiver of HUBZone Preference', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
+    59: {'column_name': 'Immediate Shipment Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    60: {'column_name': 'Immediate Shipment Delivery Days', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 4, 'definition': ''},
+    61: {'column_name': 'RESERVED', 'field_type': 'reserved', 'quote_level': '', 'max_length': 0, 'definition': ''},
+    62: {'column_name': 'Trade Agreements Indicator', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    63: {'column_name': 'Source of Supply CAGE Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 5, 'definition': ''},
+    64: {'column_name': 'First Article Waiver Code', 'field_type': 'conditional', 'quote_level': 'line', 'max_length': 1, 'definition': ''},
+    65: {'column_name': 'Hazardous Material Identification and Material Safety Data', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    66: {'column_name': 'Hazardous Warning Labels', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    67: {'column_name': 'Material Requirements', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    68: {'column_name': 'Buy American Indicator', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    69: {'column_name': 'Free Trade Agreements Indicator', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    70: {'column_name': 'Buy American/Free Trade/Trade Agreements End Product', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 2, 'definition': ''},
+    71: {'column_name': 'Buy American/ Free Trade Agreements/Trade Agreements Country of Origin Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 2, 'definition': ''},
+    72: {'column_name': 'Buy American / Free Trade / Trade Agreements Country Code', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 2, 'definition': ''},
+    73: {'column_name': 'Duty Free Entry Requested', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    74: {'column_name': 'Duty Free Entry Requested/Foreign Supplies in US Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    75: {'column_name': 'Duty Free Entry Requested/Duty Paid Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    76: {'column_name': 'Duty Free Entry Requested/Duty Paid Amount', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 15, 'definition': ''},
+    77: {'column_name': 'Price Breaks Solicited Indicator', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    78: {'column_name': 'Quantity Price Breaks - Range 1 Lower Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    79: {'column_name': 'Quantity Price Breaks - Range 1 Upper Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    80: {'column_name': 'Quantity Price Breaks - Range 1 Unit Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    81: {'column_name': 'Quantity Price Breaks - Range 2 Lower Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    82: {'column_name': 'Quantity Price Breaks - Range 2 Upper Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    83: {'column_name': 'Quantity Price Breaks - Range 2 Unit Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    84: {'column_name': 'Quantity Price Breaks - Range 3 Lower Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    85: {'column_name': 'Quantity Price Breaks - Range 3 Upper Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    86: {'column_name': 'Quantity Price Breaks - Range 3 Unit Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    87: {'column_name': 'Quantity Price Breaks - Range 4 Lower Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    88: {'column_name': 'Quantity Price Breaks - Range 4 Upper Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    89: {'column_name': 'Quantity Price Breaks - Range 4 Unit Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    90: {'column_name': 'Quantity Price Breaks - Range 5 Lower Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    91: {'column_name': 'Quantity Price Breaks - Range 5 Upper Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    92: {'column_name': 'Quantity Price Breaks - Range 5 Unit Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    93: {'column_name': 'Quantity Price Breaks - Range 6 Lower Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    94: {'column_name': 'Quantity Price Breaks - Range 6 Upper Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    95: {'column_name': 'Quantity Price Breaks - Range 6 Unit Price', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 13, 'definition': ''},
+    96: {'column_name': 'Quantity Variance Plus', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 2, 'definition': ''},
+    97: {'column_name': 'Quantity Variance Minus', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 2, 'definition': ''},
+    98: {'column_name': 'Minimum Order Quantity Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    99: {'column_name': 'Minimum Order Maximum Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    100: {'column_name': 'Immediate Shipment Available', 'field_type': 'optional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    101: {'column_name': 'Immediate Shipment Quantity', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 10, 'definition': ''},
+    102: {'column_name': 'Manufacturer/Dealer', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 2, 'definition': ''},
+    103: {'column_name': 'Actual Manufacturing/Production Source CAGE code', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 5, 'definition': ''},
+    104: {'column_name': 'Actual Manufacturing/Production Source Name and Address', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 255, 'definition': ''},
+    105: {'column_name': 'Item Description Indicator', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    106: {'column_name': 'Part Number Offered Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    107: {'column_name': 'Part Number Offered CAGE code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 5, 'definition': ''},
+    108: {'column_name': 'Part Number Offered - Part Number', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 40, 'definition': ''},
+    109: {'column_name': 'Part Number Offered Remarks', 'field_type': 'optional', 'quote_level': 'product', 'max_length': 255, 'definition': ''},
+    110: {'column_name': 'Supplies Offered', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    111: {'column_name': 'Supplies Offered Remarks', 'field_type': 'optional', 'quote_level': 'product', 'max_length': 255, 'definition': ''},
+    112: {'column_name': 'Qualification Requirements MFG CAGE', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 5, 'definition': ''},
+    113: {'column_name': 'Qualification Requirements Source CAGE', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 5, 'definition': ''},
+    114: {'column_name': 'Qualification Requirements Item Name', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 50, 'definition': ''},
+    115: {'column_name': 'Qualification Requirements Service Identification', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 50, 'definition': ''},
+    116: {'column_name': 'Qualification Requirements Test Number', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 50, 'definition': ''},
+    117: {'column_name': 'Higher-Level Quality Indicator', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    118: {'column_name': 'Higher-Level Quality Code', 'field_type': 'conditional', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    119: {'column_name': 'Higher-Level Quality Remarks', 'field_type': 'optional', 'quote_level': 'product', 'max_length': 255, 'definition': ''},
+    120: {'column_name': 'Child Labor Certification Code', 'field_type': 'mandatory', 'quote_level': 'product', 'max_length': 1, 'definition': ''},
+    121: {'column_name': 'Quote Remarks', 'field_type': 'optional', 'quote_level': 'header', 'max_length': 255, 'definition': ''},
+}
+
+# Predefined choices for dropdown fields
+EXPORT_FIELD_CHOICES = {
+    2: [  # Solicitation Type Indicator
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'F', 'label': 'F - Fast Auto Evaluation'},
+        {'value': 'I',
+            'label': 'I - Automated Indefinite Delivery Contract (AIDC)'},
+        {'value': 'P', 'label': 'P - Auto Evaluation'},
+    ],
+    3: [  # Small Business Set Aside Indicator
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'Y', 'label': 'Y - Small Business Set-Aside'},
+        {'value': 'H', 'label': 'H - HUBZone Set-Aside'},
+        {'value': 'R',
+            'label': 'R - Service Disabled Veteran-Owned Small Business (SDVOSB) Set-Aside'},
+        {'value': 'L',
+            'label': 'L - Woman Owned Small Business (WOSB) Set-Aside'},
+        {'value': 'A', 'label': 'A - 8a Set-Aside'},
+        {'value': 'E',
+            'label': 'E - Economically Disadvantaged Woman Owned Small Business (EDWOSB) Set-Aside'},
+        {'value': 'N', 'label': 'N - Unrestricted/Not Set-Aside'},
+    ],
+    4: [  # Additional Clause Fill-Ins Indicator
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'N', 'label': 'N - No'},
+        {'value': 'Y', 'label': 'Y - Yes'},
+    ],
+    13: [  # Small Business and Other Contractor Representations Code
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'A', 'label': 'A - Large Business/Other Business'},
+        {'value': 'B', 'label': 'B - Small Business'},
+        {'value': 'C', 'label': 'C - Nonprofit Institution'},
+        {'value': 'E',
+            'label': 'E - Educational Institution (other than HBCU or Minority)'},
+        {'value': 'F',
+            'label': 'F - Historically Black College or University (HBCU)'},
+        {'value': 'G', 'label': 'G - JWOD Participating Nonprofit Agency'},
+        {'value': 'M', 'label': 'M - Small Disadvantaged Business'},
+        {'value': 'P', 'label': 'P - Minority Institution (other than HBCU)'},
+        {'value': 'X', 'label': 'X - Intragovernmental'},
+    ],
+    18: [  # Joint Venture
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'JV',
+            'label': 'JV - Is a Joint Venture that complies with 13 CFR Part 121.103(h) and 13 CFR Part 125'},
+        {'value': 'JN',
+            'label': 'JN - Is not a Joint Venture that complies with 13 CFR Part 121.103(h) and 13 CFR Part 125'},
+    ],
+    21: [  # Affirmative Action Compliance Code
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'Y6', 'label': 'Y6 - Developed and on File'},
+        {'value': 'N6', 'label': 'N6 - Not Developed and Not on File'},
+        {'value': 'NH', 'label': 'NH - No Previous Contracts Subject to Requirements'},
+        {'value': 'NA', 'label': 'NA - Not Applicable'},
+    ],
+    22: [  # Previous Contracts and Compliance Reports Code
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'Y4', 'label': 'Y4 - Participated and Filed'},
+        {'value': 'Y5', 'label': 'Y5 - Participated and Not Filed'},
+        {'value': 'N4', 'label': 'N4 - Not Participated'},
+        {'value': 'NA', 'label': 'NA - Not Applicable'},
+    ],
+    23: [  # Alternate Disputes Resolution
+        {'value': '', 'label': '-- Select --'},
+        {'value': 'Y', 'label': 'Y - Yes'},
+        {'value': 'N', 'label': 'N - No'},
+    ],
+}
+
 
 class ExportFieldDefinition(models.Model):
     """
     Defines the 121 fields for DLA export file format.
     Each field has a position (1-121), name, type, and validation rules.
+    Field definitions are embedded in EXPORT_FIELD_DEFINITIONS constant above.
     """
     FIELD_TYPE_CHOICES = [
         ('mandatory', 'Mandatory'),
@@ -1519,8 +1744,17 @@ class ExportFieldDefinition(models.Model):
         verbose_name_plural = 'Export Field Definitions'
         ordering = ['position']
         indexes = [
+            # Single field indexes
+            # For ordering and position lookups
             models.Index(fields=['position']),
-            models.Index(fields=['field_type']),
+            models.Index(fields=['field_type']),  # For filtering by field type
+            # For admin filtering by quote level
+            models.Index(fields=['quote_level']),
+            models.Index(fields=['column_name']),  # For admin search
+
+            # Compound indexes
+            # For mandatory/conditional queries with ordering
+            models.Index(fields=['field_type', 'position']),
         ]
 
     def __str__(self):
@@ -1539,9 +1773,63 @@ class ExportFieldDefinition(models.Model):
         except (json.JSONDecodeError, ValueError):
             return []
 
+    @property
     def has_predefined_choices(self):
         """Check if this field has predefined choices for dropdown."""
         return bool(self.predefined_choices and self.predefined_choices.strip())
+
+    @classmethod
+    def ensure_all_fields_exist(cls):
+        """
+        Ensure all 121 ExportFieldDefinition records exist and are up-to-date.
+        Uses embedded EXPORT_FIELD_DEFINITIONS data.
+        This eliminates the need for management commands.
+        Updates existing records to ensure field_type and other properties are correct.
+        """
+        import json
+        import logging
+        logger = logging.getLogger(__name__)
+        created_count = 0
+        updated_count = 0
+
+        for position, field_data in EXPORT_FIELD_DEFINITIONS.items():
+            # Get predefined choices if available
+            predefined_choices_json = ''
+            if position in EXPORT_FIELD_CHOICES:
+                predefined_choices_json = json.dumps(
+                    EXPORT_FIELD_CHOICES[position])
+
+            # Use update_or_create to update existing records with correct field types
+            field_def, created = cls.objects.update_or_create(
+                position=position,
+                defaults={
+                    'column_name': field_data['column_name'],
+                    # This will update existing records with correct field types
+                    'field_type': field_data['field_type'],
+                    'quote_level': field_data['quote_level'],
+                    'max_length': field_data.get('max_length', 0),
+                    'definition': field_data.get('definition', ''),
+                    'validation_rules': field_data.get('validation_rules', ''),
+                    'default_value': field_data.get('default_value', ''),
+                    'may_affect_bid_type': field_data.get('may_affect_bid_type', False),
+                    'predefined_choices': predefined_choices_json,
+                }
+            )
+
+            if created:
+                created_count += 1
+            else:
+                # Record was updated (update_or_create updates existing records)
+                updated_count += 1
+
+        if created_count > 0:
+            logger.info(
+                f"Created {created_count} missing ExportFieldDefinition records.")
+        if updated_count > 0:
+            logger.info(
+                f"Updated {updated_count} existing ExportFieldDefinition records with correct field types.")
+
+        return cls.objects.count() == 121
 
 
 class UserExportConfiguration(models.Model):
@@ -1586,8 +1874,17 @@ class UserExportConfiguration(models.Model):
         unique_together = ('user', 'field_definition')
         ordering = ['field_definition__position']
         indexes = [
-            models.Index(fields=['user', 'field_definition']),
+            # Single field indexes
+            # For filtering enabled/disabled configs
             models.Index(fields=['is_enabled']),
+            models.Index(fields=['source_field']),  # For admin search
+            models.Index(fields=['updated_at']),  # For tracking recent changes
+
+            # Compound indexes (most important for your queries)
+            # For user+field lookups
+            models.Index(fields=['user', 'field_definition']),
+            # For enabled-only queries filtered by user
+            models.Index(fields=['user', 'is_enabled']),
         ]
 
     def __str__(self):
@@ -1599,16 +1896,184 @@ class UserExportConfiguration(models.Model):
         Returns custom_value if set, otherwise gets from source_field.
         For RfqReply objects, intelligently tries to get data from related RFQ/Solicitation models.
         Returns empty string if field is disabled or no value found.
-        
+
         Args:
             obj: Solicitation or RfqReply object (optional)
         """
         if not self.is_enabled:
             return ""
 
-        # Use custom value if set
-        if self.custom_value:
-            return self.custom_value
+        # SPECIAL HANDLING: Field position 32 - FOB Point
+        # This should ALWAYS come from the solicitation's deliver_fob field (overrides custom_value)
+        # Convert: "destination" or contains "destination" → "D", "origin" or contains "origin" → "O"
+        field_position = getattr(self.field_definition, "position", None)
+        if field_position == 32 and obj:
+            try:
+                # Check if obj is an RfqReply instance
+                is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
+                
+                if is_rfq_reply:
+                    # Try to get deliver_fob from related Solicitation
+                    solicitation = None
+                    
+                    # Method 1: Get from matched RFQ -> Solicitation
+                    if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                        solicitation = obj.rfq.solicitation
+                    
+                    # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
+                    if not solicitation:
+                        solicitation = obj.find_matching_solicitation()
+                    
+                    # If we found a solicitation, get its deliver_fob value
+                    if solicitation and hasattr(solicitation, 'deliver_fob') and solicitation.deliver_fob:
+                        fob_value = str(solicitation.deliver_fob).strip().lower()
+                        if 'destination' in fob_value:
+                            return "D"
+                        elif 'origin' in fob_value:
+                            return "O"
+                        # If already "D" or "O", return as is
+                        if fob_value in ['d', 'o']:
+                            return fob_value.upper()
+                else:
+                    # For Solicitation objects, directly get the deliver_fob value
+                    if hasattr(obj, 'deliver_fob') and obj.deliver_fob:
+                        fob_value = str(obj.deliver_fob).strip().lower()
+                        if 'destination' in fob_value:
+                            return "D"
+                        elif 'origin' in fob_value:
+                            return "O"
+                        # If already "D" or "O", return as is
+                        if fob_value in ['d', 'o']:
+                            return fob_value.upper()
+            except Exception:
+                # If any error occurs, fall through to normal source_field logic
+                pass
+
+        # SPECIAL HANDLING: Field position 36 - Inspection Point Code
+        # This should ALWAYS come from the solicitation's inspection_point field (overrides custom_value)
+        # Convert: "destination" or contains "destination" → "D", "origin" or contains "origin" → "O"
+        if field_position == 36 and obj:
+            try:
+                # Check if obj is an RfqReply instance
+                is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
+                
+                if is_rfq_reply:
+                    # Try to get inspection_point from related Solicitation
+                    solicitation = None
+                    
+                    # Method 1: Get from matched RFQ -> Solicitation
+                    if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                        solicitation = obj.rfq.solicitation
+                    
+                    # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
+                    if not solicitation:
+                        solicitation = obj.find_matching_solicitation()
+                    
+                    # If we found a solicitation, get its inspection_point value
+                    if solicitation and hasattr(solicitation, 'inspection_point') and solicitation.inspection_point:
+                        inspection_value = str(solicitation.inspection_point).strip().lower()
+                        if 'destination' in inspection_value:
+                            return "D"
+                        elif 'origin' in inspection_value:
+                            return "O"
+                        # If already "D" or "O", return as is
+                        if inspection_value in ['d', 'o']:
+                            return inspection_value.upper()
+                else:
+                    # For Solicitation objects, directly get the inspection_point value
+                    if hasattr(obj, 'inspection_point') and obj.inspection_point:
+                        inspection_value = str(obj.inspection_point).strip().lower()
+                        if 'destination' in inspection_value:
+                            return "D"
+                        elif 'origin' in inspection_value:
+                            return "O"
+                        # If already "D" or "O", return as is
+                        if inspection_value in ['d', 'o']:
+                            return inspection_value.upper()
+            except Exception:
+                # If any error occurs, fall through to normal source_field logic
+                pass
+
+        # SPECIAL HANDLING: Field position 3 - Small Business Set Aside Indicator
+        # This should ALWAYS come from the solicitation's is_set_aside field (overrides custom_value)
+        if field_position == 3 and obj:
+            try:
+                # Check if obj is an RfqReply instance
+                is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
+                
+                if is_rfq_reply:
+                    # Try to get is_set_aside from related Solicitation
+                    solicitation = None
+                    
+                    # Method 1: Get from matched RFQ -> Solicitation
+                    if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                        solicitation = obj.rfq.solicitation
+                    
+                    # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
+                    if not solicitation:
+                        solicitation = obj.find_matching_solicitation()
+                    
+                    # If we found a solicitation, get its is_set_aside value
+                    if solicitation and hasattr(solicitation, 'is_set_aside'):
+                        is_set_aside = solicitation.is_set_aside
+                        # True → "A" (8a Set-Aside), False → "N" (Unrestricted/Not Set-Aside)
+                        if is_set_aside is True:
+                            return "A"
+                        elif is_set_aside is False:
+                            return "N"
+                        # If None or not set, fall through to normal logic
+                else:
+                    # For Solicitation objects, directly get the is_set_aside value
+                    if hasattr(obj, 'is_set_aside'):
+                        is_set_aside = obj.is_set_aside
+                        # True → "A" (8a Set-Aside), False → "N" (Unrestricted/Not Set-Aside)
+                        if is_set_aside is True:
+                            return "A"
+                        elif is_set_aside is False:
+                            return "N"
+                        # If None or not set, fall through to normal logic
+            except Exception:
+                # If any error occurs, fall through to normal source_field logic
+                pass
+
+        # SPECIAL HANDLING: Field position 103 - Actual Manufacturing/Production Source CAGE code
+        # This should ALWAYS come from the solicitation's OEM CAGE code (overrides custom_value)
+        if field_position == 103 and obj:
+            try:
+                # Check if obj is an RfqReply instance
+                is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
+                
+                if is_rfq_reply:
+                    # Try to get CAGE code from related Solicitation
+                    solicitation = None
+                    
+                    # Method 1: Get from matched RFQ -> Solicitation
+                    if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                        solicitation = obj.rfq.solicitation
+                    
+                    # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
+                    if not solicitation:
+                        solicitation = obj.find_matching_solicitation()
+                    
+                    # If we found a solicitation, get its CAGE code
+                    if solicitation and hasattr(solicitation, 'cage') and solicitation.cage:
+                        cage_value = str(solicitation.cage).strip()
+                        if cage_value:
+                            return cage_value
+                else:
+                    # For Solicitation objects, directly get the CAGE code
+                    if hasattr(obj, 'cage') and obj.cage:
+                        cage_value = str(obj.cage).strip()
+                        if cage_value:
+                            return cage_value
+            except Exception:
+                # If any error occurs, fall through to normal source_field logic
+                pass
+
+        # Use custom value if set (non-empty)
+        # Empty string means "use source_field", so we check for truthy value
+        if self.custom_value and self.custom_value.strip():
+            return self.custom_value.strip()
 
         # Helper to consistently format different value types (dates, decimals, strings)
         def _format_value(value):
@@ -1643,7 +2108,8 @@ class UserExportConfiguration(models.Model):
                 try:
                     # Detect solicitation number fields (usually position 1)
                     is_solicitation_number_field = (
-                        (self.source_field and self.source_field.lower() in ("solicitation", "solicitation_number"))
+                        (self.source_field and self.source_field.lower()
+                         in ("solicitation", "solicitation_number"))
                         or getattr(self.field_definition, "position", None) == 1
                     )
                 except Exception:
@@ -1660,7 +2126,8 @@ class UserExportConfiguration(models.Model):
                             is_part_number_field = True
 
                     if not is_part_number_field:
-                        col_name = getattr(self.field_definition, "column_name", "")
+                        col_name = getattr(
+                            self.field_definition, "column_name", "")
                         if isinstance(col_name, str) and "part" in col_name.lower():
                             is_part_number_field = True
                 except Exception:
@@ -1707,10 +2174,12 @@ class UserExportConfiguration(models.Model):
 
         # Get value from source field
         if self.source_field and obj:
+            import logging
+            logger = logging.getLogger(__name__)
             try:
                 # Check if obj is an RfqReply instance
                 is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
-                
+
                 # Handle nested attributes like "user.cage" or "rfq.solicitation.solicitation"
                 if '.' in self.source_field:
                     parts = self.source_field.split('.')
@@ -1734,7 +2203,7 @@ class UserExportConfiguration(models.Model):
                             'unit': 'unit',
                             'received_date': 'return_by_date',  # Try solicitation return_by_date first
                         }
-                        
+
                         # Mapping of Solicitation field names to RfqReply field names (for when source_field is Solicitation field)
                         solicitation_to_rfq_reply_map = {
                             'solicitation': 'solicitation_number',
@@ -1746,16 +2215,17 @@ class UserExportConfiguration(models.Model):
                             'cage': None,  # Will try rfq.solicitation.cage, then user.cage
                             'pr': None,  # Purchase Request - only in Solicitation
                         }
-                        
+
                         # First, try to get from related Solicitation if source_field is an RfqReply field
                         if self.source_field in rfq_reply_to_solicitation_map:
                             solicitation_field = rfq_reply_to_solicitation_map[self.source_field]
                             # Try to get from related Solicitation first
                             if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
-                                solicitation_value = getattr(obj.rfq.solicitation, solicitation_field, None)
+                                solicitation_value = getattr(
+                                    obj.rfq.solicitation, solicitation_field, None)
                                 if solicitation_value and solicitation_value != "":
                                     return _format_value(solicitation_value)
-                            
+
                             # Fall back to RfqReply direct field if solicitation doesn't have it or RFQ not linked
                             if hasattr(obj, self.source_field):
                                 value = getattr(obj, self.source_field, None)
@@ -1763,7 +2233,7 @@ class UserExportConfiguration(models.Model):
                                     return _format_value(value)
                             # If we found a value from this mapping, don't continue to other checks
                             # But if we didn't find anything, continue to check other mappings
-                        
+
                         # Check if source_field maps to a Solicitation field
                         if self.source_field in solicitation_to_rfq_reply_map:
                             rfq_reply_field = solicitation_to_rfq_reply_map[self.source_field]
@@ -1772,7 +2242,8 @@ class UserExportConfiguration(models.Model):
                                 solicitation_field = self.source_field
                                 # Special handling for 'cage' - try solicitation.cage first
                                 if self.source_field == 'cage':
-                                    solicitation_value = getattr(obj.rfq.solicitation, 'cage', None)
+                                    solicitation_value = getattr(
+                                        obj.rfq.solicitation, 'cage', None)
                                     if solicitation_value:
                                         return str(solicitation_value)
                                     # Fall back to user.cage
@@ -1781,16 +2252,17 @@ class UserExportConfiguration(models.Model):
                                         return str(user_cage)
                                 else:
                                     # Try to get from solicitation
-                                    solicitation_value = getattr(obj.rfq.solicitation, solicitation_field, None)
+                                    solicitation_value = getattr(
+                                        obj.rfq.solicitation, solicitation_field, None)
                                     if solicitation_value and solicitation_value != "":
                                         return _format_value(solicitation_value)
-                            
+
                             # Fall back to RfqReply direct field if available
                             if rfq_reply_field and hasattr(obj, rfq_reply_field):
                                 value = getattr(obj, rfq_reply_field, None)
                                 if value is not None and value != "":
                                     return _format_value(value)
-                        
+
                         # If not in mapping, try direct access on RfqReply
                         if hasattr(obj, self.source_field):
                             value = getattr(obj, self.source_field, None)
@@ -1802,7 +2274,7 @@ class UserExportConfiguration(models.Model):
                         if value is not None:
                             formatted = _format_value(value)
                             return formatted if formatted != "" else ""
-            except (AttributeError, TypeError) as e:
+            except (AttributeError, TypeError):
                 return ""
 
         # Return default value from field definition
@@ -1810,7 +2282,7 @@ class UserExportConfiguration(models.Model):
         default_val = self.field_definition.default_value or ""
         if not default_val:
             return ""
-        
+
         # Treat placeholder/default text values as empty
         default_upper = default_val.upper().strip()
         placeholder_texts = [
@@ -1819,8 +2291,36 @@ class UserExportConfiguration(models.Model):
             "RFQ SOLICITATION #",
             "RFQ RETURN BY DATE",
         ]
-        
+
         if default_upper in placeholder_texts:
             return ""
-        
+
         return default_val
+
+
+class RfqReplyExportOverride(models.Model):
+    """
+    Per-RFQ override of export values (121 fields) for a single RFQ reply.
+    Does NOT change the global UserExportConfiguration; only affects that RFQ.
+    """
+    rfq_reply = models.OneToOneField(
+        RfqReply,
+        on_delete=models.CASCADE,
+        related_name='export_override'
+    )
+    # Store the 121 values as a JSON array (index 0 == position 1, etc.)
+    data = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "RFQ Reply Export Override"
+        verbose_name_plural = "RFQ Reply Export Overrides"
+        indexes = [
+            # Single field indexes
+            models.Index(fields=['rfq_reply']),  # For get_or_create lookups
+            # For ordering/filtering by last update
+            models.Index(fields=['updated_at']),
+        ]
+
+    def __str__(self):
+        return f"Export override for RFQ Reply {self.rfq_reply_id}"

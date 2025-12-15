@@ -7,8 +7,7 @@
 <section class="vh-100">
     <div class="d-flex justify-content-between">
         <div class="">
-            <a href="{% url 'solicitations:replied-rfq' %}" class="btn bg-secondary text-white position-relative">Replied RFQs</a>
-            <a href="{% url 'solicitations:sent-rfq' %}" class="btn mybg myhover text-white position-relative">Sent RFQs</a>
+            Total Sent RFQs <span class="badge bg-dark text-white">{{total_sent_rfqs}}</span>
         </div>
         <div class="d-flex gap-3">
             <form action="{% url 'solicitations:search-sent' %}" method="post">
@@ -19,10 +18,6 @@
                 </div>
             </form>
         </div>
-    </div>
-
-    <div class="mt-4">
-        Total Sent RFQs <span class="badge bg-dark text-white">{{total_sent_rfqs}}</span>
     </div>
 
     <div class="mb-4 mt-2">
