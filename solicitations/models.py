@@ -41,6 +41,7 @@ class Solicitation(models.Model):
     solicitation_line_number = models.CharField(max_length=255, blank=True)
     purchase_request_number = models.CharField(max_length=255, blank=True)
     is_set_aside = models.BooleanField(default=True)
+    procurement_history = models.JSONField(default=list, blank=True, help_text="List of procurement history records with CAGE, Contract Number, Quantity, Unit Cost, AWD Date, and Surplus Material")
 
     class Meta:
         indexes = [

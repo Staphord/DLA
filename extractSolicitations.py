@@ -537,6 +537,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     deliver_days = ""
     buyer_info = ""
     solicitation_line_number = ""
+    procurement_history = []
 
     print(f"\nExtracting from PDF: {pdf_url}")
 
@@ -734,6 +735,90 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                                                         print(
                                                             f"  Found line number in table on page {page_num}: {solicitation_line_number}")
                                                         break
+                                            
+                                            # Extract PROCUREMENT HISTORY table
+                                            # Look for table with headers: CAGE, Contract Number, Quantity, Unit Cost, AWD Date, Surplus Material
+                                            proc_history_headers = [str(h).upper().strip() for h in headers]
+                                            headers_joined = " ".join(proc_history_headers)
+                                            
+                                            has_cage_col = "CAGE" in proc_history_headers
+                                            has_contract_col = "CONTRACT" in headers_joined
+                                            has_quantity_col = "QUANTITY" in proc_history_headers
+                                            has_unit_cost_col = "UNIT COST" in headers_joined or "UNITCOST" in headers_joined.replace(" ", "")
+                                            has_awd_date_col = "AWD DATE" in headers_joined or "AWD" in proc_history_headers
+                                            has_surplus_col = "SURPLUS" in headers_joined
+                                            
+                                            # If this looks like a procurement history table (must have CAGE, Contract, Quantity, Unit Cost)
+                                            if has_cage_col and has_contract_col and has_quantity_col and has_unit_cost_col:
+                                                # Find column indices - handle variations in header names
+                                                cage_idx = next((i for i, h in enumerate(proc_history_headers) if h == "CAGE"), None)
+                                                
+                                                # Contract Number might be "CONTRACT NUMBER", "CONTRACT", or split across cells
+                                                contract_idx = None
+                                                for i, h in enumerate(proc_history_headers):
+                                                    if "CONTRACT" in h:
+                                                        contract_idx = i
+                                                        break
+                                                
+                                                quantity_idx = next((i for i, h in enumerate(proc_history_headers) if h == "QUANTITY"), None)
+                                                
+                                                # Unit Cost might be "UNIT COST" or "UNITCOST" or split
+                                                unit_cost_idx = None
+                                                for i, h in enumerate(proc_history_headers):
+                                                    h_clean = h.replace(" ", "")
+                                                    if "UNITCOST" in h_clean or ("UNIT" in h and "COST" in h):
+                                                        unit_cost_idx = i
+                                                        break
+                                                
+                                                # AWD Date might be "AWD DATE", "AWD", or split
+                                                awd_date_idx = None
+                                                for i, h in enumerate(proc_history_headers):
+                                                    if "AWD" in h:
+                                                        awd_date_idx = i
+                                                        break
+                                                
+                                                # Surplus Material might be "SURPLUS MATERIAL" or "SURPLUS"
+                                                surplus_idx = None
+                                                for i, h in enumerate(proc_history_headers):
+                                                    if "SURPLUS" in h:
+                                                        surplus_idx = i
+                                                        break
+                                                
+                                                # Extract all data rows from this table
+                                                print(f"  Detected procurement history table on page {page_num}")
+                                                print(f"    Column indices - CAGE: {cage_idx}, Contract: {contract_idx}, Quantity: {quantity_idx}, Unit Cost: {unit_cost_idx}, AWD Date: {awd_date_idx}, Surplus: {surplus_idx}")
+                                                
+                                                for row_idx, row in enumerate(table[1:], 1):
+                                                    # Skip empty rows
+                                                    if not row or all(not cell or str(cell).strip() == "" for cell in row):
+                                                        continue
+                                                    
+                                                    # Check if row has enough columns
+                                                    max_required_idx = max([i for i in [cage_idx, contract_idx, quantity_idx, unit_cost_idx] if i is not None], default=-1)
+                                                    if len(row) <= max_required_idx:
+                                                        continue
+                                                    
+                                                    proc_record = {}
+                                                    if cage_idx is not None and len(row) > cage_idx and row[cage_idx]:
+                                                        proc_record['cage'] = str(row[cage_idx]).strip()
+                                                    if contract_idx is not None and len(row) > contract_idx and row[contract_idx]:
+                                                        proc_record['contract_number'] = str(row[contract_idx]).strip()
+                                                    if quantity_idx is not None and len(row) > quantity_idx and row[quantity_idx]:
+                                                        proc_record['quantity'] = str(row[quantity_idx]).strip()
+                                                    if unit_cost_idx is not None and len(row) > unit_cost_idx and row[unit_cost_idx]:
+                                                        proc_record['unit_cost'] = str(row[unit_cost_idx]).strip()
+                                                    if awd_date_idx is not None and len(row) > awd_date_idx and row[awd_date_idx]:
+                                                        proc_record['awd_date'] = str(row[awd_date_idx]).strip()
+                                                    if surplus_idx is not None and len(row) > surplus_idx and row[surplus_idx]:
+                                                        proc_record['surplus_material'] = str(row[surplus_idx]).strip()
+                                                    
+                                                    # Only add if we have at least CAGE and Contract Number (required fields)
+                                                    if proc_record.get('cage') and proc_record.get('contract_number'):
+                                                        procurement_history.append(proc_record)
+                                                        print(f"    Extracted row {row_idx}: CAGE={proc_record.get('cage')}, Contract={proc_record.get('contract_number')[:20]}...")
+                                                
+                                                if procurement_history:
+                                                    print(f"  Successfully extracted {len(procurement_history)} procurement history records from page {page_num}")
 
                         except Exception as page_error:
                             print(
@@ -1014,11 +1099,12 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     print(f"PDF extraction complete:")
     print(f"Unit: {unit}")
     print(f"Line Number: {solicitation_line_number}")
+    print(f"Procurement History Records: {len(procurement_history)}")
     print(f"Inspection: {inspection_point[:50]}...")
     print(f"Acceptance: {acceptance_point[:50]}...")
     print(f"Buyer: {buyer_info[:50]}...")
 
-    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, solicitation_line_number
+    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, solicitation_line_number, procurement_history
 
 
 @retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
@@ -1336,13 +1422,14 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None):
                 pdf_url = pdf_link.get_attribute("href")
 
                 print(f"Extracting PDF data...")
-                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, solicitation_line_number = extract_unit_from_pdf_comprehensive(
+                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, solicitation_line_number, procurement_history = extract_unit_from_pdf_comprehensive(
                     pdf_url, driver=driver)
-                print(f"PDF extracted - Unit: {unit_value}, Line Number: {solicitation_line_number}")
+                print(f"PDF extracted - Unit: {unit_value}, Line Number: {solicitation_line_number}, Procurement History: {len(procurement_history)} records")
 
             except Exception as pdf_error:
                 print(f"PDF extraction failed for NSN {nsn}: {pdf_error}")
                 unit_value = inspection_point = acceptance_point = deliver_fob = deliver_days = buyer_info = solicitation_line_number = ""
+                procurement_history = []
 
             unit_code = unit_value.strip().upper() if unit_value else 'N/A'
             unit_description = UNIT_MAPPING.get(
@@ -1385,6 +1472,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None):
                         'Issued Date': solicitation_data.get('issued_date', 'N/A'),
                         'Return By Date': solicitation_data.get('return_by_date', 'N/A'),
                         'Line Number': solicitation_line_number,  # From PDF extraction
+                        'Procurement History': procurement_history,  # From PDF extraction
                         'CAGE Code': cage,
                         'Part Number': part_number,
                         'Unit': unit,
@@ -2016,8 +2104,8 @@ def save_single_record_to_db(record_data, cage_details_list):
     INSERT INTO solicitations_solicitation 
     (cage, nsn, nomenclature, solicitation, status, quantity, issued_date, return_by_date, 
      organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit, 
-     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, scraped_date, solicitation_line_number)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, scraped_date, solicitation_line_number, procurement_history)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     try:
@@ -2047,6 +2135,10 @@ def save_single_record_to_db(record_data, cage_details_list):
         else:
             organization_name = street_name = city = postal_code = phone = fax = email = 'N/A'
 
+        # Convert procurement_history list to JSON string for MySQL JSON field
+        procurement_history_data = record_data.get('Procurement History', [])
+        procurement_history_json = json.dumps(procurement_history_data) if procurement_history_data else '[]'
+        
         db_record = (
             cage_code, nsn, record_data.get(
                 'Nomenclature', 'N/A'), solicitation,
@@ -2059,7 +2151,8 @@ def save_single_record_to_db(record_data, cage_details_list):
             record_data.get('Deliver FOB', ''), record_data.get(
                 'Deliver Days', ''),
             record_data.get('Buyer Info', ''), datetime.date.today(),
-            record_data.get('Line Number', '')
+            record_data.get('Line Number', ''),
+            procurement_history_json
         )
 
         cursor.execute(sql_query, db_record)
