@@ -784,11 +784,19 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                                                         surplus_idx = i
                                                         break
                                                 
-                                                # Extract all data rows from this table
+                                                # Extract first 4 data rows from this table only
                                                 print(f"  Detected procurement history table on page {page_num}")
                                                 print(f"    Column indices - CAGE: {cage_idx}, Contract: {contract_idx}, Quantity: {quantity_idx}, Unit Cost: {unit_cost_idx}, AWD Date: {awd_date_idx}, Surplus: {surplus_idx}")
                                                 
+                                                max_records = 4  # Limit to first 4 records
+                                                records_extracted = 0
+                                                
                                                 for row_idx, row in enumerate(table[1:], 1):
+                                                    # Stop if we've already extracted 4 records
+                                                    if records_extracted >= max_records:
+                                                        print(f"    Reached limit of {max_records} procurement history records")
+                                                        break
+                                                    
                                                     # Skip empty rows
                                                     if not row or all(not cell or str(cell).strip() == "" for cell in row):
                                                         continue
@@ -815,10 +823,11 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                                                     # Only add if we have at least CAGE and Contract Number (required fields)
                                                     if proc_record.get('cage') and proc_record.get('contract_number'):
                                                         procurement_history.append(proc_record)
-                                                        print(f"    Extracted row {row_idx}: CAGE={proc_record.get('cage')}, Contract={proc_record.get('contract_number')[:20]}...")
+                                                        records_extracted += 1
+                                                        print(f"    Extracted row {row_idx} ({records_extracted}/{max_records}): CAGE={proc_record.get('cage')}, Contract={proc_record.get('contract_number')[:20]}...")
                                                 
                                                 if procurement_history:
-                                                    print(f"  Successfully extracted {len(procurement_history)} procurement history records from page {page_num}")
+                                                    print(f"  Successfully extracted {len(procurement_history)} procurement history records (limited to first {max_records}) from page {page_num}")
 
                         except Exception as page_error:
                             print(
@@ -1117,13 +1126,42 @@ def extract_data_from_page(driver, wait):
     )))
     for row in rows:
         try:
+            # Extract quantity and purchase request number from the same cell
+            # Format: "7014895472<br>QTY: 7000" or just "QTY: 7000"
+            quantity_cell = row.find_element(By.XPATH, ".//td[7]/span")
+            quantity_text = quantity_cell.text.strip()
+            purchase_request = ""
+            
+            # Try to get the inner HTML to extract PR number before <br> tag
+            try:
+                quantity_html = quantity_cell.get_attribute("innerHTML")
+                if quantity_html and "<br>" in quantity_html:
+                    # Split by <br> tag - first part is PR number, second part is QTY
+                    parts = quantity_html.split("<br>")
+                    if len(parts) >= 2:
+                        purchase_request = parts[0].strip()
+                        # Quantity is in the second part after "QTY:"
+                        qty_part = parts[1].strip()
+                        if "QTY:" in qty_part:
+                            quantity_text = qty_part.split("QTY:")[1].strip()
+                        else:
+                            quantity_text = qty_part
+                    elif len(parts) == 1:
+                        # Only PR number, no quantity
+                        purchase_request = parts[0].strip()
+                        quantity_text = ""
+            except Exception:
+                # If innerHTML extraction fails, use text extraction as fallback
+                pass
+            
             row_data = {
                 "nsn": row.find_element(By.XPATH, ".//td[2]/span/a").text.strip(),
                 "nsn_link": row.find_element(By.XPATH, ".//td[2]/span/a").get_attribute("href"),
                 "nomenclature": row.find_element(By.XPATH, ".//td[3]/span").text.strip(),
                 "solicitation": row.find_element(By.XPATH, ".//td[5]/span/a").text.strip(),
                 "status": row.find_element(By.XPATH, ".//td[6]/span").text.strip(),
-                "quantity": row.find_element(By.XPATH, ".//td[7]/span").text.strip(),
+                "quantity": quantity_text,
+                "purchase_request": purchase_request,
                 "issued_date": row.find_element(By.XPATH, ".//td[8]/span").text.strip(),
                 "return_by_date": row.find_element(By.XPATH, ".//td[9]/span").text.strip(),
             }
@@ -1471,6 +1509,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None):
                         'Status': solicitation_data.get('status', 'N/A'),
                         'Issued Date': solicitation_data.get('issued_date', 'N/A'),
                         'Return By Date': solicitation_data.get('return_by_date', 'N/A'),
+                        'Purchase Request': solicitation_data.get('purchase_request', ''),  # From web table extraction
                         'Line Number': solicitation_line_number,  # From PDF extraction
                         'Procurement History': procurement_history,  # From PDF extraction
                         'CAGE Code': cage,
@@ -2152,7 +2191,10 @@ def save_single_record_to_db(record_data, cage_details_list):
                 'Deliver Days', ''),
             record_data.get('Buyer Info', ''), datetime.date.today(),
             record_data.get('Line Number', ''),
-            procurement_history_json
+            procurement_history_json,
+            record_data.get('Purchase Request', '')
+        )
+            record_data.get('Purchase Request', '')
         )
 
         cursor.execute(sql_query, db_record)
