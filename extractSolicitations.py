@@ -536,6 +536,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     deliver_fob = ""
     deliver_days = ""
     buyer_info = ""
+    solicitation_line_number = ""
 
     print(f"\nExtracting from PDF: {pdf_url}")
 
@@ -677,18 +678,34 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                                         if unit != "N/A":
                                             break
 
-                                    # Table extraction fallback for unit
+                                    # Table extraction fallback for unit and line number
                                     tables = page.extract_tables()
                                     for table in tables:
                                         if len(table) > 1:
                                             headers = [str(cell).upper().strip()
                                                        for cell in table[0]]
                                             unit_col = None
+                                            line_col = None
+                                            
+                                            # Find unit column
                                             if "UNIT" in headers:
                                                 unit_col = headers.index(
                                                     "UNIT")
                                             elif "UI" in headers:
                                                 unit_col = headers.index("UI")
+                                            
+                                            # Find line number column
+                                            if "LINE" in headers:
+                                                line_col = headers.index("LINE")
+                                            elif "LINE NO" in headers or "LINE NUMBER" in headers:
+                                                for idx, h in enumerate(headers):
+                                                    if "LINE" in h:
+                                                        line_col = idx
+                                                        break
+                                            elif "PRLI" in headers:
+                                                line_col = headers.index("PRLI")
+                                            elif "PR LI" in headers:
+                                                line_col = headers.index("PR LI")
 
                                             if unit_col is not None:
                                                 for row in table[1:]:
@@ -699,9 +716,24 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                                                             unit = unit_candidate
                                                             print(
                                                                 f"  Found unit in table on page {page_num}: {unit}")
+                                                            
+                                                            # Extract line number from same row if column exists
+                                                            if line_col is not None and len(row) > line_col and row[line_col]:
+                                                                solicitation_line_number = str(row[line_col]).strip()
+                                                                print(
+                                                                    f"  Found line number in table on page {page_num}: {solicitation_line_number}")
                                                             break
                                                 if unit != "N/A":
                                                     break
+                                            
+                                            # If unit not found but line number column exists, try to extract line number
+                                            if not solicitation_line_number and line_col is not None:
+                                                for row in table[1:]:
+                                                    if len(row) > line_col and row[line_col]:
+                                                        solicitation_line_number = str(row[line_col]).strip()
+                                                        print(
+                                                            f"  Found line number in table on page {page_num}: {solicitation_line_number}")
+                                                        break
 
                         except Exception as page_error:
                             print(
@@ -713,6 +745,24 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
 
                     print(
                         f"  Total text extracted: {len(full_text)} characters")
+
+                    # Extract LINE NUMBER / PRLI if not already found
+                    if not solicitation_line_number:
+                        line_number_patterns = [
+                            r"LINE\s+(?:NO|NUMBER|#)?\s*[:=]\s*(\d+)",
+                            r"PRLI\s*[:=]\s*(\d+)",
+                            r"PR\s+LI\s*[:=]\s*(\d+)",
+                            r"LINE\s+ITEM\s*[:=]\s*(\d+)",
+                            r"CLIN\s+(\d+)\s+\d+\s+\d+\s+[A-Z]{2}",  # Pattern 2 format: CLIN PR PRLI UI
+                            r"^\d+\s+(\d+)\s+\d+\s+[A-Z]{2}",  # First number after CLIN in table row
+                        ]
+                        
+                        for pattern in line_number_patterns:
+                            match = re.search(pattern, full_text, re.IGNORECASE | re.MULTILINE)
+                            if match:
+                                solicitation_line_number = match.group(1).strip()
+                                print(f"  Found line number via pattern: {solicitation_line_number}")
+                                break
 
                     # Extract INSPECTION POINT
                     inspection_patterns = [
@@ -963,11 +1013,12 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     # Final logging
     print(f"PDF extraction complete:")
     print(f"Unit: {unit}")
+    print(f"Line Number: {solicitation_line_number}")
     print(f"Inspection: {inspection_point[:50]}...")
     print(f"Acceptance: {acceptance_point[:50]}...")
     print(f"Buyer: {buyer_info[:50]}...")
 
-    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info
+    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, solicitation_line_number
 
 
 @retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
@@ -1285,13 +1336,13 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None):
                 pdf_url = pdf_link.get_attribute("href")
 
                 print(f"Extracting PDF data...")
-                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info = extract_unit_from_pdf_comprehensive(
+                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, solicitation_line_number = extract_unit_from_pdf_comprehensive(
                     pdf_url, driver=driver)
-                print(f"PDF extracted - Unit: {unit_value}")
+                print(f"PDF extracted - Unit: {unit_value}, Line Number: {solicitation_line_number}")
 
             except Exception as pdf_error:
                 print(f"PDF extraction failed for NSN {nsn}: {pdf_error}")
-                unit_value = inspection_point = acceptance_point = deliver_fob = deliver_days = buyer_info = ""
+                unit_value = inspection_point = acceptance_point = deliver_fob = deliver_days = buyer_info = solicitation_line_number = ""
 
             unit_code = unit_value.strip().upper() if unit_value else 'N/A'
             unit_description = UNIT_MAPPING.get(
@@ -1333,6 +1384,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None):
                         'Status': solicitation_data.get('status', 'N/A'),
                         'Issued Date': solicitation_data.get('issued_date', 'N/A'),
                         'Return By Date': solicitation_data.get('return_by_date', 'N/A'),
+                        'Line Number': solicitation_line_number,  # From PDF extraction
                         'CAGE Code': cage,
                         'Part Number': part_number,
                         'Unit': unit,
@@ -1964,8 +2016,8 @@ def save_single_record_to_db(record_data, cage_details_list):
     INSERT INTO solicitations_solicitation 
     (cage, nsn, nomenclature, solicitation, status, quantity, issued_date, return_by_date, 
      organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit, 
-     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, scraped_date)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, scraped_date, solicitation_line_number)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     try:
@@ -2006,7 +2058,8 @@ def save_single_record_to_db(record_data, cage_details_list):
                 'Acceptance Point', ''),
             record_data.get('Deliver FOB', ''), record_data.get(
                 'Deliver Days', ''),
-            record_data.get('Buyer Info', ''), datetime.date.today()
+            record_data.get('Buyer Info', ''), datetime.date.today(),
+            record_data.get('Line Number', '')
         )
 
         cursor.execute(sql_query, db_record)
