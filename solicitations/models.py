@@ -40,7 +40,7 @@ class Solicitation(models.Model):
     buyer_info = models.CharField(max_length=255, blank=True)
     solicitation_line_number = models.CharField(max_length=255, blank=True)
     purchase_request_number = models.CharField(max_length=255, blank=True)
-    is_set_aside = models.BooleanField(default=False)
+    is_set_aside = models.BooleanField(default=True)
 
     class Meta:
         indexes = [
@@ -1911,22 +1911,23 @@ class UserExportConfiguration(models.Model):
             try:
                 # Check if obj is an RfqReply instance
                 is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
-                
+
                 if is_rfq_reply:
                     # Try to get deliver_fob from related Solicitation
                     solicitation = None
-                    
+
                     # Method 1: Get from matched RFQ -> Solicitation
                     if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
                         solicitation = obj.rfq.solicitation
-                    
+
                     # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
                     if not solicitation:
                         solicitation = obj.find_matching_solicitation()
-                    
+
                     # If we found a solicitation, get its deliver_fob value
                     if solicitation and hasattr(solicitation, 'deliver_fob') and solicitation.deliver_fob:
-                        fob_value = str(solicitation.deliver_fob).strip().lower()
+                        fob_value = str(
+                            solicitation.deliver_fob).strip().lower()
                         if 'destination' in fob_value:
                             return "D"
                         elif 'origin' in fob_value:
@@ -1956,22 +1957,23 @@ class UserExportConfiguration(models.Model):
             try:
                 # Check if obj is an RfqReply instance
                 is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
-                
+
                 if is_rfq_reply:
                     # Try to get inspection_point from related Solicitation
                     solicitation = None
-                    
+
                     # Method 1: Get from matched RFQ -> Solicitation
                     if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
                         solicitation = obj.rfq.solicitation
-                    
+
                     # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
                     if not solicitation:
                         solicitation = obj.find_matching_solicitation()
-                    
+
                     # If we found a solicitation, get its inspection_point value
                     if solicitation and hasattr(solicitation, 'inspection_point') and solicitation.inspection_point:
-                        inspection_value = str(solicitation.inspection_point).strip().lower()
+                        inspection_value = str(
+                            solicitation.inspection_point).strip().lower()
                         if 'destination' in inspection_value:
                             return "D"
                         elif 'origin' in inspection_value:
@@ -1982,7 +1984,8 @@ class UserExportConfiguration(models.Model):
                 else:
                     # For Solicitation objects, directly get the inspection_point value
                     if hasattr(obj, 'inspection_point') and obj.inspection_point:
-                        inspection_value = str(obj.inspection_point).strip().lower()
+                        inspection_value = str(
+                            obj.inspection_point).strip().lower()
                         if 'destination' in inspection_value:
                             return "D"
                         elif 'origin' in inspection_value:
@@ -2000,19 +2003,19 @@ class UserExportConfiguration(models.Model):
             try:
                 # Check if obj is an RfqReply instance
                 is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
-                
+
                 if is_rfq_reply:
                     # Try to get is_set_aside from related Solicitation
                     solicitation = None
-                    
+
                     # Method 1: Get from matched RFQ -> Solicitation
                     if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
                         solicitation = obj.rfq.solicitation
-                    
+
                     # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
                     if not solicitation:
                         solicitation = obj.find_matching_solicitation()
-                    
+
                     # If we found a solicitation, get its is_set_aside value
                     if solicitation and hasattr(solicitation, 'is_set_aside'):
                         is_set_aside = solicitation.is_set_aside
@@ -2042,19 +2045,19 @@ class UserExportConfiguration(models.Model):
             try:
                 # Check if obj is an RfqReply instance
                 is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
-                
+
                 if is_rfq_reply:
                     # Try to get CAGE code from related Solicitation
                     solicitation = None
-                    
+
                     # Method 1: Get from matched RFQ -> Solicitation
                     if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
                         solicitation = obj.rfq.solicitation
-                    
+
                     # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
                     if not solicitation:
                         solicitation = obj.find_matching_solicitation()
-                    
+
                     # If we found a solicitation, get its CAGE code
                     if solicitation and hasattr(solicitation, 'cage') and solicitation.cage:
                         cage_value = str(solicitation.cage).strip()

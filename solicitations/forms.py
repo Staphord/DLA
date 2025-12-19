@@ -2,7 +2,7 @@ from django import forms
 from django.forms import ModelForm
 from django.contrib.auth.forms import UserCreationForm
 from accounts.models import CustomUser
-from solicitations.models import EmailSettings, RfqAutoFetchSettings, GitHubWorkflow, UserOEMCustomization, UserEmailConfig, UserExportConfiguration, ExportFieldDefinition, RfqReply
+from solicitations.models import EmailSettings, RfqAutoFetchSettings, GitHubWorkflow, UserOEMCustomization, UserEmailConfig, UserExportConfiguration, ExportFieldDefinition, RfqReply, Solicitation
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth import authenticate
 
@@ -538,5 +538,77 @@ class RfqReplyEditForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Make all fields optional
+        for field_name, field in self.fields.items():
+            field.required = False
+
+
+class SolicitationEditForm(forms.ModelForm):
+    """
+    Form for editing Solicitation data when working from a replied RFQ.
+    Allows correcting scraped header information that will affect all linked RFQs/replies.
+    """
+
+    class Meta:
+        model = Solicitation
+        fields = [
+            'cage',
+            'nomenclature',
+            'solicitation',
+            'status',
+            'part_number',
+            'pr',
+            'unit',
+            'quantity',
+            'NSN',
+            'issued_date',
+            'return_by_date',
+            'organization_name',
+            'street_name',
+            'city',
+            'fax',
+            'phone',
+            'postal_code',
+            'email',
+            'inspection_point',
+            'acceptance_point',
+            'deliver_fob',
+            'deliver_days',
+            'buyer_info',
+            'solicitation_line_number',
+            'purchase_request_number',
+            'is_set_aside',
+        ]
+        widgets = {
+            'cage': forms.TextInput(attrs={'class': 'form-control'}),
+            'nomenclature': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'solicitation': forms.TextInput(attrs={'class': 'form-control'}),
+            'status': forms.TextInput(attrs={'class': 'form-control'}),
+            'part_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'pr': forms.TextInput(attrs={'class': 'form-control'}),
+            'unit': forms.TextInput(attrs={'class': 'form-control'}),
+            'quantity': forms.TextInput(attrs={'class': 'form-control'}),
+            'NSN': forms.TextInput(attrs={'class': 'form-control'}),
+            'issued_date': forms.TextInput(attrs={'class': 'form-control'}),
+            'return_by_date': forms.TextInput(attrs={'class': 'form-control'}),
+            'organization_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'street_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'city': forms.TextInput(attrs={'class': 'form-control'}),
+            'fax': forms.TextInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'postal_code': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'inspection_point': forms.TextInput(attrs={'class': 'form-control'}),
+            'acceptance_point': forms.TextInput(attrs={'class': 'form-control'}),
+            'deliver_fob': forms.TextInput(attrs={'class': 'form-control'}),
+            'deliver_days': forms.TextInput(attrs={'class': 'form-control'}),
+            'buyer_info': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'solicitation_line_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'purchase_request_number': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_set_aside': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Make all fields optional so user can adjust only what they need
         for field_name, field in self.fields.items():
             field.required = False

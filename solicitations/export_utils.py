@@ -463,6 +463,19 @@ def build_rfq_reply_values(user, rfq_reply):
         # Fail-safe: never break export because of conditional logic
         pass
 
+    # For RFQ replies, business decision: always export FOB Point (32) and
+    # Inspection Point Code (36) as "D" (Destination), regardless of what's
+    # stored on the Solicitation or in user mappings.
+    try:
+        # Positions are 1-based; 32 -> index 31, 36 -> index 35
+        if len(values) >= 32:
+            values[31] = "D"  # FOB Point
+        if len(values) >= 36:
+            values[35] = "D"  # Inspection Point Code
+    except Exception:
+        # Fail-safe: never break export because of conditional logic
+        pass
+
     # Ensure we have exactly 121 fields
     while len(values) < 121:
         values.append("")

@@ -65,6 +65,8 @@
                                 <span class="fw-semibold text-primary">${{ rfq_reply.final_price|default_if_none:"0.00" }}</span>
                             </div>
                         </div>
+
+                        {# Left side now stays as a read-only snapshot; editing happens on the right #}
                     </div>
                 </div>
             </div>
@@ -190,6 +192,119 @@
                                 <div class="text-danger small">{{ form.notes.errors }}</div>
                             {% endif %}
                         </div>
+
+                        {% if solicitation_form and original_solicitation %}
+                        <hr class="my-4">
+                        <h6 class="text-muted text-uppercase small mb-3">Solicitation Details</h6>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.solicitation.id_for_label }}" class="form-label text-muted text-uppercase small">Solicitation #</label>
+                                {{ solicitation_form.solicitation }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.cage.id_for_label }}" class="form-label text-muted text-uppercase small">CAGE</label>
+                                {{ solicitation_form.cage }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.status.id_for_label }}" class="form-label text-muted text-uppercase small">Status</label>
+                                {{ solicitation_form.status }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.NSN.id_for_label }}" class="form-label text-muted text-uppercase small">NSN</label>
+                                {{ solicitation_form.NSN }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.part_number.id_for_label }}" class="form-label text-muted text-uppercase small">Part Number</label>
+                                {{ solicitation_form.part_number }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ solicitation_form.quantity.id_for_label }}" class="form-label text-muted text-uppercase small">Quantity</label>
+                                {{ solicitation_form.quantity }}
+                            </div>
+                            <div class="col-md-2">
+                                <label for="{{ solicitation_form.unit.id_for_label }}" class="form-label text-muted text-uppercase small">Unit</label>
+                                {{ solicitation_form.unit }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.solicitation_line_number.id_for_label }}" class="form-label text-muted text-uppercase small">Line Number</label>
+                                {{ solicitation_form.solicitation_line_number }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.purchase_request_number.id_for_label }}" class="form-label text-muted text-uppercase small">Purchase Request #</label>
+                                {{ solicitation_form.purchase_request_number }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.issued_date.id_for_label }}" class="form-label text-muted text-uppercase small">Issued Date</label>
+                                {{ solicitation_form.issued_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.return_by_date.id_for_label }}" class="form-label text-muted text-uppercase small">Return By</label>
+                                {{ solicitation_form.return_by_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.inspection_point.id_for_label }}" class="form-label text-muted text-uppercase small">Inspection</label>
+                                {{ solicitation_form.inspection_point }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.acceptance_point.id_for_label }}" class="form-label text-muted text-uppercase small">Acceptance</label>
+                                {{ solicitation_form.acceptance_point }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.deliver_fob.id_for_label }}" class="form-label text-muted text-uppercase small">FOB</label>
+                                {{ solicitation_form.deliver_fob }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.deliver_days.id_for_label }}" class="form-label text-muted text-uppercase small">Delivery Days</label>
+                                {{ solicitation_form.deliver_days }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-muted text-uppercase small d-block">Set Aside</label>
+                                <div class="form-check form-switch mt-1">
+                                    {{ solicitation_form.is_set_aside }}
+                                    <label class="form-check-label" for="{{ solicitation_form.is_set_aside.id_for_label }}">
+                                        Small Business Set-Aside
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <label for="{{ solicitation_form.nomenclature.id_for_label }}" class="form-label text-muted text-uppercase small">Solicitation Nomenclature</label>
+                                {{ solicitation_form.nomenclature }}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ solicitation_form.buyer_info.id_for_label }}" class="form-label text-muted text-uppercase small">Buyer Info</label>
+                                {{ solicitation_form.buyer_info }}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ solicitation_form.organization_name.id_for_label }}" class="form-label text-muted text-uppercase small">Organization</label>
+                                {{ solicitation_form.organization_name }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.email.id_for_label }}" class="form-label text-muted text-uppercase small">Email</label>
+                                {{ solicitation_form.email }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.phone.id_for_label }}" class="form-label text-muted text-uppercase small">Phone</label>
+                                {{ solicitation_form.phone }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.fax.id_for_label }}" class="form-label text-muted text-uppercase small">Fax</label>
+                                {{ solicitation_form.fax }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.city.id_for_label }}" class="form-label text-muted text-uppercase small">City</label>
+                                {{ solicitation_form.city }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.postal_code.id_for_label }}" class="form-label text-muted text-uppercase small">Postal Code</label>
+                                {{ solicitation_form.postal_code }}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ solicitation_form.street_name.id_for_label }}" class="form-label text-muted text-uppercase small">Street</label>
+                                {{ solicitation_form.street_name }}
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <div class="mt-4 d-flex gap-2">
                             <button type="submit" class="btn mybg myhover text-white px-4">

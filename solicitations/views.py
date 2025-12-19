@@ -2152,7 +2152,7 @@ def edit_replied_rfq(request, rfq):
     Superusers and admins can edit any user's RFQ reply.
     """
     from .models import RfqReply
-    from .forms import RfqReplyEditForm
+    from .forms import RfqReplyEditForm, SolicitationEditForm
 
     try:
         # Superusers and admins can edit any RFQ reply, regular users only their own
@@ -2164,20 +2164,40 @@ def edit_replied_rfq(request, rfq):
         messages.error(request, "RFQ reply not found")
         return redirect('solicitations:replied-rfq')
 
+    # Find the linked / matching solicitation (may be None)
+    original_solicitation = rfq_reply.find_matching_solicitation()
+
     if request.method == 'POST':
-        form = RfqReplyEditForm(request.POST, instance=rfq_reply)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "RFQ reply updated successfully")
+        reply_form = RfqReplyEditForm(request.POST, instance=rfq_reply)
+        solicitation_form = None
+        if original_solicitation:
+            solicitation_form = SolicitationEditForm(
+                request.POST, instance=original_solicitation)
+
+        # Validate both forms (if solicitation_form exists)
+        forms_valid = reply_form.is_valid() and (
+            solicitation_form is None or solicitation_form.is_valid()
+        )
+
+        if forms_valid:
+            reply_form.save()
+            if solicitation_form is not None:
+                solicitation_form.save()
+            messages.success(
+                request, "RFQ reply and solicitation updated successfully")
             return redirect('solicitations:replied-rfq-detail', rfq=rfq_reply.id)
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = RfqReplyEditForm(instance=rfq_reply)
+        reply_form = RfqReplyEditForm(instance=rfq_reply)
+        solicitation_form = SolicitationEditForm(
+            instance=original_solicitation) if original_solicitation else None
 
     context = {
-        'form': form,
+        'form': reply_form,
         'rfq_reply': rfq_reply,
+        'solicitation_form': solicitation_form,
+        'original_solicitation': original_solicitation,
     }
 
     return render(request, 'solicitations/procurements/edit_rfq_reply.html', context)
