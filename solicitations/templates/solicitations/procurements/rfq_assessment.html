@@ -1,0 +1,878 @@
+{% extends "solicitations/base.html" %}
+{% load humanize %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Bids Assessment - Bidding and Pricing</h1>
+  <nav class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:replied-rfq' %}">RFQ Replies</a></li>
+      <li class="breadcrumb-item active">Assessment</li>
+    </ol>
+    {% if "destination" in solicitation.deliver_fob|default:''|lower %}
+    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-3 py-2">
+      FOB: {{ solicitation.deliver_fob|default:'Not Available' }}
+    </span>
+    {% else %}
+    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2">
+      FOB: {{ solicitation.deliver_fob|default:'Not Available' }}
+    </span>
+    {% endif %}
+  </nav>
+</div>
+
+<section class="section">
+<div class="card">
+  <div class="card-body pt-3">
+
+    <!-- Top Bar -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 border-bottom mb-3">
+      <div class="d-flex align-items-center gap-3">
+        <span class="text-muted">Record # <strong>{{ rfq_reply.rfq_unique_id|default:rfq_reply.id }}</strong></span>
+        <span class="text-muted">REF # <strong>{{ active_assessment.bid_reference|default:'-' }}</strong></span>
+
+        <!-- Solicitation Number Search -->
+        <form method="get" action="{% url 'solicitations:rfq-assessment-search' %}" class="d-flex align-items-center gap-1">
+          <input type="text" name="sol" placeholder="Search solicitation no..."
+                 value="{{ rfq_reply.solicitation_number|default:'' }}"
+                 class="form-control form-control-sm" style="width:200px;">
+          <button type="submit" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-search"></i>
+          </button>
+        </form>
+
+        <!-- Assessment switcher if multiple exist -->
+        {% if assessments|length > 1 %}
+        <div class="d-flex align-items-center gap-1">
+          <span class="text-muted small">Record:</span>
+          <div class="btn-group btn-group-sm">
+            {% for a in assessments %}
+            <a href="?assessment={{ a.id }}"
+               class="btn {% if a.id == active_assessment.id %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+              {{ forloop.counter }}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Assessment Form -->
+    <form id="assessmentForm" method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save">
+      <input type="hidden" name="assessment_id" value="{{ active_assessment.id }}">
+
+      <!-- SOLICITATION INFO -->
+      <h6 class="fw-bold text-danger mb-3">Solicitation Info</h6>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Solicitation No</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.solicitation|default:rfq_reply.solicitation_number|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Source of Quote</label>
+          <select name="source_of_quote" class="form-select form-select-sm">
+            {% for val, label in source_choices %}
+            <option value="{{ val }}" {% if active_assessment.source_of_quote == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Date Quote Received</label>
+          <input type="date" name="date_quote_received" class="form-control form-control-sm"
+                 value="{{ active_assessment.date_quote_received|date:'Y-m-d'|default:'' }}">
+        </div>
+      </div>
+
+      <hr class="border-dashed">
+
+      <!-- PURCHASE REQUEST -->
+      <h6 class="fw-bold text-danger mb-3">Purchase Request</h6>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Purchase Request No</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.purchase_request_number|default:solicitation.pr|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">NSN</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.NSN|default:rfq_reply.nsn|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Unit of Issue</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.unit|default:rfq_reply.unit|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Part Number</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.part_number|default:rfq_reply.part_number|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Quantity Required</label>
+          <input type="text" id="quantity_display" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.quantity|default:rfq_reply.quantity|default:'1' }}" readonly>
+        </div>
+      </div>
+
+      <hr class="border-dashed">
+
+      <!-- MANUFACTURER -->
+      <h6 class="fw-bold text-danger mb-3">Manufacturer</h6>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Company Name</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ manufacturer_oem.name|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">CAGE Code</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ manufacturer_oem.cage|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Nomenclature</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ solicitation.nomenclature|default:rfq_reply.nomenclature|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Email</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ manufacturer_oem.email|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Phone</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ manufacturer_oem.phone|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Fax</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ manufacturer_oem.fax|default:'-' }}" readonly>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">POC</label>
+          <input type="text" class="form-control form-control-sm bg-light"
+                 value="{{ manufacturer_oem.poc|default:'-' }}" readonly>
+        </div>
+      </div>
+
+      <hr class="border-dashed">
+
+      <!-- OEM PRICING -->
+      <h6 class="fw-bold text-danger mb-3">OEM Pricing</h6>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Minimum Order Qty</label>
+          <input type="number" name="minimum_order_qty" id="minimum_order_qty" class="form-control form-control-sm"
+                 value="{{ rfq_reply.minimum_order_qty|default:'' }}" step="0.01" min="0">
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">OEM Unit Rate</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="oem_unit_rate" id="oem_unit_rate" class="form-control form-control-sm"
+                   value="{{ rfq_reply.unit_price|default:'0' }}"
+                   step="0.00001" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Other OEM Charges</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="other_oem_charges" id="other_oem_charges" class="form-control form-control-sm"
+                   value="{{ rfq_reply.other_oem_charges|default:'' }}" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">OEM Delivery (days)</label>
+          <input type="number" name="oem_delivery_days" id="oem_delivery_days" class="form-control form-control-sm"
+                 value="{{ rfq_reply.oem_delivery_days|default:'' }}" min="0">
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">OEM Subtotal</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="oem_subtotal" id="oem_subtotal"
+                   class="form-control form-control-sm fw-bold text-primary"
+                   value="{{ active_assessment.oem_subtotal|default:'' }}" step="0.01">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Credit Card Charge</label>
+          <select name="oem_credit_card_charge_pct" id="oem_credit_card_charge_pct" class="form-select form-select-sm">
+            <option value="0" {% if not active_assessment.oem_credit_card_charge_pct or active_assessment.oem_credit_card_charge_pct == 0 %}selected{% endif %}>0%</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">OEM Total</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="oem_total" id="oem_total"
+                   class="form-control form-control-sm fw-bold text-primary"
+                   value="{{ active_assessment.oem_total|default:'' }}" step="0.01">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Total Shipping Weight (lbs)</label>
+          <input type="number" name="total_shipping_weight" id="total_shipping_weight" class="form-control form-control-sm"
+                 value="{{ rfq_reply.total_shipping_weight|default:'' }}" step="0.01" min="0">
+        </div>
+        <div class="col-12">
+          <div class="bg-light border rounded p-3">
+            <div class="fw-semibold text-muted small mb-2">Terms of Payment</div>
+            <div class="row g-3">
+              <div class="col-12 col-md-3">
+                <label class="form-label text-muted small mb-1">
+                  <input type="radio" name="interest_type" id="interest_type_cod" value="cod_cc" class="form-check-input me-1">
+                  Interest COD/CC
+                </label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">$</span>
+                  <input type="number" name="interest_cod_cc" id="interest_cod_cc"
+                         class="form-control form-control-sm"
+                         value="{{ active_assessment.interest_cod_cc|default:'' }}" step="0.01">
+                </div>
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label text-muted small mb-1">
+                  <input type="radio" name="interest_type" id="interest_type_5050" value="50_50" class="form-check-input me-1">
+                  Interest 50/50
+                </label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">$</span>
+                  <input type="number" name="interest_50_50" id="interest_50_50"
+                         class="form-control form-control-sm"
+                         value="{{ active_assessment.interest_50_50|default:'' }}" step="0.01">
+                </div>
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label text-muted small mb-1">
+                  <input type="radio" name="interest_type" id="interest_type_cia" value="cia_prepay" class="form-check-input me-1">
+                  Interest CIA/PREPAY
+                </label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">$</span>
+                  <input type="number" name="interest_cia_prepay" id="interest_cia_prepay"
+                         class="form-control form-control-sm"
+                         value="{{ active_assessment.interest_cia_prepay|default:'' }}" step="0.01">
+                </div>
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label text-muted small mb-1">
+                  <input type="radio" name="interest_type" id="interest_type_net30" value="net_30" class="form-check-input me-1">
+                  Net 30
+                </label>
+                <input type="number" name="payment_term" id="payment_term" class="form-control form-control-sm"
+                       value="{{ rfq_reply.payment_term|default:'0' }}" step="0.01" min="0">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Shipping Cost to {{ request.user.companyName }}</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="shipping_cost_to_company" id="shipping_cost_to_company"
+                   class="form-control form-control-sm"
+                   value="{{ rfq_reply.shipping_cost_to_company|default:'' }}" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">OEM Calculated Rate</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="oem_calculated_rate" id="oem_calculated_rate"
+                   class="form-control form-control-sm fw-bold"
+                   value="{{ active_assessment.oem_calculated_rate|default:'' }}" step="0.00001">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">OEM Validity (days)</label>
+          <input type="number" name="oem_validity_days" id="oem_validity_days" class="form-control form-control-sm"
+                 value="{{ rfq_reply.oem_validity_days|default:'30' }}" min="0">
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Preservation Method</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="package_and_pres_mtd" id="package_and_pres_mtd" class="form-control form-control-sm"
+                   value="{{ rfq_reply.package_and_pres_mtd|default:'' }}" step="0.0001" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Unit Container</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="unit_container" id="unit_container"
+                   class="form-control form-control-sm"
+                   value="{{ active_assessment.unit_container|default:'' }}" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Shipping Boxing</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="shipping_boxing" id="shipping_boxing"
+                   class="form-control form-control-sm"
+                   value="{{ active_assessment.shipping_boxing|default:'' }}" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Supplies Inspection</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            {% if is_destination_inspection %}
+            <input type="hidden" name="supplies_inspection" value="0">
+            {% endif %}
+            <select name="supplies_inspection" id="supplies_inspection" class="form-select form-select-sm" {% if is_destination_inspection %}disabled{% endif %}>
+              <option value="0" {% if is_destination_inspection or not active_assessment.supplies_inspection or active_assessment.supplies_inspection == 0 %}selected{% endif %}>0</option>
+              <option value="750" {% if not is_destination_inspection and active_assessment.supplies_inspection == 750 %}selected{% endif %}>750</option>
+              <option value="1000" {% if not is_destination_inspection and active_assessment.supplies_inspection == 1000 %}selected{% endif %}>1000</option>
+              <option value="1250" {% if not is_destination_inspection and active_assessment.supplies_inspection == 1250 %}selected{% endif %}>1250</option>
+              <option value="1500" {% if not is_destination_inspection and active_assessment.supplies_inspection == 1500 %}selected{% endif %}>1500</option>
+              <option value="2000" {% if not is_destination_inspection and active_assessment.supplies_inspection == 2000 %}selected{% endif %}>2000</option>
+              <option value="2500" {% if not is_destination_inspection and active_assessment.supplies_inspection == 2500 %}selected{% endif %}>2500</option>
+              <option value="4000" {% if not is_destination_inspection and active_assessment.supplies_inspection == 4000 %}selected{% endif %}>4000</option>
+              <option value="5000" {% if not is_destination_inspection and active_assessment.supplies_inspection == 5000 %}selected{% endif %}>5000 -</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Packaging Inspection</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            {% if is_destination_inspection %}
+            <input type="hidden" name="packaging_inspection" value="0">
+            {% endif %}
+            <select name="packaging_inspection" id="packaging_inspection" class="form-select form-select-sm" {% if is_destination_inspection %}disabled{% endif %}>
+              <option value="0" {% if is_destination_inspection or not active_assessment.packaging_inspection or active_assessment.packaging_inspection == 0 %}selected{% endif %}>0</option>
+              <option value="750" {% if not is_destination_inspection and active_assessment.packaging_inspection == 750 %}selected{% endif %}>750</option>
+              <option value="1000" {% if not is_destination_inspection and active_assessment.packaging_inspection == 1000 %}selected{% endif %}>1000</option>
+              <option value="1250" {% if not is_destination_inspection and active_assessment.packaging_inspection == 1250 %}selected{% endif %}>1250</option>
+              <option value="1500" {% if not is_destination_inspection and active_assessment.packaging_inspection == 1500 %}selected{% endif %}>1500</option>
+              <option value="2000" {% if not is_destination_inspection and active_assessment.packaging_inspection == 2000 %}selected{% endif %}>2000</option>
+              <option value="2500" {% if not is_destination_inspection and active_assessment.packaging_inspection == 2500 %}selected{% endif %}>2500</option>
+              <option value="4000" {% if not is_destination_inspection and active_assessment.packaging_inspection == 4000 %}selected{% endif %}>4000</option>
+              <option value="5000" {% if not is_destination_inspection and active_assessment.packaging_inspection == 5000 %}selected{% endif %}>5000 -</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- OEM Calculated Fields -->
+      <div class="row g-3 mb-3">
+
+      </div>
+
+      <hr class="border-dashed">
+
+      <!-- COMPANY PRICING -->
+      <h6 class="fw-bold text-danger mb-3">{{ request.user.companyName }} Pricing</h6>
+      <div class="row g-3 mb-3">
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">General &amp; Admin</label>
+          <select id="general_and_admin_choice" class="form-select form-select-sm"
+                  data-current-value="{{ active_assessment.general_and_admin|default:'' }}">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="75">75</option>
+            <option value="100">100</option>
+            <option value="150">150</option>
+            <option value="200">200</option>
+            <option value="250">250</option>
+            <option value="275">275</option>
+            <option value="300">300</option>
+            <option value="500">500</option>
+            <option value="1000">1000</option>
+            <option value="other">Other value</option>
+          </select>
+          <div id="general_and_admin_other_wrap" class="input-group input-group-sm mt-2 d-none">
+            <span class="input-group-text">$</span>
+            <input type="number" name="general_and_admin" id="general_and_admin" class="form-control form-control-sm"
+                   value="{{ active_assessment.general_and_admin|default:'' }}" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Shipping Cost to Buyer</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            {% if is_origin_fob %}
+            <input type="hidden" name="shipping_cost_to_buyer" value="0">
+            {% endif %}
+            <input type="number" name="shipping_cost_to_buyer" id="shipping_cost_to_buyer"
+                   class="form-control form-control-sm {% if is_origin_fob %}bg-light{% endif %}"
+                   value="{% if is_origin_fob %}0{% else %}{{ active_assessment.shipping_cost_to_buyer|default:rfq_reply.shipping_cost_to_company|default:'' }}{% endif %}" step="0.01" min="0"
+                   {% if is_origin_fob %}disabled{% endif %}>
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Procurement Grand Total</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="grand_total" id="grand_total"
+                   class="form-control form-control-sm fw-bold text-success"
+                   value="{{ active_assessment.grand_total|default:'' }}" step="0.01">
+          </div>
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label text-muted small mb-1">Profit Margin Applied</label>
+          <div class="input-group input-group-sm">
+            <input type="number" name="profit_margin_percent" id="profit_margin_percent" class="form-control form-control-sm"
+                   value="{{ active_assessment.profit_margin_percent|default:'' }}" step="0.01" min="0" max="100">
+            <span class="input-group-text">%</span>
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">{{ request.user.companyName }} Calculated Rate</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="company_calculated_rate" id="company_calculated_rate"
+                   class="form-control form-control-sm fw-bold"
+                   value="{{ active_assessment.company_calculated_rate|default:'' }}" step="0.00001">
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">{{ request.user.companyName }} Adjusted Rate (Bid Value)</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="company_adjusted_rate" id="company_adjusted_rate" class="form-control form-control-sm"
+                   value="{{ active_assessment.company_adjusted_rate|default:'' }}" step="0.00001" min="0">
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Contract Value</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="contract_value" id="contract_value"
+                   class="form-control form-control-sm fw-bold"
+                   value="{{ active_assessment.contract_value|default:'' }}" step="0.01">
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">Estimated Profit</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text">$</span>
+            <input type="number" name="estimated_profit" id="estimated_profit"
+                   class="form-control form-control-sm fw-bold text-success"
+                   value="{{ active_assessment.estimated_profit|default:'' }}" step="0.01">
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">{{ request.user.companyName }} Delivery (days)</label>
+          <input type="hidden" name="company_delivery_days" id="company_delivery_days"
+                 value="{{ active_assessment.company_delivery_days|default:'' }}"
+                 data-user-added-days="{{ request.user.added_days|default:0 }}">
+          <input type="number" id="company_delivery_base_days" class="form-control form-control-sm bg-light"
+                 value="{{ rfq_reply.oem_delivery_days|default:'' }}" min="0" readonly>
+          <div class="form-text text-muted small">
+            OEM days + {{ request.user.added_days|default:0 }} (from your <a href="{% url 'solicitations:user-profile' request.user.id %}">profile</a>)
+          </div>
+        </div>
+        <div class="col-12 col-md-4">
+          <label class="form-label text-muted small mb-1">{{ request.user.companyName }} Validity (days)</label>
+          <input type="number" name="company_validity_days" class="form-control form-control-sm"
+                 value="{{ active_assessment.company_validity_days|default:'' }}" min="0">
+        </div>
+      </div>
+
+      <!-- Grand Total -->
+      <div class="row g-3 mb-4">
+
+      </div>
+
+      {% if procurement_history %}
+      <hr class="border-dashed">
+      <!-- PROCUREMENT HISTORY -->
+      <h6 class="fw-bold text-danger mb-3">Procurement History</h6>
+      <div class="table-responsive mb-3">
+        <table class="table table-sm table-bordered table-hover">
+          <thead class="table-light">
+            <tr>
+              <th class="text-secondary small">CAGE</th>
+              <th class="text-secondary small">Contract No</th>
+              <th class="text-secondary small">Qty</th>
+              <th class="text-secondary small">Unit Cost</th>
+              <th class="text-secondary small">AWD Date</th>
+              <th class="text-secondary small">Surplus Material</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rec in procurement_history %}
+            <tr>
+              <td class="small">{{ rec.cage|default:'-' }}</td>
+              <td class="small">{{ rec.contract_number|default:'-' }}</td>
+              <td class="small">{{ rec.quantity|default:'-' }}</td>
+              <td class="small">{% if rec.unit_cost %}${{ rec.unit_cost }}{% else %}-{% endif %}</td>
+              <td class="small">{{ rec.awd_date|default:'-' }}</td>
+              <td class="small">{{ rec.surplus_material|default:'-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      {% if solicitation.prep_for_delivery %}
+      <hr class="border-dashed">
+      <!-- PREP FOR DELIVERY -->
+      <h6 class="fw-bold text-danger mb-3">Prep For Delivery</h6>
+      <div class="mb-3">
+        <div class="form-control form-control-sm bg-light"
+             style="white-space: pre-wrap; min-height: 120px; height: auto;">{{ solicitation.prep_for_delivery }}</div>
+      </div>
+      {% endif %}
+
+      <!-- Bottom Action Bar -->
+      <hr class="border-dashed">
+      <div class="d-flex align-items-center justify-content-end flex-wrap gap-3 pt-2">
+        <input type="hidden" name="assessed" id="assessedValue" value="{% if active_assessment.assessed %}on{% endif %}">
+
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-primary"
+                  data-bs-toggle="modal" data-bs-target="#confirmSaveAssessmentModal">
+            <i class="bi bi-floppy me-1"></i>Save
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger"
+                  data-bs-toggle="modal" data-bs-target="#deleteAssessmentModal">
+            <i class="bi bi-trash me-1"></i>Delete
+          </button>
+        </div>
+      </div>
+
+    </form><!-- end assessmentForm -->
+
+  </div>
+</div>
+</section>
+
+<!-- Save Confirmation Modal -->
+<div class="modal fade" id="confirmSaveAssessmentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Save Assessment</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">Save this assessment and mark it as assessed?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" id="confirmSaveAssessmentButton">
+          Save &amp; Mark Assessed
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteAssessmentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Delete Assessment</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">Delete this assessment for record <strong>{{ rfq_reply.rfq_unique_id|default:rfq_reply.id }}</strong>? This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="assessment_id" value="{{ active_assessment.id }}">
+          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .border-dashed { border-style: dashed !important; }
+</style>
+
+<script>
+  document.getElementById('confirmSaveAssessmentButton').addEventListener('click', function () {
+    document.getElementById('assessedValue').value = 'on';
+    document.getElementById('assessmentForm').submit();
+  });
+</script>
+
+<script>
+(function () {
+  /* ---------- helpers ---------- */
+  function val(id) {
+    const el = document.getElementById(id);
+    return el ? (parseFloat(el.value) || 0) : 0;
+  }
+  function set(id, n) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) {
+      el.value = isFinite(n) ? n.toFixed(el.step && el.step.includes('00001') ? 5 : 2) : '';
+    }
+  }
+  function forceSet(id, n) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = isFinite(n) ? n.toFixed(el.step && el.step.includes('00001') ? 5 : 2) : '';
+    }
+  }
+  function updateCompanyDeliveryDays() {
+    const oemDeliveryEl = document.getElementById('oem_delivery_days');
+    const companyDeliveryEl = document.getElementById('company_delivery_days');
+    const baseEl = document.getElementById('company_delivery_base_days');
+    if (!oemDeliveryEl || !companyDeliveryEl || !baseEl) return;
+
+    const baseDays = parseInt(oemDeliveryEl.value, 10) || 0;
+    const addedDays = parseInt(companyDeliveryEl.dataset.userAddedDays || '0', 10) || 0;
+    const totalDays = baseDays + addedDays;
+    baseEl.value = String(totalDays);
+    companyDeliveryEl.value = String(totalDays);
+  }
+
+  function recalc() {
+    const oemUnitRate    = val('oem_unit_rate');
+    const qty            = Math.max(val('quantity_display') || 1, 1);
+    const otherOemCharges= val('other_oem_charges');
+    const shippingToComp = val('shipping_cost_to_company');
+    const ccPct          = val('oem_credit_card_charge_pct') / 100;
+    const oemDelivDays   = val('oem_delivery_days') || 30;
+    const ga             = val('general_and_admin');
+    const profitMarginPct= val('profit_margin_percent') / 100;
+
+    const shippingBuyerForCalc = val('shipping_cost_to_buyer');
+
+    /* OEM Subtotal = (Minimum Order Qty * OEM Unit Rate) + Other OEM Charges */
+    const minOrderQty  = val('minimum_order_qty');
+    set('oem_subtotal', (minOrderQty * oemUnitRate) + otherOemCharges);
+    const oemSubtotalForCalc = val('oem_subtotal');
+
+    /* OEM Total = OEM Subtotal * (1 + Credit Card %) */
+    set('oem_total', oemSubtotalForCalc + (oemSubtotalForCalc * ccPct));
+    const oemTotalForCalc = val('oem_total');
+
+    /* Interest - only the selected type gets its value; the others are zeroed */
+    const interestType  = (document.querySelector('input[name="interest_type"]:checked') || {}).value || 'cod_cc';
+    const interestCodCc = oemTotalForCalc * 45 * 24 / (365 * 100);
+    const interest5050  = oemTotalForCalc * (oemDelivDays + 45) * 24 / (2 * 365 * 100);
+    const interestCia   = oemTotalForCalc * (oemDelivDays + 45) * 24 / (365 * 100);
+    set('interest_cod_cc',     interestType === 'cod_cc'     ? interestCodCc : 0);
+    set('interest_50_50',      interestType === '50_50'      ? interest5050  : 0);
+    set('interest_cia_prepay', interestType === 'cia_prepay' ? interestCia   : 0);
+    if (interestType !== 'net_30') {
+      set('payment_term', 0);
+    }
+
+    /* OEM Calculated Rate = (OEM Total + Active Interest + Shipping to Company) / Qty */
+    const activeInterest = interestType === 'cod_cc' ? interestCodCc :
+                           interestType === '50_50'  ? interest5050  :
+                           interestType === 'cia_prepay' ? interestCia :
+                           interestType === 'net_30' ? val('payment_term') : 0;
+    set('oem_calculated_rate', (oemTotalForCalc + activeInterest + shippingToComp) / qty);
+    const oemCalcRateForCalc = val('oem_calculated_rate');
+
+    /* Contract Value = Company Calculated Rate * Qty */
+    /* Grand Total = (Qty * (OEM Calc Rate + Pkg & Pres Method + Unit Container))
+                   + Shipping Boxing + Supplies Inspection + Packaging Inspection
+                   + G&A + Shipping Cost to Buyer */
+    const pkgPresMtd   = val('package_and_pres_mtd');
+    const unitContainer= val('unit_container');
+    const shippingBoxing  = val('shipping_boxing');
+    const suppliesInsp    = val('supplies_inspection');
+    const packagingInsp   = val('packaging_inspection');
+    set('grand_total', (qty * (oemCalcRateForCalc + pkgPresMtd + unitContainer))
+                     + shippingBoxing + suppliesInsp + packagingInsp
+                     + ga + shippingBuyerForCalc);
+    const grandTotalForCalc = val('grand_total');
+
+    /* Company Calculated Rate = (Grand Total + (Grand Total * Profit Margin %)) / Qty */
+    const companyCalculatedRate = (grandTotalForCalc + (grandTotalForCalc * profitMarginPct)) / qty;
+    forceSet('company_calculated_rate', companyCalculatedRate);
+    forceSet('company_adjusted_rate', companyCalculatedRate);
+
+    set('contract_value', companyCalculatedRate * qty);
+    const contractValForCalc = val('contract_value');
+
+    /* Estimated Profit = (Contract Value - Grand Total) + (Packaging Inspection + G&A) */
+    set('estimated_profit', (contractValForCalc - grandTotalForCalc) + (packagingInsp + ga));
+  }
+
+  /* Pure input fields - changes always trigger a full recalc */
+  const watchIds = [
+    'oem_unit_rate', 'minimum_order_qty', 'other_oem_charges',
+    'shipping_cost_to_company', 'shipping_cost_to_buyer',
+    'oem_subtotal', 'oem_total', 'oem_calculated_rate',
+    'package_and_pres_mtd', 'oem_credit_card_charge_pct', 'oem_delivery_days',
+    'unit_container', 'shipping_boxing', 'supplies_inspection', 'packaging_inspection',
+    'general_and_admin', 'payment_term',
+    'profit_margin_percent', 'company_adjusted_rate',
+    'grand_total',
+  ];
+  watchIds.forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', recalc);
+  });
+
+  const oemDeliveryEl = document.getElementById('oem_delivery_days');
+  if (oemDeliveryEl) {
+    oemDeliveryEl.addEventListener('input', updateCompanyDeliveryDays);
+    oemDeliveryEl.addEventListener('change', updateCompanyDeliveryDays);
+  }
+
+  (function () {
+    const select = document.getElementById('general_and_admin_choice');
+    const input = document.getElementById('general_and_admin');
+    const otherWrap = document.getElementById('general_and_admin_other_wrap');
+    if (!select || !input || !otherWrap) return;
+
+    const presets = ['25', '50', '75', '100', '150', '200', '250', '275', '300', '500', '1000'];
+    const current = select.dataset.currentValue ? String(parseFloat(select.dataset.currentValue)) : '';
+
+    if (presets.includes(current)) {
+      select.value = current;
+      input.value = current;
+      otherWrap.classList.add('d-none');
+    } else if (current) {
+      select.value = 'other';
+      otherWrap.classList.remove('d-none');
+    } else {
+      select.value = '25';
+      input.value = '25';
+      otherWrap.classList.add('d-none');
+    }
+
+    select.addEventListener('change', function () {
+      if (select.value === 'other') {
+        otherWrap.classList.remove('d-none');
+        input.focus();
+      } else {
+        input.value = select.value;
+        otherWrap.classList.add('d-none');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      recalc();
+    });
+  })();
+
+  /* Radio buttons trigger recalc on change */
+  document.querySelectorAll('input[name="interest_type"]').forEach(function (r) {
+    r.addEventListener('change', recalc);
+  });
+
+  /* Two-way sync: company_calculated_rate <-> company_adjusted_rate */
+  (function () {
+    const calcRate = document.getElementById('company_calculated_rate');
+    const adjRate  = document.getElementById('company_adjusted_rate');
+    if (calcRate && adjRate) {
+      calcRate.addEventListener('input', function () {
+        adjRate.value = calcRate.value;
+        recalc();
+      });
+    }
+  })();
+
+  (function () {
+    const isOriginFob = {{ is_origin_fob|yesno:"true,false" }};
+    const shipCompany = document.getElementById('shipping_cost_to_company');
+    const shipBuyer = document.getElementById('shipping_cost_to_buyer');
+    const shipBuyerHidden = document.querySelector('input[type="hidden"][name="shipping_cost_to_buyer"]');
+    if (!shipCompany || !shipBuyer) return;
+
+    function setBuyerValue(value) {
+      shipBuyer.value = value;
+      if (shipBuyerHidden) shipBuyerHidden.value = value;
+    }
+
+    function syncFromCompany() {
+      if (isOriginFob) {
+        setBuyerValue('0');
+        recalc();
+        return;
+      }
+      setBuyerValue(shipCompany.value);
+      recalc();
+    }
+
+    function syncFromBuyer() {
+      if (isOriginFob) {
+        setBuyerValue('0');
+        recalc();
+        return;
+      }
+      shipCompany.value = shipBuyer.value;
+      if (shipBuyerHidden) shipBuyerHidden.value = shipBuyer.value;
+      recalc();
+    }
+
+    if (isOriginFob) {
+      setBuyerValue('0');
+    } else if (shipCompany.value && !shipBuyer.value) {
+      setBuyerValue(shipCompany.value);
+    } else if (shipBuyer.value && !shipCompany.value) {
+      shipCompany.value = shipBuyer.value;
+    } else if (shipCompany.value !== shipBuyer.value) {
+      setBuyerValue(shipCompany.value);
+    }
+
+    shipCompany.addEventListener('input', syncFromCompany);
+    shipBuyer.addEventListener('input', syncFromBuyer);
+  })();
+
+  /* Reverse sync: editing contract_value back-computes company_adjusted_rate */
+  (function () {
+    const cvEl = document.getElementById('contract_value');
+    if (cvEl) {
+      cvEl.addEventListener('input', function () {
+        const qty     = Math.max(val('quantity_display') || 1, 1);
+        const newRate = parseFloat(this.value) / qty;
+        if (isFinite(newRate)) {
+          const adj  = document.getElementById('company_adjusted_rate');
+          const calc = document.getElementById('company_calculated_rate');
+          if (adj)  adj.value  = newRate.toFixed(5);
+          if (calc) calc.value = newRate.toFixed(5);
+        }
+        recalc();
+      });
+    }
+  })();
+
+  /* Pre-select radio from saved interest_type */
+  (function () {
+    const saved = '{{ active_assessment.interest_type|default:"cod_cc" }}';
+    const map   = { 'cod_cc': 'interest_type_cod', '50_50': 'interest_type_5050', 'cia_prepay': 'interest_type_cia', 'net_30': 'interest_type_net30' };
+    const el    = document.getElementById(map[saved] || 'interest_type_cod');
+    if (el) el.checked = true;
+  })();
+
+  /* Show save-success toast when redirected from a successful save */
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('saved') !== '1') return;
+    const url = new URL(window.location);
+    url.searchParams.delete('saved');
+    window.history.replaceState({}, '', url);
+    function tryToast(attempts) {
+      if (typeof window.showGlobalToast === 'function') {
+        window.showGlobalToast('Assessment saved successfully.', 'success');
+      } else if (attempts > 0) {
+        setTimeout(function () { tryToast(attempts - 1); }, 100);
+      }
+    }
+    tryToast(20);
+  })();
+
+  updateCompanyDeliveryDays();
+  recalc();
+})();
+</script>
+
+{% endblock %}

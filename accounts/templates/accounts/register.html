@@ -1,0 +1,116 @@
+{% extends 'accounts/baseaccount.html' %}
+{% load static %}
+
+{% block content %}
+<div class="auth-wrapper py-5" style="justify-content: flex-start;">
+
+  <div class="text-center mb-4">
+    <div class="auth-logo mb-1">RFQSYS</div>
+    <div class="auth-subtitle">Create your account</div>
+  </div>
+
+  <div class="card auth-card auth-card-wide">
+    <div class="card-body p-4">
+      <form action="{% url 'solicitations:register' %}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="user_type" value="client">
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small">First Name</label>
+            <input type="text" name="first_name" class="form-control" required>
+            {% if form.first_name.errors %}<div class="text-danger small">{{ form.first_name.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small">Last Name</label>
+            <input type="text" name="last_name" class="form-control" required>
+            {% if form.last_name.errors %}<div class="text-danger small">{{ form.last_name.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small">Email</label>
+            <input type="email" name="email" class="form-control" required>
+            {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small">Company Name</label>
+            <input type="text" name="companyName" class="form-control" maxlength="50" required>
+            {% if form.companyName.errors %}<div class="text-danger small">{{ form.companyName.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Phone</label>
+            <input type="text" name="phone" class="form-control" required>
+            {% if form.phone.errors %}<div class="text-danger small">{{ form.phone.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Fax</label>
+            <input type="text" name="fax" class="form-control">
+            {% if form.fax.errors %}<div class="text-danger small">{{ form.fax.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">CAGE Code</label>
+            <input type="text" name="cage" class="form-control">
+            {% if form.cage.errors %}<div class="text-danger small">{{ form.cage.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small">Address</label>
+            <input type="text" name="address" class="form-control" required>
+            {% if form.address.errors %}<div class="text-danger small">{{ form.address.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold small">Website</label>
+            <input type="text" name="website" class="form-control">
+            {% if form.website.errors %}<div class="text-danger small">{{ form.website.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Username</label>
+            <input type="text" name="username" class="form-control" required>
+            {% if form.username.errors %}<div class="text-danger small">{{ form.username.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Password</label>
+            <div class="input-group">
+              <input type="password" name="password1" id="id_password1" class="form-control" required>
+              <button class="btn btn-outline-secondary" type="button" onclick="togglePwd('id_password1','eye1')">
+                <i class="bi bi-eye" id="eye1"></i>
+              </button>
+            </div>
+            {% if form.password1.errors %}<div class="text-danger small">{{ form.password1.errors }}</div>{% endif %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold small">Confirm Password</label>
+            <div class="input-group">
+              <input type="password" name="password2" id="id_password2" class="form-control" required>
+              <button class="btn btn-outline-secondary" type="button" onclick="togglePwd('id_password2','eye2')">
+                <i class="bi bi-eye" id="eye2"></i>
+              </button>
+            </div>
+            {% if form.password2.errors %}<div class="text-danger small">{{ form.password2.errors }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-secondary text-white w-100">Register</button>
+        </div>
+        <div class="text-center mt-3">
+          <a href="{% url 'accounts:login-user' %}" class="small text-muted">Already have an account? Sign in</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function togglePwd(inputId, iconId) {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.replace('bi-eye', 'bi-eye-slash');
+  } else {
+    input.type = 'password';
+    icon.classList.replace('bi-eye-slash', 'bi-eye');
+  }
+}
+</script>
+{% endblock %}

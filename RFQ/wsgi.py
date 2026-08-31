@@ -1,0 +1,20 @@
+"""
+WSGI config for RFQ project.
+
+It exposes the WSGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/5.1/howto/deployment/wsgi/
+"""
+
+import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
+
+from RFQ import wsgi_static_patch  # noqa: E402
+
+wsgi_static_patch.apply()
+
+application = get_wsgi_application()

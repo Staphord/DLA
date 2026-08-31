@@ -1,0 +1,19 @@
+NEW RFQ CHAT MESSAGE
+
+Hello {{ recipient_name }},
+
+You have received a new message regarding RFQ-{{ rfq_id }} - {{ rfq_nomenclature }}
+
+From: {{ sender_name }}
+
+Message:
+{{ message_preview }}
+
+Please visit the following link to view the full message and respond:
+{{ chat_url }}
+
+Thank you,
+{{ company_name }}
+
+---
+This is an automated notification. Please do not reply to this email.

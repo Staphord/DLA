@@ -1,0 +1,161 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section>
+    <div class="d-flex justify-content-between mt-3">
+        <div class="">
+            Add New Cient...
+        </div>
+        <div class="">
+            
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <div class="card">
+            <div class="card-body">
+                <form action="" method="post" class="py-3" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="row my-2">
+                        <div class="col-md-6">
+                            <label for="">First Name:</label>
+                            {{form.first_name}}
+                            
+                            {% if form.first_name.errors %}
+                                <div class="text-danger">
+                                    {{ form.first_name.errors }}
+                                </div>
+                             {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="">Last Name:</label>
+                            {{form.last_name}}
+                            
+                            {% if form.address.errors %}
+                                <div class="text-danger">
+                                    {{ form.address.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">Email:</label>
+                            {{form.email}}
+                            
+                            {% if form.email.errors %}
+                                <div class="text-danger">
+                                    {{ form.email.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Phone:</label>
+                            {{form.phone}}
+                            
+                            {% if form.phone.errors %}
+                                <div class="text-danger">
+                                    {{ form.phone.errors }}
+                                </div>
+                                {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Company Name:</label>
+                            {{form.companyName}}
+                        </div>
+                    </div>
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">Address:</label>
+                            {{form.address}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">User Type:</label>
+                            {{form.user_type}}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Logo:</label>
+                            {{form.logo}}
+                        </div>
+                    </div>
+
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">Fax:</label>
+                            {{form.fax}}
+
+                            {% if form.fax.errors %}
+                                <div class="text-danger">
+                                    {{ form.fax.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Cage:</label>
+                            {{form.cage}}
+                            {% if form.cage.errors %}
+                                <div class="text-danger">
+                                    {{ form.cage.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Website:</label>
+                            {{form.website}}
+                            {% if form.website.errors %}
+                                <div class="text-danger">
+                                    {{ form.website.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row my-2">
+                        <div class="col-md-4">
+                            <label for="">User Name:</label>
+                            {{form.username}}
+
+                            {% if form.username.errors %}
+                                <div class="text-danger">
+                                    {{ form.username.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Password:</label>
+                            <input type="password" name="password1" class="form-control" value="{{ form.password1.value|default_if_none:'' }}">
+                            {% if form.password1.errors %}
+                                <div class="text-danger">
+                                    {{ form.password1.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label for="">Confirm Password:</label>
+                            <input type="password" name="password2" class="form-control" value="{{ form.password2.value|default_if_none:'' }}">
+                            {% if form.password2.errors %}
+                                <div class="text-danger">
+                                    {{ form.password2.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="my-3 d-flex justify-content-end gap-3">
+                        <a href="{% url 'solicitations:clients' %}" class="btn btn-danger">Cancel</a>
+                        <button type="submit" class="btn mybg hoverbg text-white">Add Client</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock content %}
+    

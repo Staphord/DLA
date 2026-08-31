@@ -1,0 +1,263 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+  <title>RFQ || Automated Program</title>
+  <meta content="" name="description">
+  <meta content="" name="keywords">
+  <link rel="shortcut icon" href="#" type="image/x-icon">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Jost:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="{% static 'solicitations/assets/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+  <link href="{% static 'solicitations/assets/css/style.css' %}" rel="stylesheet">
+</head>
+
+<body>
+    <!-- ======= Top Bar ======= -->
+    <div id="topbar" class="d-flex align-items-center header-top fixed-top py-2">
+        <div class="container d-flex justify-content-between">
+            <div class="contact-info align-items-center">
+                <a class="text-white" href="#">Welcome to RFQ Automated Program</a>
+            </div>
+            <div class="d-none d-lg-flex gap-3 social-links align-items-center">
+                <a href="mailto:support@rfqsys.com" class="text-white">Support: support@rfqsys.com</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======= Header ======= -->
+    <header id="header" class="header-top fixed-top py-3 mt-4 pt-4 bg-white mb-3">
+        <div class="container d-flex align-items-center">
+            <h6 class="me-auto py-2"><a class='fs-3 bold logo' href="#">LOGO</a></h6>
+            <nav id="navbar" class="navbar">
+                <ul>
+                    <i class="bi bi-list mobile-nav-toggle text-warning"></i>
+                </ul>
+            </nav>
+        </div>
+    </header>
+        
+    <section class="mt-5 pt-5 mb-4 pb-4">
+        <div class="container bg-light mt-3 rounded-2 p-3">
+
+            <!-- Success Message -->
+            <div class="mt-3" id="success-message" style="display: none;">
+                <div class="d-flex mar car justify-content-center ms-1 me-1 mt-0 alert alert-success alert-dismissible fade show" role="alert">
+                    Reply submitted successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            </div>
+
+            {% if existing_reply %}
+            <div class="mt-3" id="warning-message">
+                <div class="d-flex mar car justify-content-center ms-1 me-1 mt-0 alert alert-warning alert-dismissible fade show" role="alert">
+                    You have already submitted a reply for this item. Please continue to the next item or close this window.
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if is_consolidated %}
+            <div class="alert alert-info">
+                <strong>Multiple Items:</strong> Please submit pricing for item {{ item_index|add:"1" }} of {{ total_items }}
+                <div class="progress mt-2">
+                    <div class="progress-bar" role="progressbar" style="width: {% widthratio item_index|add:"1" total_items 100 %}%" aria-valuenow="{{ item_index|add:"1" }}" aria-valuemin="0" aria-valuemax="{{ total_items }}">
+                        Item {{ item_index|add:"1" }}/{{ total_items }}
+                    </div>
+                </div>
+                
+                <!-- Item Status Indicators -->
+                <div class="mt-2">
+                    {% for solicitation in all_solicitations %}
+                        {% if forloop.counter0 == item_index %}
+                            <span class="badge bg-primary">Item {{ forloop.counter }}</span>
+                        {% else %}
+                            {% with replied=False %}
+                                {% for reply in user.rfq_item_replies.all %}
+                                    {% if reply.solicitation.id == solicitation.id and reply.rfq.id == rfq.id %}
+                                        {% with replied=True %}
+                                            <span class="badge bg-success">✓ Item {{ forloop.parentloop.parentloop.counter }}</span>
+                                        {% endwith %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% if not replied %}
+                                    <span class="badge bg-secondary">Item {{ forloop.counter }}</span>
+                                {% endif %}
+                            {% endwith %}
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="fs-6">
+                        {% if is_consolidated %}
+                        Product Details - Item {{ item_index|add:"1" }} of {{ total_items }} (RFQ {{ rfq.unique_id }})
+                        {% else %}
+                        Product Detail
+                        {% endif %}
+                    </div>
+                    <hr>
+                    
+                    <!-- Current Item -->
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p><strong>Item Name:</strong> {{ current_solicitation.nomenclature }}</p>
+                            <p><strong>Quantity:</strong> {{ current_solicitation.quantity }}</p>
+                            <p><strong>Part Number:</strong> {{ current_solicitation.part_number }}</p>
+                            <p><strong>NSN:</strong> {{ current_solicitation.NSN }}</p>
+                            {% if rfq.oem %}
+                            <hr>
+                            <p><strong>OEM:</strong> {{ rfq.oem.name }}</p>
+                            <p><strong>CAGE Code:</strong> {{ rfq.oem.cage }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="text-center text-muted fs-6">
+                                {% if is_consolidated %}
+                                Please provide a quote for this specific item. You'll be prompted for additional items afterward.
+                                {% else %}
+                                Fill out this form and if the cost is competitive we will be back to you as soon as possible
+                                {% endif %}
+                            </div>
+                            
+                            {% if is_consolidated and not is_last_item %}
+                            <div class="alert alert-info mt-2">
+                                <small><i class="bi bi-info-circle"></i> Note: You'll be able to add notes, select delivery mode, and upload documents on the final item.</small>
+                            </div>
+                            {% endif %}
+                            
+                            <form method="post" id="form-id" enctype="multipart/form-data">
+                                {% csrf_token %}
+                                <div class="my-1">
+                                  <label for="id_price">Price:</label>
+                                  <input type="number" name="price" class="form-control" step="0.01" required="" id="id_price" {% if existing_reply %}disabled value="{{ existing_reply.price }}"{% endif %}>
+                                </div>
+                                
+                                <!-- Only show these fields if it's the last item or not a consolidated RFQ -->
+                                {% if not is_consolidated or is_last_item %}
+                                <div class="my-1">
+                                  <label for="id_delivery_mode">Delivery mode:</label>
+                                  <select name="delivery_mode" class="form-select" id="id_delivery_mode" {% if existing_reply %}disabled{% endif %}>
+                                    <option value="Free" {% if not existing_reply or existing_reply.delivery_mode == 'Free' %}selected=""{% endif %}>Free</option>
+                                    <option value="Paid" {% if existing_reply and existing_reply.delivery_mode == 'Paid' %}selected=""{% endif %}>Paid</option>
+                                  </select>
+                                </div>
+                                <div class="my-1">
+                                  <label for="id_short_note">Short note:</label>
+                                  <textarea 
+                                    name="short_note" cols="40" rows="3" class="form-control" placeholder="Add an optional note" maxlength="1000" id="id_short_note" {% if existing_reply %}disabled{% endif %}>{% if existing_reply %}{{ existing_reply.short_note }}{% endif %}</textarea>
+                                </div>
+                                <div class="my-1">
+                                  <label for="id_document">Document:</label>
+                                  <input type="file" name="document" class="form-control" id="id_document" {% if existing_reply %}disabled{% endif %}>
+                                  {% if existing_reply and existing_reply.document %}
+                                  <small class="text-muted">Document already uploaded</small>
+                                  {% endif %}
+                                </div>
+                                {% else %}
+                                <!-- Hidden fields for non-last items -->
+                                <input type="hidden" name="delivery_mode" value="Free">
+                                <input type="hidden" name="short_note" value="">
+                                {% endif %}
+                                
+                                {% if existing_reply %}
+                                    {% if is_consolidated and not is_last_item %}
+                                        <a href="?rfq_unique_id={{ rfq.unique_id }}&item_index={{ item_index|add:'1' }}" class="btn btn-primary text-white w-100">Continue to Next Item</a>
+                                    {% else %}
+                                        <button type="button" class="btn mybg myhover text-white w-100" onclick="window.close()">Close Window</button>
+                                    {% endif %}
+                                {% else %}
+                                    <button type="submit" class="btn mybg myhover text-white w-100">
+                                        {% if is_consolidated and not is_last_item %}
+                                        Submit & Continue to Next Item
+                                        {% else %}
+                                        Submit Reply
+                                        {% endif %}
+                                    </button>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer id="footer" class="footer">
+        <div class="copyright">
+            &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+        </div>
+        <div class="credits">
+            Designed by <a href="#">Gil Tech</a>
+        </div>
+    </footer>
+    
+    <!-- Vendor JS Files -->
+    <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+
+    <!-- JavaScript to Handle Form Submission and Tab Close -->
+    <script>
+        document.getElementById('form-id').addEventListener('submit', function (event) {
+            event.preventDefault(); // Prevent default submission behavior
+
+            const formData = new FormData(this);
+
+            fetch(this.action, {
+                method: this.method,
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (data.next_item) {
+                        // Redirect to the next item
+                        window.location.href = data.next_url;
+                    } else {
+                        // Last item, show success message and close
+                        const successMessage = document.getElementById('success-message');
+                        successMessage.style.display = 'block';
+                        this.style.display = 'none';
+                        setTimeout(() => {
+                            window.close();
+                        }, 3000);
+                    }
+                } else {
+                    alert('Error: ' + JSON.stringify(data.errors));
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+
+{% if existing_reply and not is_consolidated %}
+<script>
+  setTimeout(() => {
+    window.close();
+  }, 5000);
+</script>
+{% endif %}
+</body>
+</html>

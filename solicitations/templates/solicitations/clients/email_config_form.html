@@ -1,0 +1,597 @@
+{% extends 'solicitations/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Email Configuration</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Essential Fields -->
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        SMTP Host *
+                                        <small class="text-muted">(e.g., mail.yourdomain.com)</small>
+                                    </label>
+                                    {{ form.email_host }}
+                                    {% if form.email_host.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.email_host.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        Port *
+                                        <small class="text-muted">(Usually 587)</small>
+                                    </label>
+                                    {{ form.email_port }}
+                                    {% if form.email_port.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.email_port.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Your Email Address *
+                                <small class="text-muted">(This will be used as sender)</small>
+                            </label>
+                            {{ form.default_from_email }}
+                            {% if form.default_from_email.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.default_from_email.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">
+                                <small>This email will be used as the sender address</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Email Password *
+                            </label>
+                            <div class="input-group">
+                                {{ form.email_host_password }}
+                                <button class="btn btn-secondary password-toggle-btn" type="button" data-target="{{ form.email_host_password.id_for_label }}">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            {% if form.email_host_password.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.email_host_password.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">
+                                <small>
+                                    <strong>Gmail users:</strong> You need to use an "App Password" instead of your regular password. 
+                                    <a href="https://support.google.com/accounts/answer/185833" target="_blank">
+                                        Learn how to create one
+                                    </a>
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- Email Interval Settings -->
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Email Sending Interval (seconds) *
+                                <small class="text-muted">(3-240 seconds)</small>
+                            </label>
+                            {{ form.email_interval_seconds }}
+                            {% if form.email_interval_seconds.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.email_interval_seconds.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="form-text">
+                                <small>
+                                    Time delay between sending emails to different recipients. 
+                                    Longer intervals help avoid being flagged as spam.
+                                    <span id="interval-display" class="text-primary fw-bold"></span>
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- Sent Folder Settings -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ form.save_to_sent_folder }}
+                                <label class="form-check-label">
+                                    <i class="bi bi-folder-plus me-2"></i>Save to Sent Folder
+                                </label>
+                            </div>
+                            {% if form.save_to_sent_folder.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.save_to_sent_folder.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- IMAP Settings (shown when Save to Sent Folder is enabled) -->
+                        <div class="sent-folder-setting">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            {{ form.custom_imap_host.label }}
+                                            <small class="text-muted">(Optional - Auto-detected)</small>
+                                        </label>
+                                        {{ form.custom_imap_host }}
+                                        {% if form.custom_imap_host.errors %}
+                                            <div class="text-danger">
+                                                {% for error in form.custom_imap_host.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                        <div class="form-text">
+                                            <small>{{ form.custom_imap_host.help_text }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            {{ form.custom_imap_port.label }}
+                                        </label>
+                                        {{ form.custom_imap_port }}
+                                        {% if form.custom_imap_port.errors %}
+                                            <div class="text-danger">
+                                                {% for error in form.custom_imap_port.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    {{ form.custom_sent_folder.label }}
+                                    <small class="text-muted">(Optional - Auto-detected)</small>
+                                </label>
+                                {{ form.custom_sent_folder }}
+                                {% if form.custom_sent_folder.errors %}
+                                    <div class="text-danger">
+                                        {% for error in form.custom_sent_folder.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <div class="form-text">
+                                    <small>{{ form.custom_sent_folder.help_text }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Security Settings -->
+                        <div class="card bg-light mb-3">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    Security Settings
+                                </h6>
+                                <div class="mb-3 form-check">
+                                    {{ form.email_use_tls }}
+                                    <label class="form-check-label">
+                                        Use TLS (Transport Layer Security)
+                                    </label>
+                                    {% if form.email_use_tls.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.email_use_tls.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <div class="form-text">
+                                        <small class="text-success">
+                                            TLS is enabled for secure email transmission (recommended for all providers)
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Hidden field for email_host_user -->
+                        <div style="display: none;">
+                            {{ form.email_host_user }}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                Save Configuration
+                            </button>
+                            <a href="{% url 'solicitations:user-profile' client.id %}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container - Fixed positioning -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="toast align-items-center text-white border-0 {% if message.tags == 'success' %}bg-success{% elif message.tags == 'error' %}bg-danger{% elif message.tags == 'warning' %}bg-warning text-dark{% else %}bg-info{% endif %}" 
+                 role="alert" aria-live="assertive" aria-atomic="true" id="toast-{{ forloop.counter }}">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        {% if message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'error' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                    </div>
+                    <button type="button" class="btn-close {% if message.tags == 'warning' %}btn-close-dark{% else %}btn-close-white{% endif %} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+<script>
+// Password toggle functionality
+function togglePassword(fieldId, button) {
+    console.log('togglePassword called with fieldId:', fieldId);
+    
+    const passwordField = document.getElementById(fieldId);
+    const icon = button.querySelector('i');
+    
+    if (!passwordField) {
+        console.error('Password field not found with ID:', fieldId);
+        return;
+    }
+    
+    if (!icon) {
+        console.error('Icon not found in button');
+        return;
+    }
+    
+    console.log('Current field type:', passwordField.type);
+    
+    if (passwordField.type === 'password') {
+        passwordField.type = 'text';
+        icon.classList.remove('bi-eye');
+        icon.classList.add('bi-eye-slash');
+        button.setAttribute('title', 'Hide password');
+        console.log('Password shown');
+    } else {
+        passwordField.type = 'password';
+        icon.classList.remove('bi-eye-slash');
+        icon.classList.add('bi-eye');
+        button.setAttribute('title', 'Show password');
+        console.log('Password hidden');
+    }
+}
+
+// Function to toggle sent folder settings visibility
+function toggleSentFolderSettings() {
+    const saveToSentCheckbox = document.querySelector('#id_save_to_sent_folder');
+    const sentFolderSettings = document.querySelectorAll('.sent-folder-setting');
+    
+    if (saveToSentCheckbox) {
+        const isChecked = saveToSentCheckbox.checked;
+        
+        sentFolderSettings.forEach(function(setting) {
+            if (isChecked) {
+                setting.style.display = 'block';
+                setting.style.opacity = '1';
+            } else {
+                setting.style.display = 'none';
+                setting.style.opacity = '0.5';
+            }
+        });
+    }
+}
+
+// Main DOMContentLoaded event listener
+document.addEventListener('DOMContentLoaded', function() {
+    const defaultFromEmail = document.querySelector('#id_default_from_email');
+    const emailHostUser = document.querySelector('#id_email_host_user');
+    const emailIntervalInput = document.querySelector('#id_email_interval_seconds');
+    const intervalDisplay = document.querySelector('#interval-display');
+    
+    // Enhanced password toggle setup
+    const passwordToggleButtons = document.querySelectorAll('.password-toggle-btn');
+    console.log('Found', passwordToggleButtons.length, 'password toggle buttons');
+    
+    passwordToggleButtons.forEach(function(button) {
+        const targetId = button.getAttribute('data-target');
+        console.log('Setting up toggle for field:', targetId);
+        
+        // Set initial tooltip
+        button.setAttribute('title', 'Show password');
+        
+        // Add click event listener
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Button clicked, target ID:', targetId);
+            togglePassword(targetId, this);
+        });
+    });
+    
+    // Function to format interval display
+    function updateIntervalDisplay(seconds) {
+        if (!seconds || isNaN(seconds)) {
+            intervalDisplay.textContent = '';
+            return;
+        }
+        
+        const sec = parseInt(seconds);
+        if (sec < 60) {
+            intervalDisplay.textContent = `(${sec} seconds)`;
+        } else {
+            const minutes = Math.floor(sec / 60);
+            const remainingSeconds = sec % 60;
+            if (remainingSeconds === 0) {
+                intervalDisplay.textContent = `(${minutes} minute${minutes !== 1 ? 's' : ''})`;
+            } else {
+                intervalDisplay.textContent = `(${minutes}m ${remainingSeconds}s)`;
+            }
+        }
+    }
+    
+    // Initialize interval display
+    if (emailIntervalInput) {
+        updateIntervalDisplay(emailIntervalInput.value);
+        
+        // Update display when user changes interval
+        emailIntervalInput.addEventListener('input', function() {
+            updateIntervalDisplay(this.value);
+        });
+    }
+    
+    // Sync email_host_user with default_from_email
+    if (defaultFromEmail && emailHostUser) {
+        // Sync on page load
+        if (defaultFromEmail.value) {
+            emailHostUser.value = defaultFromEmail.value;
+        }
+        
+        // Sync when user changes the email
+        defaultFromEmail.addEventListener('input', function() {
+            emailHostUser.value = defaultFromEmail.value;
+        });
+        
+        defaultFromEmail.addEventListener('blur', function() {
+            emailHostUser.value = defaultFromEmail.value;
+        });
+    }
+    
+    // Initialize sent folder settings toggle
+    const saveToSentCheckbox = document.querySelector('#id_save_to_sent_folder');
+    if (saveToSentCheckbox) {
+        // Set initial state
+        toggleSentFolderSettings();
+        
+        // Add event listener for changes
+        saveToSentCheckbox.addEventListener('change', toggleSentFolderSettings);
+    }
+    
+    // Check if Bootstrap is loaded
+    if (typeof bootstrap === 'undefined') {
+        console.error('Bootstrap JavaScript is not loaded!');
+        // Fallback: Show a simple alert
+        {% if messages %}
+            {% for message in messages %}
+                alert('{{ message.tags|title }}: {{ message|escapejs }}');
+            {% endfor %}
+        {% endif %}
+        return;
+    }
+    
+    // Initialize and show all toasts
+    const toastElements = document.querySelectorAll('.toast');
+    console.log('Found', toastElements.length, 'toast elements');
+    
+    if (toastElements.length > 0) {
+        let redirectUrl = null;
+        
+        // Check if we need to redirect after showing toast
+        {% if success_redirect %}
+            redirectUrl = '{{ redirect_url }}';
+        {% endif %}
+        
+        toastElements.forEach(function(toastElement, index) {
+            try {
+                const toast = new bootstrap.Toast(toastElement, {
+                    autohide: true,
+                    delay: 3000  // 3 seconds
+                });
+                
+                // Add event listener for when toast is hidden
+                if (redirectUrl && toastElement.classList.contains('bg-success')) {
+                    toastElement.addEventListener('hidden.bs.toast', function() {
+                        console.log('Success toast hidden, redirecting...');
+                        window.location.href = redirectUrl;
+                    });
+                }
+                
+                console.log('Showing toast', index + 1);
+                toast.show();
+                
+                // Fallback redirect in case toast events don't work
+                if (redirectUrl && toastElement.classList.contains('bg-success')) {
+                    setTimeout(function() {
+                        window.location.href = redirectUrl;
+                    }, 3500); // Slightly longer than toast delay
+                }
+                
+            } catch (error) {
+                console.error('Error showing toast:', error);
+                // Fallback to alert
+                const message = toastElement.querySelector('.toast-body').textContent;
+                alert(message);
+                
+                // Still redirect if needed
+                if (redirectUrl) {
+                    setTimeout(function() {
+                        window.location.href = redirectUrl;
+                    }, 1000);
+                }
+            }
+        });
+    } else {
+        console.log('No toast elements found');
+        
+        // If no toasts but we need to redirect, do it immediately
+        {% if success_redirect %}
+            window.location.href = '{{ redirect_url }}';
+        {% endif %}
+    }
+});
+</script>
+
+<style>
+.readonly-field {
+    background-color: #f8f9fa !important;
+    cursor: not-allowed;
+}
+
+.form-control:disabled, 
+.form-control[readonly] {
+    background-color: #e9ecef;
+    opacity: 1;
+}
+
+.alert-info {
+    border-left: 4px solid #0dcaf0;
+}
+
+.card.bg-light {
+    border: 1px solid #dee2e6;
+}
+
+.btn {
+    border-radius: 0.375rem;
+}
+
+.form-text {
+    margin-top: 0.25rem;
+}
+
+/* Toast Styling */
+.toast-container {
+    z-index: 1055 !important;
+}
+
+.toast {
+    min-width: 300px;
+    max-width: 400px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    margin-bottom: 0.5rem;
+}
+
+.toast-body {
+    font-weight: 500;
+    padding: 0.75rem;
+}
+
+/* Ensure toast colors work */
+.toast.bg-success {
+    background-color: #198754 !important;
+}
+
+.toast.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+.toast.bg-info {
+    background-color: #0dcaf0 !important;
+}
+
+/* Animation for toast appearance */
+.toast.showing {
+    opacity: 1;
+}
+
+.toast.show {
+    opacity: 1;
+}
+
+/* Styling for interval display */
+#interval-display {
+    font-weight: bold;
+}
+
+/* Password toggle button styling */
+.input-group .btn-outline-secondary {
+    border-left: 0;
+    cursor: pointer;
+}
+
+.input-group .form-control:focus + .btn-outline-secondary {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Ensure password fields have proper styling */
+.input-group .form-control {
+    border-right: 0;
+}
+
+.input-group .form-control:focus {
+    border-right: 0;
+    box-shadow: none;
+}
+
+/* Sent folder settings animation */
+.sent-folder-setting {
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+/* Enhanced form field focus states */
+.form-control:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+</style>
+{% endblock %}

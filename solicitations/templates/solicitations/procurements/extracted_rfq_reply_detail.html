@@ -1,0 +1,315 @@
+{% extends 'solicitations/base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block content %}
+
+<section class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <p class="text-muted text-uppercase small mb-1">RFQ Reply Summary</p>
+            <h4 class="fw-semibold mb-0">
+                {{ rfq_reply.rfq_unique_id|default:"No RFQ ID" }}
+            </h4>
+            <small class="text-muted">OEM quotation aligned with original solicitation context.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'solicitations:edit-replied-rfq' rfq_reply.id %}" class="btn mybg myhover text-white">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            <a href="{% url 'solicitations:replied-rfq' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small mb-3">Pricing Snapshot</h6>
+                    <div class="border rounded-3 p-3 bg-light">
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                            <span class="text-muted">Unit Price</span>
+                            <span class="fw-semibold">${{ rfq_reply.unit_price|default_if_none:"0.00"|floatformat:2 }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                            <span class="text-muted">Total Price</span>
+                            <span class="fw-semibold text-success">${{ rfq_reply.total_price|default:rfq_reply.calculated_total_price|default_if_none:"0.00"|floatformat:2|intcomma }}</span>
+                        </div>
+                        {% if rfq_reply.total_cost_with_fees %}
+                        <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                            <span class="fw-semibold">Total with Fees</span>
+                            <span class="fw-bold text-success fs-6">${{ rfq_reply.total_cost_with_fees|floatformat:2|intcomma }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if rfq_reply.additional_costs_summary %}
+                    <div class="mt-4">
+                        <h6 class="text-muted text-uppercase small mb-3">
+                            <i class="bi bi-receipt me-1"></i>Additional Costs
+                        </h6>
+                        <div class="border rounded-3 p-3 bg-light">
+                            {% for cost_name, cost_value in rfq_reply.additional_costs_summary.items %}
+                            <div class="d-flex justify-content-between align-items-center mb-2 {% if not forloop.last %}pb-2 border-bottom{% endif %}">
+                                <span class="text-muted small">{{ cost_name }}</span>
+                                <span class="fw-semibold text-success">${{ cost_value|floatformat:2 }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="mt-4 border-top pt-3">
+                        <small class="text-muted text-uppercase d-block">Received</small>
+                        <p class="fw-semibold mb-2">{{ rfq_reply.received_date|date:"M d, Y"|default:rfq_reply.created_at|date:"M d, Y" }}</p>
+                        <small class="text-muted text-uppercase d-block">OEM Contact</small>
+                        <p class="fw-semibold mb-0">{{ rfq_reply.oem_name|default:"Unknown" }}</p>
+                        <p class="text-muted mb-0">{{ rfq_reply.replied_email|default:"Not provided" }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-muted text-uppercase small mb-0">Reply Details</h6>
+                        <span class="badge bg-info text-dark">{{ rfq_reply.nomenclature|default:"No description" }}</span>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">RFQ ID</small>
+                            <p class="fw-semibold">{{ rfq_reply.rfq_unique_id|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Solicitation #</small>
+                            <p class="fw-semibold">
+                                {# Priority: original_solicitation (found via helper) -> rfq.solicitation -> reply field #}
+                                {% if original_solicitation %}
+                                    {{ original_solicitation.solicitation|default:rfq_reply.solicitation_number|default:"-" }}
+                                {% elif rfq_reply.rfq and rfq_reply.rfq.solicitation %}
+                                    {{ rfq_reply.rfq.solicitation.solicitation|default:rfq_reply.solicitation_number|default:"-" }}
+                                {% else %}
+                                    {{ rfq_reply.solicitation_number|default:"-" }}
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">NSN</small>
+                            <p class="fw-semibold">
+                                {% if original_solicitation %}
+                                    {{ original_solicitation.NSN|default:rfq_reply.nsn|default:"-" }}
+                                {% elif rfq_reply.rfq and rfq_reply.rfq.solicitation %}
+                                    {{ rfq_reply.rfq.solicitation.NSN|default:rfq_reply.nsn|default:"-" }}
+                                {% else %}
+                                    {{ rfq_reply.nsn|default:"-" }}
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <hr class="text-muted my-3">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Part Number</small>
+                            <p class="fw-semibold">
+                                {% if original_solicitation %}
+                                    {{ original_solicitation.part_number|default:rfq_reply.part_number|default:"-" }}
+                                {% elif rfq_reply.rfq and rfq_reply.rfq.solicitation %}
+                                    {{ rfq_reply.rfq.solicitation.part_number|default:rfq_reply.part_number|default:"-" }}
+                                {% else %}
+                                    {{ rfq_reply.part_number|default:"-" }}
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Quantity</small>
+                            <p class="fw-semibold">
+                                {% if original_solicitation %}
+                                    {{ original_solicitation.quantity|default:rfq_reply.quantity|default:"-" }}
+                                {% elif rfq_reply.rfq and rfq_reply.rfq.solicitation %}
+                                    {{ rfq_reply.rfq.solicitation.quantity|default:rfq_reply.quantity|default:"-" }}
+                                {% else %}
+                                    {{ rfq_reply.quantity|default:"-" }}
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Unit</small>
+                            <p class="fw-semibold">
+                                {% if original_solicitation %}
+                                    {{ original_solicitation.unit|default:rfq_reply.unit|default:"-"|intcomma }}
+                                {% elif rfq_reply.rfq and rfq_reply.rfq.solicitation %}
+                                    {{ rfq_reply.rfq.solicitation.unit|default:rfq_reply.unit|default:"-"|intcomma }}
+                                {% else %}
+                                    {{ rfq_reply.unit|default:"-"|intcomma }}
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Received</small>
+                            <p class="fw-semibold">{{ rfq_reply.received_date|date:"M d, Y"|default:"-" }}</p>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <small class="text-muted text-uppercase d-block">Nomenclature</small>
+                            <p class="fw-semibold mb-0">
+                                {% if original_solicitation %}
+                                    {{ original_solicitation.nomenclature|default:rfq_reply.nomenclature|default:"Not specified" }}
+                                {% elif rfq_reply.rfq and rfq_reply.rfq.solicitation %}
+                                    {{ rfq_reply.rfq.solicitation.nomenclature|default:rfq_reply.nomenclature|default:"Not specified" }}
+                                {% else %}
+                                    {{ rfq_reply.nomenclature|default:"Not specified" }}
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if original_solicitation %}
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-muted text-uppercase small mb-0">Original Solicitation</h6>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">CAGE</small>
+                            <p class="fw-semibold">{{ original_solicitation.cage|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Solicitation #</small>
+                            <p class="fw-semibold">{{ original_solicitation.solicitation|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Part Number</small>
+                            <p class="fw-semibold">{{ original_solicitation.part_number|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Issued Date</small>
+                            <p class="fw-semibold">{{ original_solicitation.issued_date|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Return By</small>
+                            <p class="fw-semibold text-danger">{{ original_solicitation.return_by_date|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Inspection</small>
+                            <p class="fw-semibold">{{ original_solicitation.inspection_point|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Acceptance</small>
+                            <p class="fw-semibold">{{ original_solicitation.acceptance_point|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">FOB</small>
+                            <p class="fw-semibold">{{ original_solicitation.deliver_fob|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Delivery Days</small>
+                            <p class="fw-semibold">{{ original_solicitation.deliver_days|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Status</small>
+                            <p class="fw-semibold">{{ original_solicitation.status|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Line Number</small>
+                            <p class="fw-semibold">
+                                {{ original_solicitation.solicitation_line_number|default:"-" }}
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Purchase Request #</small>
+                            <p class="fw-semibold">
+                                {{ original_solicitation.purchase_request_number|default:original_solicitation.pr|default:"-" }}
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Set Aside</small>
+                            <p class="fw-semibold">
+                                {% if original_solicitation.is_set_aside %}
+                                    Yes
+                                {% else %}
+                                    No
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">NSN</small>
+                            <p class="fw-semibold">{{ original_solicitation.NSN|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Unit</small>
+                            <p class="fw-semibold">{{ original_solicitation.unit|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Quantity</small>
+                            <p class="fw-semibold">{{ original_solicitation.quantity|default:"-" }}</p>
+                        </div>
+                        <div class="col-4 col-md-4">
+                            <small class="text-muted text-uppercase d-block">Scraped Date</small>
+                            <p class="fw-semibold">{{ original_solicitation.scraped_date|date:"M d, Y"|default:"-" }}</p>
+                        </div>
+                        <div class="col-4 col-md-8">
+                            <small class="text-muted text-uppercase d-block">Nomenclature</small>
+                            <p class="fw-semibold mb-0">{{ original_solicitation.nomenclature|default:"-" }}</p>
+                        </div>
+                    </div>
+                    <div class="mt-3 border rounded-3 p-3 bg-light">
+                        <small class="text-muted text-uppercase d-block mb-2">Buyer Info</small>
+                        <p class="mb-0">{{ original_solicitation.buyer_info|default:"No buyer information provided." }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small mb-3">OEM Profile</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Organization</small>
+                            <p class="fw-semibold">{{ original_solicitation.organization_name|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Email</small>
+                            <p class="fw-semibold">{{ original_solicitation.email|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Phone</small>
+                            <p class="fw-semibold">{{ original_solicitation.phone|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Fax</small>
+                            <p class="fw-semibold">{{ original_solicitation.fax|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">City</small>
+                            <p class="fw-semibold">{{ original_solicitation.city|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted text-uppercase d-block">Postal Code</small>
+                            <p class="fw-semibold">{{ original_solicitation.postal_code|default:"-" }}</p>
+                        </div>
+                        <div class="col-12">
+                            <small class="text-muted text-uppercase d-block">Street</small>
+                            <p class="fw-semibold mb-0">{{ original_solicitation.street_name|default:"-" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-warning border-0 shadow-sm">
+                <i class="bi bi-exclamation-triangle me-2"></i> This reply has not been matched to a solicitation yet.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{% endblock content %}

@@ -1,0 +1,1879 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+<section>
+    <!-- ========== HEADER SECTION ========== -->
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="mt-3">
+        </div>
+        <div class="d-flex gap-3">
+            <!-- Send RFQs Button -->
+            <a href="#" class="btn mybg hoverbg text-white" id="sendRfqsButton">
+                Send RFQs
+            </a>
+            <!-- NEW: Stop Processing Button -->
+            <button id="stopProcessingButton" class="btn btn-danger" style="display: none;">
+                <i class="bi bi-stop-circle"></i> Stop Processing
+            </button>
+            <a href="{% url 'solicitations:solicitations' %}" class="btn bg-secondary text-white">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Search Alert -->
+    <div class="mt-3">
+        {% if mysearch %}
+        <div class="d-flex mar car justify-content-center ms-1 me-1 mt-0 alert alert-warning alert-dismissible fade show" role="alert">
+            You searched for <span class="badge mt-1 bg-warning ms-2">{{ mysearch }}.</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ========== STATUS BAR ========== -->
+    <div class="">
+        Total Solicitations <span class="badge bg-light text-dark" id="totalSolicitationsCount">{{ total_solicitations }}</span> 
+        <!-- Show selected count when items are selected -->
+        <span id="selectedCount" class="badge bg-primary ms-2" style="display: none;">0 selected</span>
+        <!-- Processing count will be added here dynamically -->
+    </div>
+
+    <div class="my-4">
+        <div class="card">
+            <div class="card-body my-3">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover my-3" id="solicitationsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>
+                                    <input type="checkbox" class="form-check-input fs-5" id="selectAll">
+                                    <span class="ms-2 small"></span>
+                                </th>
+                                <th class="text-secondary">Status</th>
+                                <th class="text-secondary">Cage</th>
+                                <th class="text-secondary">Nomenclature</th>
+                                <th class="text-secondary">Quantity</th>
+                                <th class="text-secondary">NSN</th>
+                                <th class="text-secondary">Unit</th>
+                                <th class="text-secondary">Solicitation</th>
+                                <th class="text-secondary">Issued</th>
+                                <th class="text-secondary">Return</th>
+                                {% if user.user_type == 'admin' %}
+                                <th class="text-secondary text-center">Actions</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody id="solicitationsTableBody">
+                            {% for solicitation in data %}
+                            <tr id="row-{{ solicitation.id }}" 
+                                {% if solicitation.oem_disabled %}
+                                    class="table-danger" style="cursor: not-allowed;"
+                                {% elif solicitation.email_sent %}
+                                    class="table-success" style="cursor: not-allowed;"
+                                {% else %}
+                                    class="table-light" style="cursor: pointer;" onclick="location.href='{% url 'solicitations:solicitation-detail' solicitation.id %}';"
+                                {% endif %}>
+                                
+                                <!-- Checkbox Column -->
+                                <td>
+                                    {% if solicitation.oem_disabled or solicitation.email_sent %}
+                                        <input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();" disabled> 
+                                    {% else %}
+                                        <input type="checkbox" class="rowCheckbox form-check-input fs-5" data-id="{{ solicitation.id }}" onclick="event.stopPropagation();">
+                                    {% endif %}
+                                </td>
+
+                                <!-- Status Column -->
+                                <td>
+                                    {% if solicitation.oem_disabled %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i> Disabled
+                                        </span>
+                                    {% elif solicitation.email_sent %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Sent
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary" id="status-badge-{{ solicitation.id }}">
+                                            <i class="bi bi-circle"></i> Ready
+                                        </span>
+                                    {% endif %}
+                                </td>
+
+                                <!-- Data Columns -->
+                                <td>{{ solicitation.cage }}</td>
+                                <td>{{ solicitation.nomenclature|title }}</td>
+                                <td>{{ solicitation.quantity }}</td>
+                                <td>{{ solicitation.NSN }}</td>
+                                <td>{{ solicitation.unit }}</td>
+                                <td>{{ solicitation.solicitation }}</td>
+                                <td>{{ solicitation.issued_date }}</td>
+                                <td>{{ solicitation.return_by_date }}</td>
+
+                                <!-- Actions Column -->
+                                {% if user.user_type == 'admin' %}
+                                <td>
+                                    {% if not solicitation.email_sent %}
+                                    <div class="dropdown text-center">
+                                        <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
+                                            <i class="bi bi-caret-down-fill"></i>
+                                        </a>
+                                        <ul class="dropdown-menu">
+                                            <li>
+                                                <a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{solicitation.id}}" onclick="event.stopPropagation();">
+                                                    Delete
+                                                </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    {% else %}
+                                    <div class="text-center text-muted">
+                                        <i class="bi bi-lock"></i>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ========== MODALS ========== -->
+<!-- Stop Processing Confirmation Modal -->
+<div class="modal fade" id="stopProcessingModal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="stopProcessingModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Are you sure you want to stop RFQ processing?</strong>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmStopProcessingButton">Yes, Stop Processing</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- Delete Solicitation Modals -->
+{% for solicitation in data %}
+<div class="modal fade" id="deleteSent-{{solicitation.id}}" tabindex="-1" data-bs-backdrop="static" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this Solicitation?</p>
+                <form method="POST" action="{% url 'solicitations:delete-solicitation' solicitation.id %}">
+                    {% csrf_token %}
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                        <button type="submit" class="btn btn-danger">Yes, Delete</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Progress Modal -->
+<div class="modal fade" id="progressModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="progressModalLabel">Processing RFQs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="location.reload();"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="progress" id="progressBarContainer">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="progressBar">0%</div>
+                </div>
+                <div id="status" class="fs-6 mt-3">Sending RFQs, please wait...</div>
+                <div id="processingDetails" class="small text-muted mt-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="selectToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                Please select at least one solicitation.
+            </div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Email Preview Modal -->
+<div class="modal fade" id="previewMail" tabindex="-1" aria-labelledby="previewMailLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-center" id="previewMailLabel">Mail Sample that will be delivered to OEM</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Configured email template (from Email Template Config); shown when backend returns html -->
+                <div id="previewMailConfiguredHtml" class="border rounded p-2 bg-light" style="display: none;"></div>
+                <!-- Legacy static layout (fallback when no html) -->
+                <div id="previewMailLegacyContent" class="container my-4">
+                    <div class="shadow-box">
+                        <div class="mb-2">
+                            <div><strong>Subject:</strong> Request for Quotation</div>
+                            <div><strong>From:</strong><span id="previewEmail" class="ms-1"></span></div>
+                            <div><strong>To:</strong><span id="previewOemEmail" class="ms-1"></span></div>
+                        </div>
+
+                        <div class="my-2"> 
+                            <div id="previewSalutation" contenteditable="true"></div> 
+                            <div id="previewBody" class="" contenteditable="true"></div>
+                        </div>
+                        <div class='text-center mb-1'><strong>ITEMS ARE FOR RESALE TO THE US GOVERNMENT</strong></div>
+                        <div class="table-responsive">
+                          <table class="table table-bordered w-100">
+                            <tr>
+                              <td><strong>1. Date:</strong> <span class="" id="previewDate"></span></td>
+                              <td><strong>2. Our Reference:</strong> <span id="previewRef"></span> </td>
+                            </tr>
+                            <tr>
+                              <td><strong>3. To:</strong> <span id="previewToCompany"></span></td>
+                              <td><strong>4. Approved OEM Cage Code:</strong> <span id="previewOemCage"></span></td>
+                            </tr>
+                            <tr>
+                              <td><strong>5. Phone:</strong> <span id="previewOemPhone"></span></td>
+                              <td><strong>6. Fax:</strong> <span id="previewOemFax"></span></td>
+                            </tr>
+                            <tr>
+                              <td colspan="2"><strong>7. Your Email:</strong> <span id="previewOemEmail2"></span></td>
+                            </tr>
+                          </table>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead class="table-secondary">
+                                    <tr>
+                                        <th style="font-weight: normal;">#</th>
+                                        <th style="font-weight: normal;">NSN</th>
+                                        <th style="font-weight: normal;">Nomen</th>
+                                        <th style="font-weight: normal;">Part#</th>
+                                        <th style="font-weight: normal;">Qty/Unit</th>
+                                        <th style="font-weight: normal;">Price (USD)</th>
+                                        <th style="font-weight: normal;">Total Price (USD)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>0001</td>
+                                        <td id="previewNSN">xxx</td>
+                                        <td id="previewNomen">xxx</td>
+                                        <td id="previewPartNumber">xxx</td>
+                                        <td id="previewQtyUnit">1 EA</td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="table-responsive">
+                          <table class="table table-bordered">
+                            <tr>
+                              <td colspan="2">8. Technical drawing requirements:</td>
+                            </tr>
+                            <tr class=''>
+                              <td class='text-center' colspan="2"><strong>Important:</strong><br>If IRPOD is indicated in block 8 above, or if you require any technical drawing(s) to submit a quote or if this part number is regarded as classified,<br>
+              please email <span style="color: #333; text-decoration: none;" id="previewPersonalEmail"></span> directly for more information.</td>
+                            </tr>
+                            <tr>
+                              <td>9. Minimum Order Quantity (MOQ):</td>
+                              <td>10. Quote valid for (days):</td>
+                            </tr>
+                            <tr>
+                              <td>11. Inspection Point: <span id='previewInspectionPoint'></span></td>
+                              <td>Indicate inspection cage and address:</td>
+                            </tr>
+                            <tr>
+                              <td>12. Est. shipping cost:</td>
+                              <td>13. Terms:</td>
+                            </tr>
+                            <tr>
+                              <td colspan="2">14. Est. Shipping Dimensions & Weight (if shipping cost unknown):</td>
+                            </tr>
+                            <tr>
+                              <td>15. Delivery days:</td>
+                              <td>16. Country of origin:</td>
+                            </tr>
+                            <tr>
+                              <td colspan="2">17. Do you have an ISO certification or equivalent? Please state:</td>
+                            </tr>
+                            <tr>
+                              <td>18. Quoted By:</td>
+                              <td>19. Date:</td>
+                            </tr>
+                          </table>
+                        </div>
+                <!-- Email Footer -->
+                <div class="">Note: Please reply by <span class="text-danger" id="previewReturnDate">mm/dd/yyyy</span></div> <br>
+                <div>Best regards</div>
+                <br>
+                <div>
+                    <div class="d-flex">
+                        <div class="mb-1 text-dark" id="previewFirstNameFooter"></div>
+                        <div class="mb-1 ms-2 fs-6" id="previewLastNameFooter"></div>
+                        <div class="mb-1 ms-2 me-2 fs-6"><span>-</span></div>
+                        <div class="mb-1 fs-6" id="previewTitleFooter"></div>
+                    </div>
+                    <div class="mb-1 text-dark" id="previewCompanyFooter"></div>
+                    <div class="mb-1 fs-6" id="previewAddressFooter"></div>
+                    <div class="d-flex">
+                        <div class="me-1">Phone: </div>
+                        <div class="mb-1 fs-6" id="previewPhoneFooter"></div>
+                    </div>
+                    <div class="d-flex">
+                        <div class="me-1">Fax: </div>
+                        <div class="mb-1 fs-6" id="previewFaxFooter"></div>
+                    </div>
+                    <div class="d-flex">
+                        <div class="me-1">Email: </div>
+                        <div class="mb-1 fs-6" id="previewEmailFooter"></div>
+                    </div>
+                    <div class="d-flex">
+                        <div class="me-1">Website: </div>
+                        <div class="mb-1 fs-6" id="previewWebsiteFooter"></div>
+                    </div>
+                    <div class='mb-1'>
+                       <img id="previewLogo1" class="shadow-sm" src="" alt="Company Logo" style="max-width: 100px; display: none;">
+                    </div>
+                </div>
+                </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="editButton" class="btn btn-dark">Edit</button>
+                    <button id="saveButton" class="btn btn-secondary" style="display: none;">Save</button>
+                    <button id="confirmSendButton" class="btn mybg myhover text-white">Confirm and Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const ALL_VALID_SOLICITATION_IDS = {{ all_valid_solicitation_ids|safe }}; 
+const CURRENT_USER_ID = {{ user.id }};
+let PROCESSING_IDS = [];
+</script>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function () {
+    let globalSelectedIds = [];
+    let selectAllMode = false;
+    let isSubmittingRFQs = false;
+    let isBatchProcessing = false;
+    let processingCountTimeout = null;
+    const csrftoken = "{{ csrf_token }}";
+
+    // ========== DATABASE STATE FUNCTIONS ==========
+    
+    function saveSelectionStateToDatabase() {
+        const data = {
+            action: 'bulk_update',
+            selected_ids: globalSelectedIds,
+            select_all_mode: selectAllMode,
+            processing_ids: PROCESSING_IDS,
+            is_submitting: isSubmittingRFQs,
+            page_url: window.location.href,
+            filter_criteria: getCurrentFilterCriteria()
+        };
+        
+        $.ajax({
+            url: '/solicitations/api/update-user-state/',
+            type: 'POST',
+            headers: { "X-CSRFToken": csrftoken },
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            success: function(response) {
+                console.log('State saved to database successfully');
+            },
+            error: function(xhr, status, error) {
+                console.warn('Failed to save state to database:', error);
+            }
+        });
+    }
+
+    function loadSelectionStateFromDatabase() {
+        return $.ajax({
+            url: '/solicitations/api/get-user-state/',
+            type: 'GET',
+            success: function(response) {
+                console.log('Database state loaded:', response);
+                
+                // Store previous state for comparison
+                const previousSelectedCount = globalSelectedIds.length;
+                const previousSelectAllMode = selectAllMode;
+                const previousProcessingCount = PROCESSING_IDS.length;
+                const previousSubmitting = isSubmittingRFQs;
+                
+                // Update local variables
+                globalSelectedIds = response.selected_ids || [];
+                selectAllMode = response.select_all_mode || false;
+                PROCESSING_IDS = response.processing_ids || [];
+                isSubmittingRFQs = response.is_submitting || false;
+                
+                // Log what actually changed
+                const selectedChanged = globalSelectedIds.length !== previousSelectedCount;
+                const selectAllChanged = selectAllMode !== previousSelectAllMode;
+                const processingChanged = PROCESSING_IDS.length !== previousProcessingCount;
+                const submittingChanged = isSubmittingRFQs !== previousSubmitting;
+                
+                if (selectedChanged || selectAllChanged || processingChanged || submittingChanged) {
+                    console.log("State changes detected:");
+                    if (selectedChanged) console.log(`  - Selected: ${previousSelectedCount} ? ${globalSelectedIds.length}`);
+                    if (selectAllChanged) console.log(`  - Select All: ${previousSelectAllMode} ? ${selectAllMode}`);
+                    if (processingChanged) console.log(`  - Processing: ${previousProcessingCount} ? ${PROCESSING_IDS.length}`);
+                    if (submittingChanged) console.log(`  - Submitting: ${previousSubmitting} ? ${isSubmittingRFQs}`);
+                } else {
+                    console.log("No meaningful state changes detected");
+                }
+                
+                // Sync with actual processing status from table
+                syncWithProcessingStatus();
+                
+                return true;
+            },
+            error: function(xhr, status, error) {
+                console.warn('Failed to load state from database:', error);
+                return false;
+            }
+        });
+    }
+    
+    function updateDatabaseSelection(action, solicitation_ids) {
+        const data = {
+            action: action,
+            solicitation_ids: solicitation_ids,
+            page_url: window.location.href,
+            filter_criteria: getCurrentFilterCriteria()
+        };
+        
+        return $.ajax({
+            url: '/solicitations/api/update-user-state/',
+            type: 'POST',
+            headers: { "X-CSRFToken": csrftoken },
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            success: function(response) {
+                // Update local state from database response
+                globalSelectedIds = response.selected_ids || [];
+                selectAllMode = response.select_all_mode || false;
+                PROCESSING_IDS = response.processing_ids || [];
+                isSubmittingRFQs = response.is_submitting || false;
+            }
+        });
+    }
+
+    function syncWithProcessingStatus() {
+        $.ajax({
+            url: '/solicitations/api/sync-processing-status/',
+            type: 'GET',
+            success: function(response) {
+                
+                // Update local state with actual status from database
+                PROCESSING_IDS = response.processing_ids || [];
+                globalSelectedIds = response.selected_ids || [];
+                isSubmittingRFQs = response.is_submitting || false;
+                
+                // Update UI to reflect actual status
+                response.sent_ids.forEach(id => {
+                    updateRowStatus(id, 'sent');
+                });
+                
+                // IMPORTANT: Clear stale processing statuses
+                response.completed_ids.forEach(id => {
+                    updateRowStatus(id, 'ready'); // or 'sent' if appropriate
+                });
+                
+                response.processing_ids.forEach(id => {
+                    updateRowStatus(id, 'processing');
+                });
+                
+                // Update checkboxes and counts
+                updateCurrentPageCheckboxes();
+                updateProcessingCount();
+                updateSelectedCount();
+                
+            },
+            error: function(xhr, status, error) {
+                console.warn('Failed to sync processing status:', error);
+            }
+        });
+    }
+    
+    function getCurrentFilterCriteria() {
+        return {
+            search_term: $('input[name="mysearch"]').val() || '', 
+            page_number: {{ page_obj.number|default:1 }},
+        };
+    }
+
+    // ========== ORIGINAL STATE PERSISTENCE FUNCTIONALITY (KEPT AS BACKUP) ==========
+    
+    // State persistence keys (user-specific to avoid conflicts)
+    const STATE_KEYS = {
+        SELECTED_IDS: 'rfq_selected_ids_{{ user.id }}',
+        SELECT_ALL_MODE: 'rfq_select_all_mode_{{ user.id }}',
+        PROCESSING_IDS: 'rfq_processing_ids_{{ user.id }}',
+        LAST_UPDATE: 'rfq_last_update_{{ user.id }}'
+    };
+
+    // Save current state to sessionStorage (KEPT AS BACKUP)
+    function saveSelectionState() {
+        try {
+            const state = {
+                selectedIds: globalSelectedIds,
+                selectAllMode: selectAllMode,
+                processingIds: PROCESSING_IDS,
+                timestamp: Date.now()
+            };
+            sessionStorage.setItem(STATE_KEYS.SELECTED_IDS, JSON.stringify(state));
+         
+        } catch (e) {
+            console.warn("Could not save state to sessionStorage:", e);
+        }
+        
+        // Also save to database
+        saveSelectionStateToDatabase();
+    }
+
+    // Save state after user action
+    function saveStateAfterUserAction() {
+        saveSelectionState();
+        saveSelectionStateToDatabase();
+    }
+
+    // Load state from sessionStorage (KEPT AS BACKUP)
+function loadSelectionStateFromDatabase() {
+    return $.ajax({
+        url: '/solicitations/api/get-user-state/',
+        type: 'GET',
+        success: function(response) {
+            // Update local variables
+            globalSelectedIds = response.selected_ids || [];
+            selectAllMode = response.select_all_mode || false;
+            PROCESSING_IDS = response.processing_ids || [];
+            isSubmittingRFQs = response.is_submitting || false;
+            
+            // FIX: Restore batch processing state
+            isBatchProcessing = response.is_submitting || (PROCESSING_IDS.length > 0);
+                        
+            // Sync with actual processing status
+            syncWithProcessingStatus();
+            
+            return true;
+        },
+        error: function(xhr, status, error) {
+            console.warn('Failed to load state from database:', error);
+            return false;
+        }
+    });
+}
+
+    // Clear saved state (KEPT)
+    function clearSelectionState() {
+        try {
+            sessionStorage.removeItem(STATE_KEYS.SELECTED_IDS);
+        } catch (e) {
+            console.warn("Could not clear state:", e);
+        }
+    }
+
+    // Enhanced restoration that combines sessionStorage with database status
+    function restoreCompleteState() {
+        
+        // Step 1: Try to load from database first
+        loadSelectionStateFromDatabase().then(function() {
+            
+            // Step 2: Get fresh status from database if we have current page IDs
+            const currentPageIds = [];
+            $('.rowCheckbox').each(function() {
+                currentPageIds.push(parseInt($(this).data('id')));
+            });
+            
+            if (currentPageIds.length > 0) {
+                
+                $.ajax({
+                    url: "{% url 'solicitations:check_solicitation_status' %}",
+                    type: "GET",
+                    data: { 'ids[]': currentPageIds },
+                    success: function(response) {
+                        
+                        // Step 3: Update UI based on database status
+                        if (response.status_updates) {
+                            Object.keys(response.status_updates).forEach(solId => {
+                                const status = response.status_updates[solId];
+                                const id = parseInt(solId);
+                                
+                                // Update UI based on actual database status
+                                if (status.status === 'processing' || (status.email_status && status.email_status === 'processing')) {
+                                    if (!PROCESSING_IDS.includes(id)) {
+                                        PROCESSING_IDS.push(id);
+                                    }
+                                    updateRowStatus(id, 'processing');
+                                    // Remove from selections if processing
+                                    globalSelectedIds = globalSelectedIds.filter(gid => gid !== id);
+                                } else if (status.email_sent || status.status === 'sent') {
+                                    updateRowStatus(id, 'sent');
+                                    // Remove from selections if sent
+                                    globalSelectedIds = globalSelectedIds.filter(gid => gid !== id);
+                                } else if (status.status === 'failed') {
+                                    updateRowStatus(id, 'failed');
+                                    // Keep in selections to allow retry
+                                }
+                            });
+                            
+                            // Step 4: Update UI with restored/corrected state
+                            updateCurrentPageCheckboxes();
+                            updateProcessingCount();
+                            updateSelectedCount();
+                            saveSelectionState(); // Save corrected state
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.warn("Database status check failed, using loaded state");
+                        updateCurrentPageCheckboxes();
+                        updateProcessingCount();
+                        updateSelectedCount();
+                    }
+                });
+            } else {
+                // No current page IDs but we have loaded state
+                updateCurrentPageCheckboxes();
+                updateProcessingCount();
+                updateSelectedCount();
+            }
+        }).catch(function() {
+            // Fallback to sessionStorage
+            const sessionStateLoaded = loadSelectionState();
+            if (sessionStateLoaded) {
+                updateCurrentPageCheckboxes();
+                updateProcessingCount();
+                updateSelectedCount();
+            }
+        });
+    }
+
+    // ========== CORE FUNCTIONS ==========
+
+    function initializeProcessingIds() {
+        PROCESSING_IDS = [];
+        $('.processing-badge').each(function() {
+            const id = parseInt($(this).data('id'));
+            if (id && !PROCESSING_IDS.includes(id)) {
+                PROCESSING_IDS.push(id);
+            }
+        });
+        console.log("Initialized processing IDs:", PROCESSING_IDS);
+    }
+
+    function markAsProcessing(ids) {
+        console.log("Marking as processing:", ids);
+        ids.forEach(id => {
+            if (!PROCESSING_IDS.includes(id)) {
+                PROCESSING_IDS.push(id);
+            }
+            const $row = $(`#row-${id}`);
+            const $checkbox = $row.find('.rowCheckbox');
+            const $statusCell = $row.find('td:nth-child({% if not auto_send %}2{% else %}1{% endif %})');
+            
+            if ($row.length) {
+                $row.removeClass('table-light').addClass('table-warning processing-row');
+                $row.css('cursor', 'not-allowed');
+                $row.off('click');
+                $checkbox.prop('disabled', true).prop('checked', false);
+                //$statusCell.html(`<span class="badge bg-warning text-dark processing-badge" data-id="${id}"><i class="bi bi-clock-history spinning"></i> Processing</span>`);
+                //console.log(`Row ${id} marked as processing`);
+            }
+        });
+        globalSelectedIds = globalSelectedIds.filter(id => !ids.includes(id));
+        updateProcessingCount();
+        updateSelectedCount();
+        saveSelectionState(); // Save state after change
+        
+        // Update database
+        updateDatabaseSelection('add_processing', ids);
+    }
+
+    function markAsCompleted(ids) {
+        console.log("Marking as completed (sent):", ids);
+        ids.forEach(id => {
+            const index = PROCESSING_IDS.indexOf(id);
+            if (index > -1) {
+                PROCESSING_IDS.splice(index, 1);
+            }
+            const $row = $(`#row-${id}`);
+            const $checkbox = $row.find('.rowCheckbox');
+            const $statusCell = $row.find('td:nth-child({% if not auto_send %}2{% else %}1{% endif %})');
+            
+            if ($row.length) {
+                // Mark as sent instead of removing
+                $row.removeClass('table-warning processing-row').addClass('table-success');
+                $row.css('cursor', 'not-allowed');
+                $row.off('click');
+                $checkbox.prop('disabled', true).prop('checked', false);
+                $statusCell.html(`<span class="badge bg-success"><i class="bi bi-check-circle"></i> Sent</span>`);
+                console.log(`Row ${id} marked as sent`);
+            }
+            
+            // Remove from valid solicitation IDs
+            const validIndex = ALL_VALID_SOLICITATION_IDS.indexOf(id);
+            if (validIndex > -1) {
+                ALL_VALID_SOLICITATION_IDS.splice(validIndex, 1);
+            }
+        });
+        updateProcessingCount();
+        updateSelectedCount();
+        saveSelectionState(); // Save state after change
+        
+        // Update database
+        updateDatabaseSelection('remove_processing', ids);
+    }
+
+    function markAsFailed(ids, reason = "Processing failed") {
+        console.log("Marking as failed:", ids, "Reason:", reason);
+        ids.forEach(id => {
+            // Remove from processing list
+            const index = PROCESSING_IDS.indexOf(id);
+            if (index > -1) {
+                PROCESSING_IDS.splice(index, 1);
+            }
+            
+            const $row = $(`#row-${id}`);
+            const $checkbox = $row.find('.rowCheckbox');
+            const $statusCell = $row.find('td:nth-child({% if not auto_send %}2{% else %}1{% endif %})');
+            
+            if ($row.length) {
+                // Reset row styling to normal (not processing)
+                $row.removeClass('table-warning processing-row').addClass('table-light');
+                $row.css('cursor', 'pointer');
+                
+                // Re-enable checkbox so user can retry
+                $checkbox.prop('disabled', false).prop('checked', false);
+                
+                // Show FAILED status (red badge)
+                $statusCell.html(`
+                    <span class="badge bg-danger" title="${reason}">
+                        <i class="bi bi-x-circle"></i> Failed
+                    </span>
+                `);
+                
+                // Restore click handler for row
+                $row.off('click').on('click', function() {
+                    var solicitationDetailUrl = "{% url 'solicitations:solicitation-detail' 0 %}";
+                    location.href = solicitationDetailUrl.replace('0', id);
+                });
+                
+                console.log(`Row ${id} marked as FAILED - user can retry by selecting again`);
+            }
+        });
+        
+        // Remove from current selection
+        globalSelectedIds = globalSelectedIds.filter(id => !ids.includes(id));
+        updateProcessingCount();
+        updateSelectedCount();
+        saveSelectionState(); // Save state after change
+        
+        // Update database
+        updateDatabaseSelection('remove_processing', ids);
+    }
+
+function updateProcessingCount() {
+    const count = PROCESSING_IDS.length;
+    const $processingCount = $('#processingCount');
+    
+    // Clear any existing timeout
+    if (processingCountTimeout) {
+        clearTimeout(processingCountTimeout);
+        processingCountTimeout = null;
+        console.log("Cleared existing processing count timeout");
+    }
+    
+    if (count > 0) {
+        console.log("SHOWING processing count:", count);
+        
+        // If count reaches 1, set 15-second timeout to force hide it
+        if (count === 1) {
+            console.log("Processing count is 1 - setting 15-second timeout");
+            processingCountTimeout = setTimeout(function() {
+                console.log("15-second timeout reached - force hiding processing count");
+                $('#processingCount').remove();
+                // Clear the PROCESSING_IDS array to prevent it from reappearing
+                PROCESSING_IDS = [];
+                processingCountTimeout = null;
+                showToast("Processing completed", "info");
+                
+            }, 15000); // 15 seconds
+            
+        }
+    } else {
+        $processingCount.remove();
+    }
+}
+
+    function formatPhoneNumber(phone) {
+        if (!phone || typeof phone !== 'string') {
+            return phone || '-';
+        }
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length === 10) {
+            return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+        } else if (digits.length === 11 && digits[0] === '1') {
+            return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+        } else {
+            return phone;
+        }
+    }
+
+function updateSelectedCount() {
+    // Hide SELECTED count during batch processing (when stop button is visible)
+    // But keep PROCESSING count visible to show progress
+    const isActivelySending = isSubmittingRFQs || isBatchProcessing;
+    
+    if (isActivelySending) {
+        // Hide SELECTED count during RFQ processing (but processing count stays visible)
+        $('#selectedCount').hide();
+        return;
+    }
+    
+    // Get actual count based on selection mode
+    let count = 0;
+    if (selectAllMode) {
+        // In select all mode: count all valid IDs minus processing/sent ones
+        count = ALL_VALID_SOLICITATION_IDS.filter(id => !PROCESSING_IDS.includes(id)).length; 
+    } else {
+        // In individual mode: count items in globalSelectedIds
+        count = globalSelectedIds.length;
+    }
+    
+    if (count > 0) {
+        $('#selectedCount').text(count + ' Total Selected').show();
+    } else {
+        $('#selectedCount').hide();
+    }
+}
+
+
+    function updateCurrentPageCheckboxes() {
+        if (selectAllMode) {
+            $('.rowCheckbox:not(:disabled)').prop('checked', true);
+            $('#selectAll').prop('checked', true);
+        } else {
+            $('.rowCheckbox').each(function() {
+                const solicitationId = parseInt($(this).data('id'));
+                const isSelected = globalSelectedIds.includes(solicitationId);
+                const isProcessing = PROCESSING_IDS.includes(solicitationId);
+                $(this).prop('checked', isSelected && !isProcessing);
+            });
+            const currentPageCheckboxes = $('.rowCheckbox:not(:disabled)');
+            const checkedBoxes = currentPageCheckboxes.filter(':checked');
+            $('#selectAll').prop('checked', currentPageCheckboxes.length > 0 && checkedBoxes.length === currentPageCheckboxes.length);
+        }
+        updateSelectedCount();
+    }
+
+    function showToast(message, type = "error") {
+        $('#selectToast .toast-body').text(message);
+        const toastElement = $('#selectToast');
+        toastElement.removeClass('text-bg-success text-bg-danger text-bg-info');
+        if (type === "success") {
+            toastElement.addClass('text-bg-success');
+        } else if (type === "error") {
+            toastElement.addClass('text-bg-danger');
+        } else if (type === "info") {
+            toastElement.addClass('text-bg-info');
+        }
+        const delay = Math.min(10000, Math.max(3000, message.length * 100));
+        const toast = new bootstrap.Toast(toastElement[0], { delay: delay });
+        toast.show();
+    }
+
+    // Helper function to update individual row status
+    function updateRowStatus(id, status) {
+        const $row = $(`#row-${id}`);
+        const $checkbox = $row.find('.rowCheckbox');
+        
+        // Determine status column index based on whether auto_send is enabled
+        const statusColumnIndex = {% if not auto_send %}2{% else %}1{% endif %};
+        const $statusCell = $row.find(`td:nth-child(${statusColumnIndex})`);
+        
+        if ($row.length === 0) {
+            return;
+        }
+        
+        console.log(`Updating row ${id} to status: ${status}`);
+        
+        if (status === 'ready') {
+            // NEW: Reset to ready state (for stopped items)
+            $row.removeClass('table-warning processing-row table-success table-danger').addClass('table-light');
+            $row.css('cursor', 'pointer');
+            $checkbox.prop('disabled', false).prop('checked', false);
+            $statusCell.html(`<span class="badge bg-secondary"><i class="bi bi-circle"></i> Ready</span>`);
+            
+            // Restore click handler
+            $row.off('click').on('click', function() {
+                location.href = "{% url 'solicitations:solicitation-detail' 0 %}".replace('0', id);
+            });
+            
+        } else if (status === 'processing') {
+            $row.removeClass('table-light table-success').addClass('table-warning processing-row');
+            $row.css('cursor', 'not-allowed');
+            $row.off('click');
+            $checkbox.prop('disabled', true).prop('checked', false);
+            $statusCell.html(`<span class="badge bg-warning text-dark processing-badge" data-id="${id}"><i class="bi bi-clock-history spinning"></i> Processing</span>`);
+        } else if (status === 'sent') {
+            $row.removeClass('table-light table-warning processing-row').addClass('table-success');
+            $row.css('cursor', 'not-allowed');
+            $row.off('click');
+            $checkbox.prop('disabled', true).prop('checked', false);
+            $statusCell.html(`<span class="badge bg-success"><i class="bi bi-check-circle"></i> Sent</span>`);
+        } else if (status === 'failed') {
+            $row.removeClass('table-warning processing-row table-success').addClass('table-light');
+            $row.css('cursor', 'pointer');
+            $checkbox.prop('disabled', false).prop('checked', false);
+            $statusCell.html(`<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Failed</span>`);
+            
+            // Restore click handler for row
+            $row.off('click').on('click', function() {
+                location.href = "{% url 'solicitations:solicitation-detail' 0 %}".replace('0', id);
+            });
+        }
+    }
+
+    // ========== EVENT HANDLERS WITH STATE PERSISTENCE ==========
+
+    $('#selectAll').click(function () {
+        console.log("Select All clicked, checked:", this.checked);
+        
+        if (this.checked) {
+            // Select all mode: include all valid IDs except processing/sent ones
+            selectAllMode = true;
+            globalSelectedIds = ALL_VALID_SOLICITATION_IDS.filter(id => !PROCESSING_IDS.includes(id));
+            $('.rowCheckbox:not(:disabled)').prop('checked', true);
+            console.log("Select All enabled, globalSelectedIds:", globalSelectedIds);
+            
+            // Update database
+            updateDatabaseSelection('select_all', []);
+        } else {
+            // Deselect all
+            selectAllMode = false;
+            globalSelectedIds = [];
+            $('.rowCheckbox').prop('checked', false);
+            
+            // Update database
+            updateDatabaseSelection('clear_all', []);
+        }
+        updateSelectedCount();
+        saveStateAfterUserAction();
+    });
+
+    // Handle individual row selection
+    $(document).on('change', '.rowCheckbox', function (e) {
+        e.stopPropagation();
+        
+        const solicitationId = parseInt($(this).data('id'));
+        const $statusBadge = $(`#row-${solicitationId}`).find('.badge');        
+        // Don't allow selection of processing items or sent items
+        if (PROCESSING_IDS.includes(solicitationId) || $statusBadge.hasClass('bg-success')) {
+            $(this).prop('checked', false);
+            const reason = $statusBadge.hasClass('bg-success') ? "already sent" : "currently being processed";
+            showToast(`This item is ${reason} and cannot be selected.`, "error");
+            return;
+        }
+        
+        // Show info message when user selects a previously failed item
+        if (this.checked && $statusBadge.hasClass('bg-danger')) {
+            showToast(`Retrying solicitation ${solicitationId} (previously failed)`, "info");
+        }
+        
+        if (this.checked) {
+            // Add to selection if not already included
+            if (!globalSelectedIds.includes(solicitationId)) {
+                globalSelectedIds.push(solicitationId);
+                
+                // Update database
+                updateDatabaseSelection('select', [solicitationId]);
+            } else {
+                console.log("ID", solicitationId, "already in selection");
+            }
+        } else {
+            // Remove from selection and disable select all mode
+            selectAllMode = false;
+            const oldLength = globalSelectedIds.length;
+            globalSelectedIds = globalSelectedIds.filter(id => id !== solicitationId);
+            $('#selectAll').prop('checked', false);            
+            // Update database
+            updateDatabaseSelection('deselect', [solicitationId]);
+        }
+        
+        updateSelectedCount();
+        saveStateAfterUserAction();
+    });
+
+    // Handle click events for additional safety
+    $(document).on('click', '.rowCheckbox', function (e) {
+        e.stopPropagation();
+    });
+
+    // ========== MAIL PREVIEW FUNCTIONS ==========
+
+    $("#editButton").click(function () {
+        $("#previewHeading, #previewSalutation, #previewBody")
+            .attr("contenteditable", "true")
+            .addClass("border border-primary");
+        $("#editButton").hide();
+        $("#saveButton").show();
+    });
+
+    $('#saveButton').click(function () {
+        const updatedHeading = $('#previewHeading').text();
+        const updatedSalutation = $('#previewSalutation').text();
+        const updatedBody = $('#previewBody').html();
+        $.ajax({
+            url: "{% url 'solicitations:update_mail_preview' %}",
+            type: "POST",
+            headers: { "X-CSRFToken": csrftoken },
+            data: JSON.stringify({
+                heading: updatedHeading,
+                salutation: updatedSalutation,
+                body: updatedBody
+            }),
+            contentType: "application/json",
+            success: function () {
+                showToast("Changes saved successfully!", "success");
+            },
+            error: function (xhr) {
+                showToast("Failed to save changes. Please try again.", "error");
+            }
+        });
+    });
+
+    // ========== SEND RFQ FUNCTIONALITY ==========
+
+    $('#sendRfqsButton').click(function (e) {
+        e.preventDefault();
+        if (isSubmittingRFQs) {
+            showToast("Please wait - RFQ processing is in progress...", "error");
+            return false;
+        }
+                
+        // Proper selection logic
+        let selectedIds = [];
+        if (selectAllMode) {
+            // Select all mode: get all valid IDs excluding processing ones
+            selectedIds = ALL_VALID_SOLICITATION_IDS.filter(id => !PROCESSING_IDS.includes(id));   
+        } else {
+            // Individual selection mode: use globalSelectedIds directly
+            selectedIds = [...globalSelectedIds];
+        }
+                
+        if (selectedIds.length === 0) {
+            if (PROCESSING_IDS.length > 0) {
+                showToast("No solicitations available for selection. Some items are currently being processed.");
+            } else {
+                showToast("Please select at least one solicitation.");
+            }
+            return false;
+        }
+                
+        isSubmittingRFQs = true;
+        const $button = $(this);
+        const originalText = $button.text();
+        // Update database submission state
+        updateDatabaseSelection('set_submitting', []);
+
+        function resetSubmission() {
+            isSubmittingRFQs = false;
+            
+            // Update database submission state
+            updateDatabaseSelection('set_submitting', []);
+        }
+
+        // Check user profile first
+        $.ajax({
+            url: "{% url 'solicitations:check_user_profile' %}",
+            type: "GET",
+            headers: { "X-CSRFToken": csrftoken },
+            success: function (data) {
+                if (!data.has_logo || !data.has_initial || !data.has_title || !data.has_personal) {
+                    let errorMsg = "Please update your profile settings: ";
+                    let missingFields = [];
+                    if (!data.has_logo) missingFields.push("You have not set a logo for your business");
+                    if (!data.has_initial) missingFields.push("you have not set your company initials");
+                    if (!data.has_title) missingFields.push("you have not set your position, set it");
+                    if (!data.has_personal) missingFields.push("you have not set your personal email, set it");
+                    errorMsg += missingFields.join(" and ") + " before sending RFQs.";
+                    showToast(errorMsg);
+                    resetSubmission();
+                    return;
+                }
+                showToast(`Preparing to send ${selectedIds.length} ${selectedIds.length === 1 ? 'RFQ' : 'RFQs'}...`, "success");
+                
+                // Fetch email preview
+                $.ajax({
+                    url: "{% url 'solicitations:fetch_mail_preview' %}",
+                    type: "POST",
+                    headers: { "X-CSRFToken": csrftoken },
+                    data: JSON.stringify({ selected_ids: selectedIds }),
+                    contentType: "application/json",
+                    success: function (data) {
+                        console.log("Received data from server:", data);
+                        
+                        if (data.html) {
+                            // Use configured email template (EmailTemplateConfig) from backend
+                            $('#previewMailConfiguredHtml').html(data.html).show();
+                            $('#previewMailLegacyContent').hide();
+                        } else {
+                            $('#previewMailConfiguredHtml').hide().empty();
+                            $('#previewMailLegacyContent').show();
+                            // Populate preview modal with data (legacy field-by-field)
+                        $('#previewSalutation').text(data.salutation);
+                        $('#previewHeading').text(data.heading);
+                        $('#previewBody').html(data.body);
+                        $('#previewCompany').text(data.company);
+                        $('#previewAddress').text(data.address);
+                        $('#previewPhone').text(formatPhoneNumber(data.phone)); 
+                        $('#previewEmail').text(data.email);
+                        $('#previewPersonalEmail').text(data.personal_email);
+                        $('#previewCage').text(data.cage);
+                        $('#previewWebsite').text(data.website);
+                        $('#previewFax').text(formatPhoneNumber(data.fax));
+                        $('#previewFirstName').text(data.first_name);
+                        $('#previewLastName').text(data.last_name);
+                        $('#previewTitle').text(data.title);
+                        $('#previewEmail, #previewEmailBody').text(data.email);
+                        $('#previewLogo, #previewLogo1').text(data.logo);
+                        $('#previewFirstName, #previewFirstNameFooter').text(data.first_name);
+                        $('#previewLastName, #previewLastNameFooter').text(data.last_name);
+                        $('#previewTitle, #previewTitleFooter').text(data.title);
+                        $('#previewCompany, #previewCompanyFooter').text(data.company);
+                        $('#previewAddress, #previewAddressFooter').text(data.address);
+                        $('#previewPhone, #previewPhoneFooter').text(formatPhoneNumber(data.phone));
+                        $('#previewFax, #previewFaxFooter').text(formatPhoneNumber(data.fax)); 
+                        $('#previewWebsite, #previewWebsiteFooter').text(data.website);
+
+                        if (data.logo) {
+                            $('#previewLogo, #previewLogo1').attr('src', data.logo).show();
+                        } else {
+                            $('#previewLogo, #previewLogo1').hide();
+                        }
+
+                        if (data.sample_solicitation && data.sample_oem) {
+                            console.log("Populating dynamic data...");
+                            const sol = data.sample_solicitation;
+                            const oem = data.sample_oem;
+                            $('#previewDate').text(data.current_date);
+                            $('#previewRef').text(data.reference_number);
+                            $('#previewToCompany').text(oem.organization_name || 'N/A');
+                            $('#previewOemCage').text(sol.cage);
+                            $('#previewOemPhone').text(formatPhoneNumber(oem.phone) || '-');
+                            $('#previewOemFax').text(formatPhoneNumber(oem.fax) || '-');
+                            $('#previewOemEmail').text(oem.email || 'N/A');
+                            $('#previewOemEmail,#previewOemEmail2').text(oem.email || '-');
+                            $('#previewItemNumber').text('1');
+                            $('#previewNSN').text(sol.NSN);
+                            $('#previewNomen').text(sol.nomenclature);
+                            $('#previewPartNumber').text(sol.part_number || 'N/A');
+                            $('#previewUnit').text(sol.unit);
+                            $('#previewQuantity').text(sol.quantity);
+                            $('#previewQtyUnit').text(`${sol.quantity} ${sol.unit}`);
+                            $('#previewInspectionPoint').text(sol.inspection_point || '-');
+                            $('#previewAcceptancePoint').text(sol.acceptance_point || '-');
+                            $('#previewDeliverFob').text(sol.deliver_fob || '-');
+                            $('#previewDeliverDays').text(sol.deliver_days || '-');
+                            $('#previewReturnDate').text(data.reply_deadline);                                
+                            console.log("Dynamic data populated successfully");
+                        } else {
+                            console.warn("No dynamic data available, using defaults");
+                            const today = new Date();
+                            const replyDeadline = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
+                            $('#previewDate').text(today.toLocaleDateString('en-US'));
+                            $('#previewRef').text('SAMPLE_REF_' + today.toISOString().slice(0, 10).replace(/-/g, ''));
+                            $('#previewToCompany').text('Sample OEM Company');
+                            $('#previewOemCage').text('XXXXX');
+                            $('#previewOemPhone').text(formatPhoneNumber('123-456-7890'));
+                            $('#previewOemFax').text('-');
+                            $('#previewOemEmail').text('contact@sampleoem.com');
+                            $('#previewItemNumber').text('1');
+                            $('#previewNSN').text('1234567890123');
+                            $('#previewQtyUnit').text('1 EA');
+                            $('#previewNomen').text('Sample Item');
+                            $('#previewPartNumber').text('N/A');
+                            $('#previewUnit').text('EA');
+                            $('#previewQuantity').text('1');
+                            $('#previewReturnDate').text(replyDeadline.toLocaleDateString('en-US', {
+                                month: '2-digit',
+                                day: '2-digit', 
+                                year: 'numeric'
+                            }).replace(/\//g, '-'));
+                        }
+                        }
+                        $('#confirmSendButton').data('selected-ids', selectedIds);
+                        $('#previewMail').modal('show');
+                    },
+                    error: function(xhr, status, error) {
+                        try {
+                            const errorData = JSON.parse(xhr.responseText);
+                            showToast("Error: " + (errorData.error || "Failed to load email preview"));
+                        } catch(e) {
+                            showToast("Failed to load email preview. Please try again.");
+                        }
+                        resetSubmission();
+                    }
+                });
+            },
+            error: function () {
+                showToast("Failed to verify your profile information. Please try again.");
+                resetSubmission();
+            }
+        });
+    });
+
+$('#previewMail').on('hidden.bs.modal', function () {
+    // Only reset flags if we're not in background processing mode
+    // If background processing has started, let the polling handle completion
+    if (isSubmittingRFQs && !isBatchProcessing) {
+        isSubmittingRFQs = false;        
+        // Update database submission state
+        updateDatabaseSelection('set_submitting', []);
+    } else if (isBatchProcessing) {
+        console.log("Modal closed, but batch processing is active - keeping flags");
+    }
+});
+
+    // Confirm and send RFQs
+$('#confirmSendButton').click(function () {
+    const selectedIds = $(this).data('selected-ids');
+    $('#previewMail').modal('hide');
+    $('#progressModal').modal('show');
+    $('#progressBar').width('0%').text('0%');
+    $('#status').text(`Starting to send ${selectedIds.length} ${selectedIds.length === 1 ? 'RFQ' : 'RFQs'}...`);
+    $('#processingDetails').text(`User: {{ user.username }} | Processing ${selectedIds.length} items`);
+    
+    // SET BATCH FLAGS FIRST
+    isBatchProcessing = true;
+    isSubmittingRFQs = true;
+
+    
+    markAsProcessing(selectedIds);
+    
+    $.ajax({
+        url: "{% url 'solicitations:send_rfqs' %}",
+        type: "POST",
+        headers: { "X-CSRFToken": csrftoken },
+        data: JSON.stringify({ selected_ids: selectedIds }),
+        contentType: "application/json",
+        
+        success: function (response) {
+            if (response.status === "processing" || response.status === "queued") {
+                const estimatedTime = response.estimated_completion_minutes || 30;
+                $('#status').html(`<div>RFQs are being processed in the background...</div>`);
+                $('#processingDetails').html(``);
+                
+                let progress = 0;
+               
+                const progressInterval = setInterval(function () {
+                    if (progress < 90) {
+                        progress += 3;
+                        $('#progressBar').width(progress + '%').text(progress + '%');
+                    } else {
+                        clearInterval(progressInterval);
+                        $('#progressBar').width('100%').text('Complete');
+                        $('#status').html(`<div class="text-success">RFQ processing initiated successfully!</div>`);
+                        location.reload();
+                        
+                        // Close modal but KEEP batch processing active
+                        setTimeout(function() {
+                            $('#progressModal').modal('hide');
+                            // DON'T call resetAfterCompletion here - let polling handle completion
+                        }, 2000);
+                        
+                        // Start status polling
+                        setTimeout(function() {
+                            startStatusPolling(response.task_id, selectedIds);
+                        }, 500);
+                    }
+                }, 150);  
+                
+            } else {
+                // Handle immediate success case
+                $('#progressBar').width('100%').text('100%');
+                $('#status').text(`${selectedIds.length} ${selectedIds.length === 1 ? 'RFQ' : 'RFQs'} sent successfully!`);
+                setTimeout(function () {
+                    $('#progressModal').modal('hide');
+                    markAsCompleted(selectedIds);
+                    
+                    // Reset flags for immediate success
+                    isBatchProcessing = false;
+                    isSubmittingRFQs = false;
+                    
+                    resetAfterCompletion();
+                    showToast(`Successfully sent RFQs!`, "success");
+                }, 2000);
+            }
+        },
+        error: function (xhr, status, error) {
+            console.error("RFQ sending failed:", {
+                status: status,
+                error: error,
+                response: xhr.responseText
+            });
+            
+            let errorMessage = "Unknown error occurred";
+            try {
+                const response = JSON.parse(xhr.responseText);
+                errorMessage = response.error || response.message || errorMessage;
+            } catch (e) {
+                console.error("Could not parse error response:", e);
+                errorMessage = `Server error (${xhr.status}): ${error}`;
+            }
+            
+            // Reset flags on error
+            isBatchProcessing = false;
+            isSubmittingRFQs = false;
+            
+            // Mark as failed
+            markAsFailed(selectedIds, errorMessage);
+            
+            $('#progressBar').removeClass('progress-bar-animated').addClass('bg-danger');
+            $('#progressBar').width('100%').text('Failed');
+            $('#status').html(`
+                <div class="text-danger">Failed to start RFQ processing</div>
+                <div class="mt-2">
+                    <small>Error: ${errorMessage}</small><br>
+                    <small class="text-muted">Items are marked as "Failed" but can be retried by selecting them again.</small>
+                </div>
+            `);
+            
+            // Auto-close modal even on error
+            setTimeout(function() {
+                $('#progressModal').modal('hide');
+                $('#progressBar').removeClass('bg-danger').addClass('progress-bar-animated');
+                resetAfterCompletion();
+                showToast(`Failed to send ${selectedIds.length === 1 ? 'RFQ' : 'RFQs'}: ${errorMessage}`, "error");
+            }, 3000);
+        }
+    });
+});
+
+
+    // ========== BACKGROUND STATUS POLLING ==========
+function startStatusPolling(taskId, originalSelectedIds) {
+    if (!taskId) {
+        console.log("No task ID provided, skipping status polling");
+        return;
+    }
+    
+    let pollCount = 0;
+    const maxPolls = 60; // Poll for up to 5 minutes
+    
+    const statusInterval = setInterval(function() {
+        pollCount++;
+        if (pollCount > maxPolls) {
+            clearInterval(statusInterval);
+            console.log("Status polling timed out - processing may still be ongoing");
+            
+            // Reset batch flags on timeout
+            isBatchProcessing = false;
+            isSubmittingRFQs = false;           
+            showToast("Processing is taking longer than expected. Items will update when complete.", "info");
+            return;
+        }
+        
+        $.ajax({
+            url: "{% url 'solicitations:check_solicitation_status' %}",
+            type: "GET",
+            data: { 'ids[]': originalSelectedIds },
+            headers: { "X-CSRFToken": csrftoken },
+            success: function(response) {
+                
+                if (response.status_updates) {
+                    let completedIds = [];
+                    let failedIds = [];
+                    let stillProcessingIds = [];
+                    
+                    Object.keys(response.status_updates).forEach(solId => {
+                        const solIdInt = parseInt(solId);
+                        const status = response.status_updates[solId];
+                        
+                        if (originalSelectedIds.includes(solIdInt)) {
+                            if (status.email_sent || status.status === 'sent') {
+                                completedIds.push(solIdInt);
+                                updateRowStatus(solIdInt, 'sent');
+                            } else if (status.status === 'failed') {
+                                failedIds.push(solIdInt);
+                                updateRowStatus(solIdInt, 'failed');
+                            } else if (status.status === 'processing') {
+                                stillProcessingIds.push(solIdInt);
+                                // Keep as processing
+                            }
+                        }
+                    });
+                    
+                    // Update processing list for individual items
+                    completedIds.forEach(id => {
+                        const index = PROCESSING_IDS.indexOf(id);
+                        if (index > -1) PROCESSING_IDS.splice(index, 1);
+                    });
+                    
+                    failedIds.forEach(id => {
+                        const index = PROCESSING_IDS.indexOf(id);
+                        if (index > -1) PROCESSING_IDS.splice(index, 1);
+                    });
+                    
+                    // Check if ALL items from the original batch are done
+                    const remainingProcessing = originalSelectedIds.filter(id => 
+                        !completedIds.includes(id) && !failedIds.includes(id)
+                    );
+                                        
+                    if (remainingProcessing.length === 0) {
+                        // ALL items in the batch are complete
+                        clearInterval(statusInterval);
+                        
+                        // RESET BATCH FLAGS ONLY WHEN ALL ITEMS ARE DONE
+                        isBatchProcessing = false;
+                        isSubmittingRFQs = false;                        
+                                                
+                        if (totalCompleted > 0) {
+                            showToast(`Batch complete: ${totalCompleted}/${totalOriginal} RFQs sent successfully!`, "success");
+                        }
+                        if (totalFailed > 0) {
+                            showToast(`${totalFailed}/${totalOriginal} RFQs failed to send`, "error");
+                        }
+                        
+                        // Force save state to ensure database is updated
+                        saveSelectionState();
+                        
+                        return; // Exit the polling function completely
+                    }
+                    
+                    // Update UI counts (but don't reset batch flags until all done)
+                    updateProcessingCount();
+                    updateSelectedCount();
+                    // Don't call updateStopButton here unless batch is complete
+                    saveSelectionState();
+                } else {
+                    console.log("No status_updates in response");
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log("Background status check failed, continuing to poll...");
+                console.error("Error details:", xhr.responseText);
+            }
+        });
+    }, 5000); // Poll every 5 seconds
+}
+
+
+    // ========== UTILITY FUNCTIONS ==========
+
+function resetAfterCompletion() {
+    globalSelectedIds = [];
+    selectAllMode = false;
+    $('.rowCheckbox').prop('checked', false);
+    $('#selectAll').prop('checked', false);
+    
+    // Only reset submission flag, not batch processing (that's handled by polling)
+    isSubmittingRFQs = false;
+    // Don't reset isBatchProcessing here - let polling handle it
+    
+    // Update selected count (will show 0 or hide)
+    updateSelectedCount();
+    
+    clearSelectionState();
+    
+    // Update database
+    updateDatabaseSelection('clear_all', []);
+}
+
+    // ========== EVENT LISTENERS FOR STATE PERSISTENCE ==========
+
+    // Add periodic state saving (backup)
+    setInterval(saveSelectionState, 30000); // Save every 30 seconds
+
+    // Handle page visibility change (when user comes back to tab)
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            // Store current state before refresh
+            const currentSelectedCount = globalSelectedIds.length;
+            const currentSelectAllMode = selectAllMode;
+            const currentProcessingCount = PROCESSING_IDS.length;
+            
+            loadSelectionStateFromDatabase().then(function() {
+                // Only show message if state actually changed significantly
+                const selectedChanged = Math.abs(globalSelectedIds.length - currentSelectedCount) > 0;
+                const modeChanged = selectAllMode !== currentSelectAllMode;
+                const processingChanged = Math.abs(PROCESSING_IDS.length - currentProcessingCount) > 1; // Allow small changes
+                
+                if (selectedChanged || modeChanged || processingChanged) {
+                    showToast("State synchronized with database", "info");
+                } else {
+                    console.log("State refreshed from database on page focus - no changes");
+                }
+            });
+        }
+    });
+    
+    // Enhanced page load handling
+    $(window).on('pageshow', function(event) {
+        
+        // Only show restoration message for actual page restoration (back/forward button)
+        if (event.originalEvent.persisted) {
+            
+            setTimeout(function() {
+                const beforeState = {
+                    selected: globalSelectedIds.length,
+                    selectAll: selectAllMode,
+                    processing: PROCESSING_IDS.length
+                };
+                
+                loadSelectionStateFromDatabase().then(function() {
+                    const afterState = {
+                        selected: globalSelectedIds.length,
+                        selectAll: selectAllMode,
+                        processing: PROCESSING_IDS.length
+                    };
+                    
+                    // Only show message if there's actual meaningful state
+                    if (afterState.selected > 0 || afterState.selectAll || afterState.processing > 0) {
+                        showToast("Page restored from cache - state synchronized", "info");
+                    }
+                });
+            }, 100);
+        } else {
+            // Regular page load - already handled in initializeSystem
+            console.log("Regular page load detected");
+        }
+    });
+    
+    // Handle page navigation
+    $(document).on('click', '.page-link', function(e) {
+    });
+
+    window.addEventListener('beforeunload', function() {  
+        isSubmittingRFQs = false;
+        saveSelectionState(); // Save state before leaving
+    });
+
+    window.addEventListener('load', function() {
+        isSubmittingRFQs = false;
+        initializeProcessingIds();
+    });
+
+    // Add visual indication when user hovers over failed items
+    $(document).on('mouseenter', '.badge.bg-danger', function() {
+        $(this).attr('title', 'This item failed to process. You can select it again to retry.');
+    });
+
+    // ========== INITIALIZATION ==========
+    
+    function initializeSystem() {
+        
+        initializeProcessingIds();
+        
+        // Load state from database
+        loadSelectionStateFromDatabase().then(function() {
+            
+            // Update UI based on loaded state
+            updateCurrentPageCheckboxes();
+            updateProcessingCount();
+            updateSelectedCount();
+            updateStopButton(); // Initialize stop button state
+            
+            // FIXED: Only show recovery message if there's actually meaningful state to restore
+            const hasSelections = globalSelectedIds.length > 0 || selectAllMode;
+            const hasProcessing = PROCESSING_IDS.length > 0;
+            const isSubmitting = isSubmittingRFQs;
+            
+            // Show recovery message only if there's actual state to restore
+            if (hasSelections || hasProcessing || isSubmitting) {
+                let recoveryMessage = "Your session has been restored: ";
+                let parts = [];
+                
+                if (hasSelections) {
+                    if (selectAllMode) {
+                        parts.push("select all mode");
+                    } else {
+                        parts.push(`${globalSelectedIds.length} items selected`);
+                    }
+                }
+                
+                if (hasProcessing) {
+                    parts.push(`${PROCESSING_IDS.length} items processing`);
+                }
+                
+                if (isSubmitting) {
+                    parts.push("submission in progress");
+                }
+                
+                recoveryMessage += parts.join(", ");
+            } else {
+                console.log("No meaningful state to restore, skipping recovery message");
+            }
+            
+        }).catch(function() {
+            // Start with clean state
+            globalSelectedIds = [];
+            selectAllMode = false;
+            PROCESSING_IDS = [];
+            isSubmittingRFQs = false;
+            updateCurrentPageCheckboxes();
+            updateProcessingCount();
+            updateSelectedCount();
+        });
+        
+        // Set up periodic sync with database every 30 seconds
+        setInterval(function() {
+            if (PROCESSING_IDS.length > 0 || isSubmittingRFQs) {
+                console.log("Periodic sync with processing status...");
+                syncWithProcessingStatus();
+            }
+        }, 30000);
+        
+        $("#saveButton").hide();
+    }
+    
+    // Initialize the system
+    initializeSystem();
+
+    window.clearRFQState = function() {
+        clearSelectionState();
+        globalSelectedIds = [];
+        selectAllMode = false;
+        PROCESSING_IDS = [];
+        isSubmittingRFQs = false;
+        updateCurrentPageCheckboxes();
+        updateProcessingCount();
+        updateSelectedCount();
+        
+        // Also clear database state
+        updateDatabaseSelection('clear_all', []);
+    };
+
+    window.forceRestoreState = function() {
+        restoreCompleteState();
+    };
+
+    window.saveCurrentState = function() {
+        saveSelectionState();
+    };
+
+    window.showStateInfo = function() {
+        const stateInfo = {
+            globalSelectedIds: globalSelectedIds,
+            selectAllMode: selectAllMode,
+            processingIds: PROCESSING_IDS,
+            isSubmittingRFQs: isSubmittingRFQs,
+            allValidIds: ALL_VALID_SOLICITATION_IDS,
+            sessionStorageData: sessionStorage.getItem(STATE_KEYS.SELECTED_IDS),
+            currentPageIds: $('.rowCheckbox').map(function() { return parseInt($(this).data('id')); }).get(),
+            checkedIds: $('.rowCheckbox:checked').map(function() { return parseInt($(this).data('id')); }).get()
+        };
+        
+        return stateInfo;
+    };
+
+    window.getStateReport = function() {
+        const report = {
+            'Selected Items': globalSelectedIds.length,
+            'Select All Mode': selectAllMode ? 'Yes' : 'No',
+            'Processing Items': PROCESSING_IDS.length,
+            'Submitting': isSubmittingRFQs ? 'Yes' : 'No',
+            'Total Valid Items': ALL_VALID_SOLICITATION_IDS.length,
+            'Current Page Items': $('.rowCheckbox').length,
+            'Current Page Selected': $('.rowCheckbox:checked').length,
+            'Session Storage': sessionStorage.getItem(STATE_KEYS.SELECTED_IDS) ? 'Available' : 'Empty'
+        };
+        
+        console.log("=== RFQ STATE REPORT ===");
+        for (const [key, value] of Object.entries(report)) {
+            console.log(`${key}: ${value}`);
+        }        
+        return report;
+    };
+
+
+    window.syncProcessingStatus = function() {
+
+        syncWithProcessingStatus();
+    };
+
+    window.clearAllState = function() {
+        // Clear database state
+        updateDatabaseSelection('clear_all', []).then(function() {
+            // Clear local state
+            globalSelectedIds = [];
+            selectAllMode = false;
+            PROCESSING_IDS = [];
+            isSubmittingRFQs = false;
+            
+            // Clear session storage
+            clearSelectionState();
+            
+            // Update UI
+            updateCurrentPageCheckboxes();
+            updateProcessingCount();
+            updateSelectedCount();
+            showToast("All selection state cleared", "info");
+        });
+    };
+});
+</script>
+
+
+<!-- ========== CSS STYLES ========== -->
+<style>
+/* Processing row styles */
+.processing-row {
+    opacity: 0.7;
+    position: relative;
+}
+
+.processing-row:hover {
+    opacity: 0.8;
+}
+
+/* Spinning animation for processing icon */
+.spinning {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Processing badge pulse effect */
+.processing-badge {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { 
+        opacity: 1; 
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.8; 
+        transform: scale(1.05);
+    }
+}
+
+/* Disabled row styling */
+.table-danger, .processing-row, .table-success {
+    user-select: none;
+}
+
+/* NEW: Sent item styling */
+.table-success {
+    background-color: #d1edff !important;
+    opacity: 0.8;
+}
+
+/* Enhanced Pagination styling */
+.pagination {
+    justify-content: center;
+}
+
+.pagination .page-link {
+    color: #6c757d;
+    border-color: #dee2e6;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    color: white;
+    font-weight: 500;
+}
+
+.pagination .page-link:hover:not(.disabled) {
+    color: var(--bs-primary, #0d6efd);
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    transform: translateY(-1px);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: #6c757d;
+    background-color: #fff;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+}
+
+.pagination .page-link:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+
+/* Stop button styling */
+#stopProcessingButton {
+    transition: all 0.3s ease;
+}
+
+#stopProcessingButton:hover {
+    background-color: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+#stopProcessingButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Spinning animation for stop button */
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Enhanced button states */
+.btn-processing {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.btn-processing:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}
+</style>
+
+
+{% endblock %}

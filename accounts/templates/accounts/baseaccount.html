@@ -1,0 +1,60 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>RFQ || Automated Program</title>
+  <link rel="shortcut icon" href="#" type="image/x-icon">
+
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,600,700|Poppins:400,500,600,700" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+  <link href="{% static 'solicitations/assets/css/style.css' %}" rel="stylesheet">
+
+  <style>
+    body { background-color: #f5f7fa; }
+    .auth-wrapper {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 460px;
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+    .auth-card-wide {
+      max-width: 760px;
+    }
+    .auth-logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1a1a2e;
+      letter-spacing: -0.5px;
+    }
+    .auth-subtitle {
+      font-size: 0.875rem;
+      color: #6c757d;
+    }
+    .input-group .form-control:focus {
+      box-shadow: none;
+      border-right: 0;
+    }
+    .input-group .btn { border-left: 0; }
+  </style>
+</head>
+<body>
+  {% block content %}{% endblock %}
+
+  <script src="{% static 'solicitations/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

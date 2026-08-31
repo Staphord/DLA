@@ -1,0 +1,264 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+
+<div class="pagetitle">
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:sent-rfq' %}">Sent RFQs</a></li>
+      <li class="breadcrumb-item active">{{ rfq.unique_id }}</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+
+  <!-- Summary Banner -->
+  <div class="card mb-4 shadow-sm border-0">
+    <div class="card-body py-4 px-4">
+      <div class="row align-items-center g-3">
+        <div class="col-auto">
+          <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:56px;height:56px;background:#d0d5de;">
+            <i class="bi bi-envelope-paper-fill text-secondary" style="font-size:1.6rem;"></i>
+          </div>
+        </div>
+        <div class="col">
+          <div class="fs-5 text-dark">{{ rfq.unique_id }}</div>
+        </div>
+        <div class="col-md-auto text-md-end">
+          <div class="fw-semibold small">{{ rfq.sent_at|date:"M d, Y H:i" }}</div>
+        </div>
+        <div class="col-12 col-md-auto">
+          <a href="{% url 'solicitations:sent-rfq' %}" class="btn btn-sm btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Left Column: Solicitation(s) -->
+    <div class="col-lg-8">
+
+      {% if is_consolidated %}
+      <!-- Item 1 (primary solicitation) -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-clipboard-data-fill text-secondary"></i>
+          <span class="fw-semibold">Item 1 — Solicitation Data</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Solicitation No</div>
+              <div class="fw-semibold">{{ rfq.solicitation.solicitation|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">NSN</div>
+              <div class="fw-semibold">{{ rfq.solicitation.NSN|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Part Number</div>
+              <div class="fw-semibold">{{ rfq.solicitation.part_number|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">CAGE Code</div>
+              <div class="fw-semibold">{{ rfq.solicitation.cage|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Nomenclature</div>
+              <div class="fw-semibold">{{ rfq.solicitation.nomenclature|title|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Quantity</div>
+              <div class="fw-semibold">{{ rfq.solicitation.quantity|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Return By</div>
+              <div class="fw-semibold">{{ rfq.solicitation.return_by_date|default:"—" }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional solicitation items -->
+      {% for solicitation in all_solicitations %}
+        {% if solicitation.id != rfq.solicitation.id %}
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+            <i class="bi bi-clipboard-data-fill text-secondary"></i>
+            <span class="fw-semibold">Item {{ forloop.counter }} — Solicitation Data</span>
+          </div>
+          <div class="card-body py-3">
+            <div class="row g-3">
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">Solicitation No</div>
+                <div class="fw-semibold">{{ solicitation.solicitation|default:"—" }}</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">NSN</div>
+                <div class="fw-semibold">{{ solicitation.NSN|default:"—" }}</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">Part Number</div>
+                <div class="fw-semibold">{{ solicitation.part_number|default:"—" }}</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">CAGE Code</div>
+                <div class="fw-semibold">{{ solicitation.cage|default:"—" }}</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">Nomenclature</div>
+                <div class="fw-semibold">{{ solicitation.nomenclature|title|default:"—" }}</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">Quantity</div>
+                <div class="fw-semibold">{{ solicitation.quantity|default:"—" }}</div>
+              </div>
+              <div class="col-6 col-md-3">
+                <div class="text-muted small mb-1">Return By</div>
+                <div class="fw-semibold">{{ solicitation.return_by_date|default:"—" }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      {% endfor %}
+
+      {% else %}
+      <!-- Single solicitation -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-clipboard-data-fill text-secondary"></i>
+          <span class="fw-semibold">Solicitation Data</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Solicitation No</div>
+              <div class="fw-semibold">{{ rfq.solicitation.solicitation|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">NSN</div>
+              <div class="fw-semibold">{{ rfq.solicitation.NSN|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Part Number</div>
+              <div class="fw-semibold">{{ rfq.solicitation.part_number|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">CAGE Code</div>
+              <div class="fw-semibold">{{ rfq.solicitation.cage|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Nomenclature</div>
+              <div class="fw-semibold">{{ rfq.solicitation.nomenclature|title|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Quantity</div>
+              <div class="fw-semibold">{{ rfq.solicitation.quantity|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Return By</div>
+              <div class="fw-semibold">{{ rfq.solicitation.return_by_date|default:"—" }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Right Column: OEM Info -->
+    <div class="col-lg-4">
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-building-fill text-secondary"></i>
+          <span class="fw-semibold">OEM Information</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="rounded-circle bg-secondary-subtle d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+              <i class="bi bi-building text-secondary"></i>
+            </div>
+            <div>
+              <div class="fw-semibold">{{ rfq.oem.name|title|default:"—" }}</div>
+              <div class="text-muted small">CAGE: {{ rfq.oem.cage|default:"—" }}</div>
+            </div>
+          </div>
+          <hr class="my-2">
+          <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+            <i class="bi bi-envelope text-muted"></i>
+            <span class="text-muted small">Email</span>
+            <a href="mailto:{{ rfq.oem.email }}" class="ms-auto small text-secondary text-decoration-none fw-semibold text-end" style="word-break:break-all;">{{ rfq.oem.email|lower|default:"—" }}</a>
+          </div>
+          <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+            <i class="bi bi-telephone text-muted"></i>
+            <span class="text-muted small">Phone</span>
+            <span class="ms-auto small fw-semibold">{{ rfq.oem.phone|default:"—" }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+            <i class="bi bi-printer text-muted"></i>
+            <span class="text-muted small">Fax</span>
+            <span class="ms-auto small fw-semibold">{{ rfq.oem.fax|default:"—" }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+            <i class="bi bi-geo-alt text-muted"></i>
+            <span class="text-muted small">City</span>
+            <span class="ms-auto small fw-semibold">{{ rfq.oem.city|title|default:"—" }}</span>
+          </div>
+          <div class="d-flex align-items-center gap-2 py-2">
+            <i class="bi bi-signpost text-muted"></i>
+            <span class="text-muted small">Street</span>
+            <span class="ms-auto small fw-semibold text-end">{{ rfq.oem.street|title|default:"—" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete card -->
+      <div class="card shadow-sm border-danger-subtle">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-exclamation-triangle text-danger"></i>
+          <span class="fw-semibold text-danger">Danger Zone</span>
+        </div>
+        <div class="card-body py-3">
+          <p class="text-muted small mb-3">Permanently delete this RFQ. This action cannot be reversed.</p>
+          <button type="button" class="btn btn-sm btn-danger w-100" data-bs-toggle="modal" data-bs-target="#deleteModal-{{ rfq.id }}">
+            <i class="bi bi-trash me-1"></i>Delete RFQ
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal-{{ rfq.id }}" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteModalLabel">Delete RFQ</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete this RFQ? This action cannot be reversed.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <a href="{% url 'solicitations:delete-rfq' rfq.id %}" class="btn btn-danger">
+          <i class="bi bi-trash me-1"></i>Yes, Delete
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}

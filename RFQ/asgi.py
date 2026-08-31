@@ -1,0 +1,20 @@
+"""
+ASGI config for RFQ project.
+
+It exposes the ASGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/5.1/howto/deployment/asgi/
+"""
+
+import os
+
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'RFQ.settings')
+
+from RFQ import wsgi_static_patch  # noqa: E402
+
+wsgi_static_patch.apply_asgi()
+
+application = get_asgi_application()

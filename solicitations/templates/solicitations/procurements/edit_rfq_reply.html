@@ -1,0 +1,432 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section class="mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <p class="text-uppercase text-muted mb-1">Edit RFQ Reply</p>
+            <h4 class="fw-semibold mb-0">
+                {% if rfq_reply.rfq_unique_id %}
+                    {{ rfq_reply.rfq_unique_id }}
+                {% else %}
+                    <span class="text-muted">No RFQ ID available</span>
+                {% endif %}
+            </h4>
+            <small class="text-muted">Update extracted data before exporting or sending to the client.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'solicitations:replied-rfq-detail' rfq_reply.id %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left-short"></i> Back to reply
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted">Quick Snapshot</h6>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <small class="text-muted text-uppercase">OEM</small>
+                                <p class="mb-0 fw-medium">{{ rfq_reply.oem_name|default:"N/A" }}</p>
+                            </div>
+                            <span class="badge bg-info text-dark">{{ rfq_reply.received_date|date:"M d, Y" }}</span>
+                        </div>
+                        <div class="border rounded-3 p-3 bg-light">
+                            <small class="text-muted text-uppercase d-block">Item Summary</small>
+                            <p class="fw-semibold mb-0">{{ rfq_reply.nomenclature|default:"No description" }}</p>
+                            <div class="d-flex gap-3 mt-2">
+                                <div>
+                                    <small class="text-muted text-uppercase">Qty</small>
+                                    <p class="mb-0">{{ rfq_reply.quantity|default:"-" }}</p>
+                                </div>
+                                <div>
+                                    <small class="text-muted text-uppercase">Unit</small>
+                                    <p class="mb-0">{{ rfq_reply.unit|default:"-" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3 border rounded-3 p-3">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Unit Price</small>
+                                <span class="fw-semibold">${{ rfq_reply.unit_price|default_if_none:"0.00"|floatformat:2 }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">Total Price</small>
+                                <span class="fw-semibold">${{ rfq_reply.total_price|default_if_none:"0.00"|floatformat:2 }}</span>
+                            </div>
+                            {% if rfq_reply.total_cost_with_fees %}
+                            <div class="d-flex justify-content-between mt-2 pt-2 border-top">
+                                <small class="fw-semibold text-muted">Total with Fees</small>
+                                <span class="fw-bold text-success">${{ rfq_reply.total_cost_with_fees|floatformat:2 }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% if rfq_reply.additional_costs_summary %}
+                        <div class="mt-3 border rounded-3 p-3 bg-light">
+                            <small class="text-muted text-uppercase d-block mb-2">Current Additional Costs</small>
+                            {% for cost_name, cost_value in rfq_reply.additional_costs_summary.items %}
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted">{{ cost_name }}</small>
+                                <small class="fw-semibold text-success">${{ cost_value|floatformat:2 }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        {# Left side now stays as a read-only snapshot; editing happens on the right #}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="{{ form.rfq_unique_id.id_for_label }}" class="form-label text-muted text-uppercase small">RFQ ID</label>
+                                {{ form.rfq_unique_id }}
+                                {% if form.rfq_unique_id.errors %}
+                                    <div class="text-danger small">{{ form.rfq_unique_id.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.solicitation_number.id_for_label }}" class="form-label text-muted text-uppercase small">Solicitation #</label>
+                                {{ form.solicitation_number }}
+                                {% if form.solicitation_number.errors %}
+                                    <div class="text-danger small">{{ form.solicitation_number.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.nsn.id_for_label }}" class="form-label text-muted text-uppercase small">NSN</label>
+                                {{ form.nsn }}
+                                {% if form.nsn.errors %}
+                                    <div class="text-danger small">{{ form.nsn.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.part_number.id_for_label }}" class="form-label text-muted text-uppercase small">Part Number</label>
+                                {{ form.part_number }}
+                                {% if form.part_number.errors %}
+                                    <div class="text-danger small">{{ form.part_number.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.unit.id_for_label }}" class="form-label text-muted text-uppercase small">Unit</label>
+                                {{ form.unit }}
+                                {% if form.unit.errors %}
+                                    <div class="text-danger small">{{ form.unit.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ form.nomenclature.id_for_label }}" class="form-label text-muted text-uppercase small">Nomenclature</label>
+                                {{ form.nomenclature }}
+                                {% if form.nomenclature.errors %}
+                                    <div class="text-danger small">{{ form.nomenclature.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.quantity.id_for_label }}" class="form-label text-muted text-uppercase small">Quantity</label>
+                                {{ form.quantity }}
+                                {% if form.quantity.errors %}
+                                    <div class="text-danger small">{{ form.quantity.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="border rounded-3 p-3 mt-4">
+                            <p class="text-muted text-uppercase small mb-3">
+                                <i class="bi bi-currency-dollar me-1"></i>Pricing Overview
+                            </p>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.unit_price.id_for_label }}" class="form-label small text-muted">Unit Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.unit_price }}
+                                    </div>
+                                    {% if form.unit_price.errors %}
+                                        <div class="text-danger small">{{ form.unit_price.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.total_price.id_for_label }}" class="form-label small text-muted">Total Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.total_price }}
+                                    </div>
+                                    {% if form.total_price.errors %}
+                                        <div class="text-danger small">{{ form.total_price.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border rounded-3 p-3 mt-4 bg-light">
+                            <p class="text-muted text-uppercase small mb-3">
+                                <i class="bi bi-receipt me-1"></i>Additional Costs & Fees
+                            </p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="{{ form.tax.id_for_label }}" class="form-label small text-muted">Tax (VAT/GST/Sales Tax)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.tax }}
+                                    </div>
+                                    {% if form.tax.errors %}<div class="text-danger small">{{ form.tax.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.packaging_cost.id_for_label }}" class="form-label small text-muted">Packaging Cost</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.packaging_cost }}
+                                    </div>
+                                    {% if form.packaging_cost.errors %}<div class="text-danger small">{{ form.packaging_cost.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.handling_fee.id_for_label }}" class="form-label small text-muted">Handling Fee</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.handling_fee }}
+                                    </div>
+                                    {% if form.handling_fee.errors %}<div class="text-danger small">{{ form.handling_fee.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.insurance_cost.id_for_label }}" class="form-label small text-muted">Insurance Cost</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.insurance_cost }}
+                                    </div>
+                                    {% if form.insurance_cost.errors %}<div class="text-danger small">{{ form.insurance_cost.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.customs_duty.id_for_label }}" class="form-label small text-muted">Customs/Duty</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.customs_duty }}
+                                    </div>
+                                    {% if form.customs_duty.errors %}<div class="text-danger small">{{ form.customs_duty.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.setup_cost.id_for_label }}" class="form-label small text-muted">Setup/Tooling Cost</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.setup_cost }}
+                                    </div>
+                                    {% if form.setup_cost.errors %}<div class="text-danger small">{{ form.setup_cost.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.minimum_order_charge.id_for_label }}" class="form-label small text-muted">Minimum Order Charge</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.minimum_order_charge }}
+                                    </div>
+                                    {% if form.minimum_order_charge.errors %}<div class="text-danger small">{{ form.minimum_order_charge.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.rush_delivery_fee.id_for_label }}" class="form-label small text-muted">Rush Delivery Fee</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.rush_delivery_fee }}
+                                    </div>
+                                    {% if form.rush_delivery_fee.errors %}<div class="text-danger small">{{ form.rush_delivery_fee.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.environmental_fee.id_for_label }}" class="form-label small text-muted">Environmental/Disposal Fee</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.environmental_fee }}
+                                    </div>
+                                    {% if form.environmental_fee.errors %}<div class="text-danger small">{{ form.environmental_fee.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.certification_cost.id_for_label }}" class="form-label small text-muted">Certification/Testing Cost</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.certification_cost }}
+                                    </div>
+                                    {% if form.certification_cost.errors %}<div class="text-danger small">{{ form.certification_cost.errors }}</div>{% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.documentation_fee.id_for_label }}" class="form-label small text-muted">Documentation Fee</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        {{ form.documentation_fee }}
+                                    </div>
+                                    {% if form.documentation_fee.errors %}<div class="text-danger small">{{ form.documentation_fee.errors }}</div>{% endif %}
+                                </div>
+                            </div>
+                            
+                            {% if rfq_reply.total_cost_with_fees %}
+                            <div class="mt-3 pt-3 border-top">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold text-muted">Total with All Fees</span>
+                                    <span class="fw-bold text-success fs-5">${{ rfq_reply.total_cost_with_fees|floatformat:2 }}</span>
+                                </div>
+                                <small class="text-muted">Calculated automatically from base price + all additional costs</small>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="row g-3 mt-4">
+                            <div class="col-md-6">
+                                <label for="{{ form.oem_name.id_for_label }}" class="form-label text-muted text-uppercase small">OEM Name</label>
+                                {{ form.oem_name }}
+                                {% if form.oem_name.errors %}
+                                    <div class="text-danger small">{{ form.oem_name.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ form.replied_email.id_for_label }}" class="form-label text-muted text-uppercase small">Replied Email</label>
+                                {{ form.replied_email }}
+                                {% if form.replied_email.errors %}
+                                    <div class="text-danger small">{{ form.replied_email.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <label for="{{ form.notes.id_for_label }}" class="form-label text-muted text-uppercase small">Internal Notes</label>
+                            {{ form.notes }}
+                            <small class="text-muted">Keep track of negotiation context, delivery conditions, or quality notes.</small>
+                            {% if form.notes.errors %}
+                                <div class="text-danger small">{{ form.notes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        {% if solicitation_form and original_solicitation %}
+                        <hr class="my-4">
+                        <h6 class="text-muted text-uppercase small mb-3">Solicitation Details</h6>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.solicitation.id_for_label }}" class="form-label text-muted text-uppercase small">Solicitation #</label>
+                                {{ solicitation_form.solicitation }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.cage.id_for_label }}" class="form-label text-muted text-uppercase small">CAGE</label>
+                                {{ solicitation_form.cage }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.status.id_for_label }}" class="form-label text-muted text-uppercase small">Status</label>
+                                {{ solicitation_form.status }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.NSN.id_for_label }}" class="form-label text-muted text-uppercase small">NSN</label>
+                                {{ solicitation_form.NSN }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.part_number.id_for_label }}" class="form-label text-muted text-uppercase small">Part Number</label>
+                                {{ solicitation_form.part_number }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="{{ solicitation_form.quantity.id_for_label }}" class="form-label text-muted text-uppercase small">Quantity</label>
+                                {{ solicitation_form.quantity }}
+                            </div>
+                            <div class="col-md-2">
+                                <label for="{{ solicitation_form.unit.id_for_label }}" class="form-label text-muted text-uppercase small">Unit</label>
+                                {{ solicitation_form.unit }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.solicitation_line_number.id_for_label }}" class="form-label text-muted text-uppercase small">Line #</label>
+                                {{ solicitation_form.solicitation_line_number }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="{{ solicitation_form.purchase_request_number.id_for_label }}" class="form-label text-muted text-uppercase small">Purchase #</label>
+                                {{ solicitation_form.purchase_request_number }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.issued_date.id_for_label }}" class="form-label text-muted text-uppercase small">Issued Date</label>
+                                {{ solicitation_form.issued_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.return_by_date.id_for_label }}" class="form-label text-muted text-uppercase small">Return By</label>
+                                {{ solicitation_form.return_by_date }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.inspection_point.id_for_label }}" class="form-label text-muted text-uppercase small">Inspection</label>
+                                {{ solicitation_form.inspection_point }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.acceptance_point.id_for_label }}" class="form-label text-muted text-uppercase small">Acceptance</label>
+                                {{ solicitation_form.acceptance_point }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.deliver_fob.id_for_label }}" class="form-label text-muted text-uppercase small">FOB</label>
+                                {{ solicitation_form.deliver_fob }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.deliver_days.id_for_label }}" class="form-label text-muted text-uppercase small">Delivery Days</label>
+                                {{ solicitation_form.deliver_days }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label text-muted text-uppercase small d-block">Set Aside</label>
+                                <div class="form-check form-switch mt-1">
+                                    {{ solicitation_form.is_set_aside }}
+                                    <label class="form-check-label" for="{{ solicitation_form.is_set_aside.id_for_label }}">
+                                        Small Business Set-Aside
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <label for="{{ solicitation_form.nomenclature.id_for_label }}" class="form-label text-muted text-uppercase small">Solicitation Nomenclature</label>
+                                {{ solicitation_form.nomenclature }}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ solicitation_form.buyer_info.id_for_label }}" class="form-label text-muted text-uppercase small">Buyer Info</label>
+                                {{ solicitation_form.buyer_info }}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ solicitation_form.organization_name.id_for_label }}" class="form-label text-muted text-uppercase small">Organization</label>
+                                {{ solicitation_form.organization_name }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.email.id_for_label }}" class="form-label text-muted text-uppercase small">Email</label>
+                                {{ solicitation_form.email }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.phone.id_for_label }}" class="form-label text-muted text-uppercase small">Phone</label>
+                                {{ solicitation_form.phone }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.fax.id_for_label }}" class="form-label text-muted text-uppercase small">Fax</label>
+                                {{ solicitation_form.fax }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.city.id_for_label }}" class="form-label text-muted text-uppercase small">City</label>
+                                {{ solicitation_form.city }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="{{ solicitation_form.postal_code.id_for_label }}" class="form-label text-muted text-uppercase small">Postal Code</label>
+                                {{ solicitation_form.postal_code }}
+                            </div>
+                            <div class="col-12">
+                                <label for="{{ solicitation_form.street_name.id_for_label }}" class="form-label text-muted text-uppercase small">Street</label>
+                                {{ solicitation_form.street_name }}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="mt-4 d-flex gap-2">
+                            <button type="submit" class="btn mybg myhover text-white px-4">
+                                <i class="bi bi-check-circle me-1"></i> Save Changes
+                            </button>
+                            <a href="{% url 'solicitations:replied-rfq-detail' rfq_reply.id %}" class="btn btn-outline-secondary px-4">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock content %}

@@ -1,0 +1,499 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="vh-100">
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-body">
+                        
+                        <!-- FILTERS SECTION -->
+                        <div class="card mb-2 mt-2">
+                            <div class="card-header">
+                                <h6 class="mb-0">Filters</h6>
+                            </div>
+                            <div class="card-body">
+                                <form method="get" class="row g-3">
+                                    <!-- Processing Mode Filter -->
+                                    <div class="col-md-4">
+                                        <label for="processing_mode" class="form-label">Processing Mode</label>
+                                        <select name="processing_mode" id="processing_mode" class="form-select">
+                                            <option value="">All Modes</option>
+                                            {% for value, label in processing_modes %}
+                                                <option value="{{ value }}" 
+                                                        {% if current_filters.processing_mode == value %}selected{% endif %}>
+                                                    {{ label }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Date From Filter -->
+                                    <div class="col-md-4">
+                                        <label for="date_from" class="form-label">From Date</label>
+                                        <input type="date" 
+                                               name="date_from" 
+                                               id="date_from" 
+                                               class="form-control" 
+                                               value="{{ current_filters.date_from }}">
+                                    </div>
+                                    
+                                    <!-- Date To Filter -->
+                                    <div class="col-md-4">
+                                        <label for="date_to" class="form-label">To Date</label>
+                                        <input type="date" 
+                                               name="date_to" 
+                                               id="date_to" 
+                                               class="form-control" 
+                                               value="{{ current_filters.date_to }}">
+                                    </div>
+                                    
+                                    <!-- Filter Actions -->
+                                    <div class="d-flex gap-3 justify-content-end">
+                                        <div>
+                                            <button type="submit" class="btn btn-primary">Filter</button>
+                                        </div>
+                                        <div>
+                                            <a href="{% url 'solicitations:user_logs' %}" class="btn btn-secondary">Clear</a>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- LOGS TABLE SECTION -->
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date/Time</th>
+                                        <th>Type</th>
+                                        <th>Mode</th>
+                                        <th>Duration</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in page_obj %}
+                                        <!-- Only show main processing sessions, not individual RFQ/email logs -->
+                                        {% if log.log_type == 'manual_started' or log.log_type == 'manual_completed' or log.log_type == 'manual_failed' or log.log_type == 'autosend_started' or log.log_type == 'autosend_completed' or log.log_type == 'autosend_failed' %}
+                                        <tr>
+                                            <!-- Date/Time Column -->
+                                            <td>
+                                                <small>{{ log.started_at|date:"M d, Y" }}</small><br>
+                                                <small class="text-muted">{{ log.started_at|time:"H:i:s" }}</small>
+                                            </td>
+                                            
+                                            <!-- Type Column -->
+                                            <td>
+                                                <span class="badge 
+                                                    {% if log.log_type == 'autosend_completed' or log.log_type == 'manual_completed' %}
+                                                        bg-success
+                                                    {% elif log.log_type == 'autosend_failed' or log.log_type == 'manual_failed' or log.log_type == 'error' %}
+                                                        bg-danger
+                                                    {% else %}
+                                                        bg-info
+                                                    {% endif %}">
+                                                    {{ log.get_log_type_display }}
+                                                </span>
+                                            </td>
+                                            
+                                            <!-- Mode Column -->
+                                            <td>
+                                                {% if log.processing_mode %}
+                                                    <span class="badge bg-secondary">{{ log.get_processing_mode_display }}</span>
+                                                {% else %}
+                                                    <span class="text-muted">-</span>
+                                                {% endif %}
+                                            </td>
+                                            
+                                            <!-- Duration Column -->
+                                            <td>
+                                                <small>{{ log.duration_formatted }}</small>
+                                            </td>
+                                            
+                                            <!-- Status Column -->
+                                            <td>
+                                                <span class="badge 
+                                                    {% if log.status == 'completed' %}
+                                                        bg-success
+                                                    {% elif log.status == 'failed' %}
+                                                        bg-danger
+                                                    {% else %}
+                                                        bg-warning
+                                                    {% endif %}">
+                                                    {{ log.status_display }}
+                                                </span>
+                                            </td>
+                                            
+                                            <!-- Actions Column -->
+                                            <td>
+                                                {% if log.detailed_results %}
+                                                    <button type="button" 
+                                                            class="btn btn-sm btn-outline-primary" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#logModal{{ log.id }}">
+                                                        Details
+                                                    </button>
+                                                {% else %}
+                                                    <span class="text-muted">No details</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                        
+                                    {% empty %}
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted">
+                                                <p class="my-4">No logs found for the selected filters.</p>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- PAGINATION SECTION -->
+                        {% if page_obj.has_other_pages %}
+                            <nav aria-label="Logs pagination">
+                                <ul class="pagination justify-content-center">
+                                    <!-- Previous Navigation -->
+                                    {% if page_obj.has_previous %}
+                                        <li class="page-item">
+                                            <a class="page-link" 
+                                               href="?page=1{% if current_filters.log_type %}&log_type={{ current_filters.log_type }}{% endif %}{% if current_filters.processing_mode %}&processing_mode={{ current_filters.processing_mode }}{% endif %}{% if current_filters.date_from %}&date_from={{ current_filters.date_from }}{% endif %}{% if current_filters.date_to %}&date_to={{ current_filters.date_to }}{% endif %}">
+                                                First
+                                            </a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" 
+                                               href="?page={{ page_obj.previous_page_number }}{% if current_filters.log_type %}&log_type={{ current_filters.log_type }}{% endif %}{% if current_filters.processing_mode %}&processing_mode={{ current_filters.processing_mode }}{% endif %}{% if current_filters.date_from %}&date_from={{ current_filters.date_from }}{% endif %}{% if current_filters.date_to %}&date_to={{ current_filters.date_to }}{% endif %}">
+                                                Previous
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                    
+                                    <!-- Current Page Info -->
+                                    <li class="page-item active">
+                                        <span class="page-link">
+                                            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                                        </span>
+                                    </li>
+                                    
+                                    <!-- Next Navigation -->
+                                    {% if page_obj.has_next %}
+                                        <li class="page-item">
+                                            <a class="page-link" 
+                                               href="?page={{ page_obj.next_page_number }}{% if current_filters.log_type %}&log_type={{ current_filters.log_type }}{% endif %}{% if current_filters.processing_mode %}&processing_mode={{ current_filters.processing_mode }}{% endif %}{% if current_filters.date_from %}&date_from={{ current_filters.date_from }}{% endif %}{% if current_filters.date_to %}&date_to={{ current_filters.date_to }}{% endif %}">
+                                                Next
+                                            </a>
+                                        </li>
+                                        <li class="page-item">
+                                            <a class="page-link" 
+                                               href="?page={{ page_obj.paginator.num_pages }}{% if current_filters.log_type %}&log_type={{ current_filters.log_type }}{% endif %}{% if current_filters.processing_mode %}&processing_mode={{ current_filters.processing_mode }}{% endif %}{% if current_filters.date_from %}&date_from={{ current_filters.date_from }}{% endif %}{% if current_filters.date_to %}&date_to={{ current_filters.date_to }}{% endif %}">
+                                                Last
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        {% endif %}
+                        
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- MODALS SECTION -->
+{% for log in page_obj %}
+    {% if log.log_type == 'manual_started' or log.log_type == 'manual_completed' or log.log_type == 'manual_failed' or log.log_type == 'autosend_started' or log.log_type == 'autosend_completed' or log.log_type == 'autosend_failed' %}
+        <!-- LOG DETAILS MODAL -->
+        <div class="modal fade" id="logModal{{ log.id }}" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <!-- Modal Header -->
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            Processing Session Details - {{ log.started_at|date:"M d, Y H:i:s" }}
+                        </h5>
+                        <button type="button" 
+                                class="btn-close" 
+                                data-bs-dismiss="modal">
+                        </button>
+                    </div>
+                    
+                    <!-- Modal Body -->
+                    <div class="modal-body">
+                        <!-- Session Overview -->
+                        <div class="row mb-4">
+                            <!-- Basic Information -->
+                            <div class="col-md-6">
+                                <h6>Session Information</h6>
+                                <p><strong>Type:</strong> {{ log.get_log_type_display }}</p>
+                                <p><strong>Started:</strong> {{ log.started_at|date:"M d, Y H:i:s" }}</p>
+                                {% if log.completed_at %}
+                                    <p><strong>Completed:</strong> {{ log.completed_at|date:"M d, Y H:i:s" }}</p>
+                                {% endif %}
+                                <p><strong>Duration:</strong> {{ log.duration_formatted }}</p>
+                                <p><strong>Task ID:</strong> {{ log.task_id|default:"-" }}</p>
+                            </div>
+                            
+                            <!-- Processing Results -->
+                            <div class="col-md-6">
+                                <h6>Processing Results</h6>
+                                <p><strong>Mode:</strong> {{ log.get_processing_mode_display|default:"-" }}</p>
+                                <p><strong>Total Solicitations:</strong> {{ log.total_solicitations }}</p>
+                                <p><strong>Successfully Processed:</strong> 
+                                    <span class="text-success">{{ log.successful_sent }}</span>
+                                </p>
+                                <p><strong>Failed:</strong> 
+                                    <span class="text-danger">{{ log.failed_count }}</span>
+                                </p>
+                                <p><strong>Success Rate:</strong> 
+                                    <span class="text-info">{{ log.success_rate }}%</span>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Session Message -->
+                        {% if log.message %}
+                            <div class="mb-3">
+                                <h6>Session Message</h6>
+                                <div class="alert alert-info">{{ log.message }}</div>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Error Information -->
+                        {% if log.error_message %}
+                            <div class="mb-3">
+                                <h6>Error Details</h6>
+                                <div class="alert alert-danger">
+                                    <strong>Error:</strong> {{ log.error_message }}
+                                </div>
+                            </div>
+                        {% endif %}
+                        
+                        {% if log.error_traceback %}
+                            <div class="mb-3">
+                                <h6>Error Traceback</h6>
+                                <pre class="bg-light p-3" style="max-height: 200px; overflow-y: auto;">{{ log.error_traceback }}</pre>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Detailed Results -->
+                        {% if log.detailed_results %}
+                            <div class="accordion" id="detailedResults{{ log.id }}">
+                                
+                                <!-- Session Summary -->
+                                {% if log.detailed_results.processing_summary %}
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#sessionSummary{{ log.id }}">
+                                                Session Summary
+                                            </button>
+                                        </h2>
+                                        <div id="sessionSummary{{ log.id }}" class="accordion-collapse collapse show">
+                                            <div class="accordion-body">
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <h6>Processing Statistics</h6>
+                                                        {% with summary=log.detailed_results.processing_summary %}
+                                                            {% if summary.total_requested %}
+                                                                <p><strong>Total Requested:</strong> {{ summary.total_requested }}</p>
+                                                            {% endif %}
+                                                            {% if summary.successfully_sent %}
+                                                                <p><strong>Successfully Sent:</strong> {{ summary.successfully_sent }}</p>
+                                                            {% endif %}
+                                                            {% if summary.failed_count %}
+                                                                <p><strong>Failed:</strong> {{ summary.failed_count }}</p>
+                                                            {% endif %}
+                                                            {% if summary.processing_rounds %}
+                                                                <p><strong>Processing Rounds:</strong> {{ summary.processing_rounds }}</p>
+                                                            {% endif %}
+                                                            {% if summary.duration_seconds %}
+                                                                <p><strong>Duration:</strong> {{ summary.duration_seconds|floatformat:1 }}s</p>
+                                                            {% endif %}
+                                                        {% endwith %}
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <h6>Session Details</h6>
+                                                        {% with summary=log.detailed_results.processing_summary %}
+                                                            {% if summary.mode %}
+                                                                <p><strong>Mode:</strong> {{ summary.mode|title }}</p>
+                                                            {% endif %}
+                                                            {% if summary.testing_mode %}
+                                                                <p><strong>Testing Mode:</strong> 
+                                                                    <span class="badge bg-warning">{{ summary.testing_mode|yesno:"Yes,No" }}</span>
+                                                                </p>
+                                                            {% endif %}
+                                                            {% if summary.task_id %}
+                                                                <p><strong>Task ID:</strong> {{ summary.task_id }}</p>
+                                                            {% endif %}
+                                                        {% endwith %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                                
+                                <!-- RFQ Details -->
+                                {% if log.detailed_results.rfq_details %}
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#rfqDetails{{ log.id }}">
+                                                RFQ Details ({{ log.detailed_results.rfq_details|length }} RFQs Created)
+                                            </button>
+                                        </h2>
+                                        <div id="rfqDetails{{ log.id }}" class="accordion-collapse collapse">
+                                            <div class="accordion-body">
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-striped">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Solicitation ID</th>
+                                                                <th>CAGE Code</th>
+                                                                <th>RFQ ID</th>
+                                                                <th>Status</th>
+                                                                <th>Nomenclature</th>
+                                                                <th>Created At</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for rfq in log.detailed_results.rfq_details %}
+                                                                <tr>
+                                                                    <td>{{ rfq.solicitation_id }}</td>
+                                                                    <td>{{ rfq.cage_code }}</td>
+                                                                    <td>
+                                                                        <code>{{ rfq.rfq_unique_id|default:"-" }}</code>
+                                                                    </td>
+                                                                    <td>
+                                                                        <span class="badge 
+                                                                            {% if rfq.status == 'created' %}
+                                                                                bg-success
+                                                                            {% else %}
+                                                                                bg-danger
+                                                                            {% endif %}">
+                                                                            {{ rfq.status }}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td>{{ rfq.nomenclature|truncatechars:40 }}</td>
+                                                                    <td>
+                                                                        {% if rfq.created_at %}
+                                                                            <small>{{ rfq.created_at|slice:":19"|date:"M d H:i" }}</small>
+                                                                        {% else %}
+                                                                            -
+                                                                        {% endif %}
+                                                                    </td>
+                                                                </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                                
+                                <!-- Email Details -->
+                                {% if log.detailed_results.email_details %}
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" 
+                                                    type="button" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#emailDetails{{ log.id }}">
+                                                Email Details ({{ log.detailed_results.email_details|length }} Emails Sent)
+                                            </button>
+                                        </h2>
+                                        <div id="emailDetails{{ log.id }}" class="accordion-collapse collapse">
+                                            <div class="accordion-body">
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-striped">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>RFQ ID</th>
+                                                                <th>To Email</th>
+                                                                <th>CC Emails</th>
+                                                                <th>Status</th>
+                                                                <th>Nomenclature</th>
+                                                                <th>Sent At</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for email in log.detailed_results.email_details %}
+                                                                <tr>
+                                                                    <td>
+                                                                        <code>{{ email.rfq_unique_id }}</code>
+                                                                    </td>
+                                                                    <td>
+                                                                        {% if email.testing_mode %}
+                                                                            <span class="badge bg-warning">TEST</span>
+                                                                        {% endif %}
+                                                                        {{ email.to_email|truncatechars:25 }}
+                                                                    </td>
+                                                                    <td>
+                                                                        {% if email.cc_emails %}
+                                                                            {{ email.cc_emails|join:", "|truncatechars:30 }}
+                                                                        {% else %}
+                                                                            -
+                                                                        {% endif %}
+                                                                    </td>
+                                                                    <td>
+                                                                        <span class="badge 
+                                                                            {% if email.status == 'sent' %}
+                                                                                bg-success
+                                                                            {% else %}
+                                                                                bg-danger
+                                                                            {% endif %}">
+                                                                            {{ email.status }}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td>{{ email.nomenclature|truncatechars:30 }}</td>
+                                                                    <td>
+                                                                        {% if email.sent_at %}
+                                                                            <small>{{ email.sent_at|slice:":19"|date:"M d H:i" }}</small>
+                                                                        {% else %}
+                                                                            -
+                                                                        {% endif %}
+                                                                    </td>
+                                                                </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                                
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Modal Footer -->
+                    <div class="modal-footer">
+                        <button type="button" 
+                                class="btn btn-secondary" 
+                                data-bs-dismiss="modal">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endfor %}
+
+{% endblock %}

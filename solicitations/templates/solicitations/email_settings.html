@@ -1,0 +1,323 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="py-4">
+    <div class="container">
+        <div class="row g-4 justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-4">
+
+                        <!-- Header & Back -->
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div>
+                            </div>
+                            <a href="{% url 'solicitations:solicitations' %}" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-arrow-left me-1"></i> Unsent Solicitations
+                            </a>
+                        </div>
+
+                        <!-- Messages -->
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+
+                        <!-- Settings Form -->
+                        <form method="post" id="settingsForm">
+                            {% csrf_token %}
+                            {{ form.auto_send }}
+
+                            <!-- Current Status Display -->
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="fw-semibold">
+                                    Automation Status
+                                </div>
+                                <div>
+                                    {% if current_auto_send %}
+                                    <span class="badge bg-success">Automation is ON</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Automation is OFF</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <!-- Schedule Settings -->
+                            <div id="schedule-settings" class="card p-3 bg-light mb-4 border-0">
+                                <h5 class="mb-3">Schedule Settings</h5>
+                                
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <label for="{{ form.send_day.id_for_label }}" class="form-label">Frequency:</label>
+                                        {{ form.send_day }}
+                                        {% if form.send_day.errors %}
+                                            <div class="text-danger small mt-1">
+                                                {% for error in form.send_day.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <label for="{{ form.send_scope.id_for_label }}" class="form-label">Send Scope:</label>
+                                        {{ form.send_scope }}
+                                        {% if form.send_scope.errors %}
+                                            <div class="text-danger small mt-1">
+                                                {% for error in form.send_scope.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                
+                                <!-- Multiple Time Intervals -->
+                                <div class="mb-4">
+                                    <!-- Time Interval 1 -->
+                                    <div class="row g-3 mb-3 align-items-center">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                {{ form.enable_time_1 }}
+                                                <label class="form-check-label" for="{{ form.enable_time_1.id_for_label }}">
+                                                    <strong>Time 1</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.send_time_1.id_for_label }}" class="form-label">Morning:</label>
+                                            {{ form.send_time_1 }}
+                                            {% if form.send_time_1.errors %}
+                                                <div class="text-danger small mt-1">
+                                                    {% for error in form.send_time_1.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Default: 9:00 AM</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Time Interval 2 -->
+                                    <div class="row g-3 mb-3 align-items-center">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                {{ form.enable_time_2 }}
+                                                <label class="form-check-label" for="{{ form.enable_time_2.id_for_label }}">
+                                                    <strong>Time 2</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.send_time_2.id_for_label }}" class="form-label">Afternoon:</label>
+                                            {{ form.send_time_2 }}
+                                            {% if form.send_time_2.errors %}
+                                                <div class="text-danger small mt-1">
+                                                    {% for error in form.send_time_2.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Default: 2:00 PM</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Time Interval 3 -->
+                                    <div class="row g-3 mb-3 align-items-center">
+                                        <div class="col-md-2">
+                                            <div class="form-check">
+                                                {{ form.enable_time_3 }}
+                                                <label class="form-check-label" for="{{ form.enable_time_3.id_for_label }}">
+                                                    <strong>Time 3</strong>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="{{ form.send_time_3.id_for_label }}" class="form-label">Evening:</label>
+                                            {{ form.send_time_3 }}
+                                            {% if form.send_time_3.errors %}
+                                                <div class="text-danger small mt-1">
+                                                    {% for error in form.send_time_3.errors %}
+                                                        {{ error }}
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Default: 6:00 PM</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Schedule Preview -->
+                                <div class="mt-3 p-3 bg-white rounded border">
+                                    <h6 class="mb-2">Schedule Preview:</h6>
+                                    <div id="schedulePreview" class="fw-bold text-primary">
+                                        <!-- Will be filled by JavaScript -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="mt-2 d-flex justify-content-end gap-2">
+                                <a href="{% url 'solicitations:solicitations' %}" class="btn btn-outline-secondary">
+                                    Cancel
+                                </a>
+
+                                <!-- Dynamic button that changes based on schedule changes -->
+                                <button type="submit" id="actionButton" name="toggle_status" 
+                                        class="btn {% if current_auto_send %}btn-danger{% else %}btn-success{% endif %}"
+                                        data-current-state="{{ current_auto_send|yesno:'enabled,disabled' }}">
+                                    {% if current_auto_send %}
+                                    <i class="fas fa-power-off"></i> Disable Automation
+                                    {% else %}
+                                    <i class="fas fa-power-on"></i> Enable Automation
+                                    {% endif %}
+                                </button>
+                            </div>
+
+                            <!-- Hidden input to track which action to perform -->
+                            <input type="hidden" id="action_type" name="action_type" value="toggle_status">
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const daySelect = document.getElementById('{{ form.send_day.id_for_label }}');
+        const scopeSelect = document.getElementById('{{ form.send_scope.id_for_label }}');
+        const schedulePreview = document.getElementById('schedulePreview');
+        const actionButton = document.getElementById('actionButton');
+        const actionType = document.getElementById('action_type');
+        
+        // Time interval elements
+        const time1Checkbox = document.getElementById('{{ form.enable_time_1.id_for_label }}');
+        const time1Input = document.getElementById('{{ form.send_time_1.id_for_label }}');
+        const time2Checkbox = document.getElementById('{{ form.enable_time_2.id_for_label }}');
+        const time2Input = document.getElementById('{{ form.send_time_2.id_for_label }}');
+        const time3Checkbox = document.getElementById('{{ form.enable_time_3.id_for_label }}');
+        const time3Input = document.getElementById('{{ form.send_time_3.id_for_label }}');
+        
+        // Store initial values to detect changes
+        const initialValues = {
+            day: daySelect.value,
+            scope: scopeSelect.value,
+            time1Enabled: time1Checkbox.checked,
+            time1: time1Input.value,
+            time2Enabled: time2Checkbox.checked,
+            time2: time2Input.value,
+            time3Enabled: time3Checkbox.checked,
+            time3: time3Input.value
+        };
+        
+        // Update schedule preview
+        function updateSchedulePreview() {
+            const dayText = daySelect.options[daySelect.selectedIndex].text;
+            const scopeText = scopeSelect.options[scopeSelect.selectedIndex].text;
+            
+            // Collect enabled times
+            const enabledTimes = [];
+            if (time1Checkbox.checked && time1Input.value) {
+                enabledTimes.push(time1Input.value);
+            }
+            if (time2Checkbox.checked && time2Input.value) {
+                enabledTimes.push(time2Input.value);
+            }
+            if (time3Checkbox.checked && time3Input.value) {
+                enabledTimes.push(time3Input.value);
+            }
+            
+            let previewText = '';
+            if (enabledTimes.length === 0) {
+                previewText = 'No time intervals enabled';
+            } else {
+                const timesStr = enabledTimes.join(', ');
+                if (dayText === 'Every day') {
+                    previewText = `Emails will be sent every day at ${timesStr}`;
+                } else {
+                    previewText = `Emails will be sent every ${dayText} at ${timesStr}`;
+                }
+                previewText += ` (${scopeText.toLowerCase()})`;
+            }
+            
+            schedulePreview.textContent = previewText;
+            
+            // Check if changes were made
+            const hasChanges = (
+                daySelect.value !== initialValues.day ||
+                scopeSelect.value !== initialValues.scope ||
+                time1Checkbox.checked !== initialValues.time1Enabled ||
+                time1Input.value !== initialValues.time1 ||
+                time2Checkbox.checked !== initialValues.time2Enabled ||
+                time2Input.value !== initialValues.time2 ||
+                time3Checkbox.checked !== initialValues.time3Enabled ||
+                time3Input.value !== initialValues.time3
+            );
+            
+            // Update button based on changes
+            if (hasChanges) {
+                // Replace with Save Changes button
+                actionButton.innerHTML = '<i class="fas fa-save"></i> Save Changes';
+                actionButton.className = 'btn btn-warning text-white';
+                actionType.value = 'save_schedule';
+            } else {
+                // Show current status button based on current auto_send state
+                const currentState = actionButton.getAttribute('data-current-state');
+                if (currentState === 'enabled') {
+                    actionButton.innerHTML = '<i class="fas fa-power-off"></i> Disable Automation';
+                    actionButton.className = 'btn btn-danger';
+                } else {
+                    actionButton.innerHTML = '<i class="fas fa-power-on"></i> Enable Automation';
+                    actionButton.className = 'btn btn-success';
+                }
+                actionType.value = 'toggle_status';
+            }
+        }
+
+        // Initialize the preview
+        updateSchedulePreview();
+        
+        // Add event listeners
+        daySelect.addEventListener('change', updateSchedulePreview);
+        scopeSelect.addEventListener('change', updateSchedulePreview);
+        time1Checkbox.addEventListener('change', updateSchedulePreview);
+        time1Input.addEventListener('change', updateSchedulePreview);
+        time2Checkbox.addEventListener('change', updateSchedulePreview);
+        time2Input.addEventListener('change', updateSchedulePreview);
+        time3Checkbox.addEventListener('change', updateSchedulePreview);
+        time3Input.addEventListener('change', updateSchedulePreview);
+        
+        // Disable time inputs when checkbox is unchecked
+        function toggleTimeInput(checkbox, input) {
+            input.disabled = !checkbox.checked;
+            if (!checkbox.checked) {
+                input.value = '';
+            }
+        }
+        
+        // Set up initial state and event listeners for time inputs
+        toggleTimeInput(time1Checkbox, time1Input);
+        toggleTimeInput(time2Checkbox, time2Input);
+        toggleTimeInput(time3Checkbox, time3Input);
+        
+        time1Checkbox.addEventListener('change', () => toggleTimeInput(time1Checkbox, time1Input));
+        time2Checkbox.addEventListener('change', () => toggleTimeInput(time2Checkbox, time2Input));
+        time3Checkbox.addEventListener('change', () => toggleTimeInput(time3Checkbox, time3Input));
+    });
+</script>
+{% endblock %}

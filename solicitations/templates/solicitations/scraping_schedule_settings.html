@@ -1,0 +1,151 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="py-4">
+    <div class="container">
+        <div class="row g-4 justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-5">
+                            <div>
+                                <h4 class="mb-1">Automatic Scraping Settings</h4>
+                                <p class="text-muted mb-0">Configure when solicitations are automatically scraped.</p>
+                            </div>
+                            <a href="{% url 'solicitations:home' %}" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+                            </a>
+                        </div>
+
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+
+                        <form method="post">
+                            {% csrf_token %}
+                            
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="fw-semibold">
+                                    Automatic Scraping Status
+                                </div>
+                                <div>
+                                    {% if form.instance.enabled %}
+                                        <span class="badge bg-success">Auto Scraping is ON</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Auto Scraping is OFF</span>
+                                    {% endif %}
+                                </div>
+                                <!-- Keep the field in the form but hide the raw checkbox; we will toggle it via the button -->
+                                <div class="d-none">
+                                    {{ form.enabled }}
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="row g-4 mt-1">
+                                <div class="col-md-6">
+                                    <label for="{{ form.scrape_day.id_for_label }}" class="form-label fw-semibold">
+                                        Scrape Day
+                                    </label>
+                                    {{ form.scrape_day }}
+                                    {% if form.scrape_day.errors %}
+                                        <div class="text-danger small mt-1">
+                                            {% for error in form.scrape_day.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.scrape_time.id_for_label }}" class="form-label fw-semibold">
+                                        Scrape Time
+                                    </label>
+                                    {{ form.scrape_time }}
+                                    {% if form.scrape_time.help_text %}
+                                        <div class="form-text">{{ form.scrape_time.help_text }}</div>
+                                    {% endif %}
+                                    {% if form.scrape_time.errors %}
+                                        <div class="text-danger small mt-1">
+                                            {% for error in form.scrape_time.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <div class="row g-3 align-items-center">
+                                    <div class="col-md-6">
+                                        <label for="{{ form.second_scrape_time.id_for_label }}" class="form-label fw-semibold mb-1">
+                                            Second Scrape Time
+                                        </label>
+                                        {{ form.second_scrape_time }}
+                                        {% if form.second_scrape_time.errors %}
+                                            <div class="text-danger small mt-1">
+                                                {% for error in form.second_scrape_time.errors %}
+                                                    {{ error }}
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% if current_schedule_info %}
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <small class="text-muted d-block mb-1"><strong>Current Schedule:</strong></small>
+                                <div class="d-flex flex-column gap-2">
+                                    <div>
+                                        Runs on <strong>{{ current_schedule_info.day_display }}</strong> at <strong>{{ current_schedule_info.time_display }}</strong>
+                                        <small class="text-muted ms-2">(System checks every 2 minutes)</small>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            {% if schedule.last_run %}
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <small class="text-muted d-block mb-1"><strong>Last Run:</strong></small>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span>{{ schedule.last_run|date:"M d, Y H:i:s" }}</span>
+                                    {% if schedule.last_run_status %}
+                                        <span class="badge 
+                                            {% if schedule.last_run_status == 'success' %}bg-success
+                                            {% elif schedule.last_run_status == 'failed' %}bg-danger
+                                            {% elif schedule.last_run_status == 'skipped' %}bg-warning
+                                            {% else %}bg-info{% endif %}">
+                                            {{ schedule.last_run_status|title }}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <div class="mt-4 d-flex justify-content-end gap-2">
+                                <button type="submit"
+                                        class="btn btn-primary">
+                                    <i class="bi bi-save me-1"></i>
+                                    {% if form.instance.enabled %}
+                                        Disable Automatic Scraping
+                                    {% else %}
+                                        Enable Automatic Scraping
+                                    {% endif %}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

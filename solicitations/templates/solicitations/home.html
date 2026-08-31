@@ -1,0 +1,617 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+
+{% if user.is_authenticated %}
+<div class="pagetitle">
+  <h1 class="text-dark">Dashboard</h1>
+  <div class="d-flex justify-content-between">
+    <div class="mt-2">
+      <nav>
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="#">Home</a></li>
+          <li class="breadcrumb-item text-dark">Dashboard</li>
+        </ol>
+      </nav>
+    </div>
+    {% if user.user_type == "admin" %}
+    <div class="">
+      <a href="{% url 'solicitations:workflow' %}" class="btn btn-secondary text-white">Set Cron</a>
+      <a href="#" class="btn mybg myhover text-white" data-bs-toggle="modal" data-bs-target="#exampleModalToggle">Scrape Solicitations</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<section class="section dashboard">
+  
+  {% if user.user_type == "admin" %}
+  <div class="row">
+    <div class="col-xxl-4 col-md-4">
+      <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
+          <div class="card info-card revenue-card myhover">
+              <div class="card-body rounded-3">
+                <h5 class="card-title">Unsent Solicitations <span class="text-muted">| All</span></h5>
+                <div class="d-flex align-items-center">
+                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                      <i class="bi bi-files my-text"></i>
+                  </div>
+                  <div class="ps-3">
+                    <h6 class="" id="unsentSolicitationsCount">{{total_solicitations}}</h6>
+                  </div>
+                </div>
+              </div>
+          </div>
+      </a>
+    </div>
+
+    <div class="col-xxl-4 col-md-4">
+      <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
+        <div class="card info-card revenue-card myhover">
+          <div class="card-body rounded-3">
+            <h5 class="card-title">Sent RFQs <span class="text-muted">| All</span></h5>
+            <div class="d-flex align-items-center">
+                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                  <i class="bi bi-truck my-text"></i>
+              </div>
+              <div class="ps-3">
+                <h6 class="">{{total_sent_rfqs}}</h6>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </a>
+    </div>
+
+    <div class="col-xxl-4 col-md-4">
+      <a href="{% url 'solicitations:clients' %}" class="text-decoration-none">
+        <div class="card info-card revenue-card myhover">
+          <div class="card-body rounded-3">
+            <h5 class="card-title">Users <span class="">| All</span></h5>
+            <div class="d-flex align-items-center">
+              <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                <i class="bi bi-people my-text"></i>
+              </div>
+              <div class="ps-3">
+                <h6 class="">{{total_clients}}</h6>
+              </div>
+            </div>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+  {% else %}
+  <div class="row">
+    <div class="col-md-6">
+      <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
+          <div class="card info-card revenue-card myhover">
+              <div class="card-body rounded-3">
+                <h5 class="card-title">Unsent Solicitations <span class="text-muted">| All</span></h5>
+                <div class="d-flex align-items-center">
+                    <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                      <i class="bi bi-files my-text"></i>
+                  </div>
+                  <div class="ps-3">
+                    <h6 class="" id="unsentSolicitationsCount">{{total_solicitations}}</h6>
+                  </div>
+                </div>
+              </div>
+          </div>
+      </a>
+    </div>
+
+    <!-- Procurement Card -->
+      <div class="col-md-6">
+        <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
+        <div class="card info-card revenue-card myhover">
+          <div class="card-body rounded-3">
+            <h5 class="card-title">Sent RFQs <span class="text-muted">| All</span></h5>
+            <div class="d-flex align-items-center">
+                <div class="card-icon rounded-circle d-flex align-items-center justify-content-center">
+                  <i class="bi bi-truck my-text"></i>
+              </div>
+              <div class="ps-3">
+                <h6 class="">{{total_sent_rfqs}}</h6>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </a>
+      </div>
+    <!-- End Procurement Card -->
+ </div>
+  {% endif%}
+    
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card h-100"> <!-- Added h-100 class -->
+      <div class="card-body d-flex flex-column"> <!-- Added d-flex flex-column -->
+        <h5 class="card-title">OEMs Status Chart</h5>
+  
+        <!-- Line Chart -->
+        <div class="flex-grow-1 d-flex align-items-center justify-content-center"> <!-- Chart container -->
+          <canvas id="lineChart" style="max-height: 260px; max-width: 100%;"></canvas>
+        </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", () => {
+            // Fetch dynamic data from the Django backend
+            fetch('https://swiftneasyrfq.com/DLA/solicitations/get-oem-status-data/')
+              .then(response => response.json())
+              .then(data => {
+                // Extract dynamic data
+                const dynamicData = [data.active, data.disabled];
+  
+                // Create the chart using the dynamic data
+                new Chart(document.querySelector('#lineChart'), {
+                  type: 'bar',  
+                  data: {
+                    labels: ['Active', 'Disabled'],
+                    datasets: [{
+                      label: 'Number',
+                      data: dynamicData,  // Use the dynamic data
+                      fill: false,
+                      borderColor: 'rgb(75, 192, 192)',
+                      backgroundColor: [
+                          'rgb(54, 162, 235)',  // Active color
+                          'rgb(104, 99, 200)'   // Disabled color
+                        ],
+                      tension: 0.1
+                    }]
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: true, // Keep aspect ratio
+                    aspectRatio: 2, // Set aspect ratio for consistency
+                    scales: {
+                      y: {
+                        beginAtZero: true
+                      }
+                    }
+                  }
+                });
+              })
+              .catch(error => {
+                console.error('Error fetching dynamic data:', error);
+              });
+          });
+        </script>
+        <!-- End Line Chart -->
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-6">
+    <div class="card h-100"> <!-- Added h-100 class -->
+      <div class="card-body d-flex flex-column"> <!-- Added d-flex flex-column -->
+        <h5 class="card-title">Solicitations and RFQs Status Info</h5>
+    
+        <!-- Doughnut Chart -->
+        <div class="flex-grow-1 d-flex align-items-center justify-content-center"> <!-- Chart container -->
+          <canvas id="doughnutChart" style="max-height: 260px; max-width: 100%;"></canvas>
+        </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", () => {
+            // Fetch dynamic data from Django view
+            fetch('https://swiftneasyrfq.com/DLA/solicitations/get-chart-data/')
+              .then(response => response.json())
+              .then(data => {
+                // Extract dynamic data
+                const dynamicData = [data.solicitations, data.sent];
+    
+                // Create the chart using the dynamic data
+                new Chart(document.querySelector('#doughnutChart'), {
+                  type: 'doughnut',
+                  data: {
+                    labels: ['Unsent solicitations', 'Sent RFQs'],
+                    datasets: [{
+                      label: 'Data',
+                      data: dynamicData,  // Use the dynamic data
+                      backgroundColor: [
+                        'rgb(255, 99, 132)',  // Scraped color
+                        'rgb(54, 162, 235)'   // Sent color
+                      ],
+                      hoverOffset: 4
+                    }]
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: true, // Keep aspect ratio
+                    aspectRatio: 1, // Square aspect ratio for doughnut
+                  }
+                });
+              })
+              .catch(error => {
+                console.error('Error fetching dynamic data:', error);
+              });
+          });
+        </script>
+        <!-- End Doughnut Chart -->
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- AJAX polling for unsent solicitations count -->
+<script>
+  (function() {
+    function initCountPolling() {
+      var unsentCountElement = document.getElementById('unsentSolicitationsCount');
+      
+      if (!unsentCountElement) {
+        return;
+      }
+      
+      // Get CSRF token 
+      function getCSRFToken() {
+        var token = document.querySelector('[name=csrfmiddlewaretoken]');
+        return token ? token.value : '';
+      }
+      
+      // Function to update unsent count from scraping progress data (single source of truth)
+      function updateUnsentCountFromProgress(progressData) {
+        if (!unsentCountElement || document.visibilityState !== 'visible') {
+          return;
+        }
+        
+        if (progressData && progressData.total_solicitations !== undefined) {
+          var newCount = progressData.total_solicitations;
+          var currentCount = parseInt(unsentCountElement.textContent.trim()) || 0;
+          // Only update if count changed (avoid unnecessary DOM updates)
+          if (newCount !== currentCount) {
+            unsentCountElement.textContent = newCount;
+          }
+        }
+      }
+      
+      // Listen for progress updates from badge polling - this is the ONLY way count updates
+      // This ensures perfect synchronization - count updates exactly when badge updates
+      document.addEventListener('scrapingProgressUpdate', function(event) {
+        // Update count when badge updates using the same progress data
+        // This ensures count updates in sync with badge progress from the same source
+        if (event.detail && event.detail.progressData) {
+          updateUnsentCountFromProgress(event.detail.progressData);
+        }
+      });
+      
+      // Listen for status changes to handle start/stop
+      document.addEventListener('scrapingStatusChanged', function(event) {
+        var isRunning = event.detail ? event.detail.isRunning : event.isRunning;
+        if (!isRunning) {
+          // Scraping stopped - do one final update by checking status
+          fetch("{% url 'solicitations:scrape-progress' %}", {
+            method: "GET",
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "X-CSRFToken": getCSRFToken(),
+            },
+          })
+          .then(response => response.json())
+          .then(progressData => {
+            updateUnsentCountFromProgress(progressData);
+          })
+          .catch(error => {
+            // Silently handle error
+          });
+        }
+      });
+      
+      // Initial update when page loads (if scraping is already running)
+      // Check once to get initial count
+      fetch("{% url 'solicitations:scrape-progress' %}", {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": getCSRFToken(),
+        },
+      })
+      .then(response => response.json())
+      .then(progressData => {
+        updateUnsentCountFromProgress(progressData);
+      })
+      .catch(error => {
+        // Silently handle error
+      });
+      
+      // No cleanup needed - we're only listening to events, not polling
+    }
+    
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initCountPolling);
+    } else {
+      // DOM is already ready
+      initCountPolling();
+    }
+  })();
+</script>
+
+<!-- Progress Modal -->
+<div class="modal fade" id="progressModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="progressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="progressModalLabel">Processing...</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="location.reload();"></button>
+          </div>
+          <div class="modal-body text-center">
+              <div class="progress" id="progressBarContainer">
+                  <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                       role="progressbar" 
+                       id="progressBar" 
+                       style="width: 0%;">0%</div>
+              </div>
+              <div id="status" class="fs-6 mt-3">Extracting Solicitations, Please Wait...</div>
+              {% if selected_date %}
+              <p id="selectedDateDisplay">Selected date: {{ selected_date }}</p>
+              {% endif %}
+          </div>
+      </div>
+  </div>
+</div>
+
+
+<!--MODAL SCRAP -->
+<div class="modal fade" id="exampleModalToggle" aria-hidden="true" data-bs-backdrop="static" aria-labelledby="exampleModalToggleLabel" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to scrape the latest solicitations?.
+      </div>
+      <div class="modal-footer">
+        <button class="btn mybg hoverbg text-white" data-bs-target="#exampleModalToggle2" data-bs-toggle="modal">Enter date to scrape</button>
+        <button type="submit" class="btn btn-secondary" onclick="handleScrape()">Yes scrape now</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="exampleModalToggle2" aria-hidden="true" aria-labelledby="exampleModalToggleLabel2" data-bs-backdrop="static" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="scrapeForm" method="post">
+          {% csrf_token %}
+          <label for="scrapeDate"> Enter date to scrape solicitations:</label>
+          <input type="date" name="date" class="form-control" id="scrapeDate" placeholder="mm-dd-yyyy" required>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn mybg hoverbg text-white" data-bs-target="#exampleModalToggle" data-bs-toggle="modal">Back to first</button>
+        <button type="button" class="btn btn-secondary" onclick="handleScrape2()">Scrape now</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+function handleScrape() {
+  // Close the current modal
+  const scrapeModal = document.getElementById('exampleModalToggle');
+  const modalInstance = bootstrap.Modal.getInstance(scrapeModal);
+  modalInstance.hide(); // Close the modal
+
+  // Show the progress modal
+  const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+  progressModal.show();
+
+  // Start scraping
+  scrapeSolicitations();
+}
+
+function handleScrape2() {
+  // Close the current modal
+  const scrapeModal2 = document.getElementById('exampleModalToggle2');
+  const modalInstance2 = bootstrap.Modal.getInstance(scrapeModal2);
+  modalInstance2.hide(); // Close the modal
+
+  // Show the progress modal
+  const progressModal2 = new bootstrap.Modal(document.getElementById('progressModal'));
+  progressModal2.show();
+
+  // Start scraping
+  scrapeSolicitations();
+}
+
+function scrapeSolicitations() {
+  const progressBar = document.getElementById('progressBar');
+  const status = document.getElementById('status');
+  const dateInput = document.getElementById('scrapeDate'); 
+  const selectedDateElement = document.getElementById('selectedDateDisplay');
+
+  // Get the date value (if available)
+  const date = dateInput ? dateInput.value : null;
+
+  // Show/hide selected date based on whether scrapeDate is provided
+  if (selectedDateElement) {
+    selectedDateElement.style.display = date ? 'block' : 'none';
+    if (date) {
+      selectedDateElement.textContent = `Selected date: ${date}`;
+    }
+  }
+
+  // Reset progress bar and status
+  progressBar.style.width = '0%';
+  progressBar.textContent = '0%';
+  status.textContent = 'Starting scraping process...';
+
+  let progressPollInterval = null;
+  let isPolling = false;
+
+  // Function to poll for progress updates
+  function pollProgress() {
+    if (isPolling) return;
+    isPolling = true;
+    
+    fetch("{% url 'solicitations:scrape-progress' %}", {
+      method: "GET",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+      },
+    })
+      .then(response => response.json())
+      .then(progressData => {
+        isPolling = false;
+        
+        if (progressData.error) {
+          console.error("Progress error:", progressData.error);
+          return;
+        }
+
+        const percentage = progressData.percentage || 0;
+        const current = progressData.current || 0;
+        const total = progressData.total || 0;
+        const message = progressData.message || "Processing...";
+        const progressStatus = progressData.status || "running";
+
+        // Update progress bar
+        progressBar.style.width = `${percentage}%`;
+        
+        // Update status text with detailed progress - format: "Processing data X/Y"
+        if (total > 0 && current > 0) {
+          status.textContent = `Processing data ${current}/${total}`;
+          progressBar.textContent = `${percentage}%`;
+        } else {
+          status.textContent = message;
+          progressBar.textContent = percentage > 0 ? `${percentage}%` : '0%';
+        }
+
+        // Handle completion - check if status is completed OR if we're at 100% and process might be done
+        if (progressStatus === "completed" || (percentage >= 100 && total > 0 && current >= total)) {
+          clearInterval(progressPollInterval);
+          isPolling = false;
+          progressBar.style.width = '100%';
+          progressBar.textContent = '100%';
+          status.textContent = message || "Scraping completed successfully!";
+          progressBar.classList.remove("bg-danger");
+          progressBar.classList.add("bg-success");
+          
+          // Clean up any orphaned processes
+          fetch("{% url 'solicitations:cleanup-scrape-processes' %}", {
+            method: "POST",
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+          }).catch(err => console.log("Cleanup request failed:", err));
+          
+          setTimeout(() => {
+            location.reload();
+          }, 3000);
+        } else if (progressStatus === "failed") {
+          clearInterval(progressPollInterval);
+          isPolling = false;
+          progressBar.style.width = '100%';
+          progressBar.textContent = '100%';
+          status.textContent = message || "Scraping failed!";
+          progressBar.classList.add("bg-danger");
+          
+          // Clean up any orphaned processes
+          fetch("{% url 'solicitations:cleanup-scrape-processes' %}", {
+            method: "POST",
+            headers: {
+              "X-Requested-With": "XMLHttpRequest",
+              "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+          }).catch(err => console.log("Cleanup request failed:", err));
+          
+          setTimeout(() => {
+            const progressModal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+            if (progressModal) progressModal.hide();
+          }, 5000);
+        }
+      })
+      .catch(error => {
+        isPolling = false;
+        console.error("Error polling progress:", error);
+      });
+  }
+
+  // Start scraping process via AJAX
+  fetch("{% url 'solicitations:scrap-solicitations' %}", {
+    method: "POST",
+    headers: {
+      "X-Requested-With": "XMLHttpRequest",
+      "Content-Type": "application/json",
+      "X-CSRFToken": document.querySelector('[name=csrfmiddlewaretoken]').value,
+    },
+    body: date ? JSON.stringify({ date: date }) : JSON.stringify({}), // Always send JSON
+  })
+    .then(response => {
+      // Handle 409 Conflict - script already running
+      if (response.status === 409) {
+        return response.json().then(errorData => {
+          // Script is already running, start polling for progress
+          // Show a clear message that we're monitoring the existing process
+          status.textContent = "A scraping task is already in progress. Monitoring current progress...";
+          progressPollInterval = setInterval(pollProgress, 2000);
+          pollProgress(); // Start polling immediately to show actual progress
+          return null; // Don't process as success, but don't throw error
+        });
+      }
+      
+      if (!response.ok) {
+        return response.json().then(errorData => {
+          throw new Error(`Server error (${response.status}): ${errorData.error || 'Unknown error'}`);
+        });
+      }
+      return response.json();
+    })
+    .then(data => {
+      // Skip if data is null (409 case already handled)
+      if (data === null) return;
+      
+      if (data.success) {
+        // Start polling for progress updates every 2 seconds
+        status.textContent = "Scraping process started. Monitoring progress...";
+        progressPollInterval = setInterval(pollProgress, 2000);
+        // Poll immediately
+        pollProgress();
+      } else {
+        status.textContent = data.error || "Failed to start scraping process.";
+        progressBar.classList.add("bg-danger");
+      }
+    })
+    .catch(error => {
+      clearInterval(progressPollInterval);
+      status.textContent = `Error: ${error.message}`;
+      progressBar.style.width = '100%';
+      progressBar.textContent = '100%';
+      progressBar.classList.add("bg-danger");
+      console.error("Scraping error:", error);
+      
+      setTimeout(() => {
+        const progressModal = bootstrap.Modal.getInstance(document.getElementById('progressModal'));
+        if (progressModal) progressModal.hide();
+      }, 5000);
+    });
+}
+</script>
+
+
+{% else %}
+<div class="d-flex justify-content-center align-items-center vh-100">
+  <div class="text-center">
+      <div class="mb-3">YOU ARE NOT AUTHENTICATED. PLEASE LOGIN.</div>
+      <a href="{% url 'accounts:login-user' %}" class="btn btn-primary">Login Now</a>
+  </div>
+</div>
+
+{% endif %}
+  
+
+{% endblock %}

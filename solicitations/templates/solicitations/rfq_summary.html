@@ -1,0 +1,1196 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>RFQ Task Summary Reports</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item active">RFQ Reports</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+  <div class="row">
+  <!-- Filters and Search -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body my-0">
+          <h5 class="card-title my-0">Filter Reports</h5>
+          <form method="GET" class="row g-3">
+            <div class="col-md-3">
+              <label for="date_from" class="form-label">Date From</label>
+              <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" value="{{ request.GET.date_from }}">
+            </div>
+            <div class="col-md-3">
+              <label for="date_to" class="form-label">Date To</label>
+              <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" value="{{ request.GET.date_to }}">
+            </div>
+            <div class="col-md-3">
+              <label for="status" class="form-label">Status</label>
+              <select class="form-select" id="status" name="status">
+                <option value="">All Statuses</option>
+                <option value="completed" {% if request.GET.status == 'completed' %}selected{% endif %}>Completed</option>
+                <option value="partial" {% if request.GET.status == 'partial' %}selected{% endif %}>Partial</option>
+                <option value="failed" {% if request.GET.status == 'failed' %}selected{% endif %}>Failed</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label for="mode" class="form-label">Processing Mode</label>
+              <select class="form-select" id="mode" name="mode">
+                <option value="">All Modes</option>
+                <option value="manual" {% if request.GET.mode == 'manual' %}selected{% endif %}>Manual</option>
+                <option value="automated" {% if request.GET.mode == 'automated' %}selected{% endif %}>Automated</option>
+              </select>
+            </div>
+            <div class="col-12 d-flex gap-2 justify-content-end">
+              <button type="submit" class="btn btn-sm btn-secondary">
+                <i class="bi bi-funnel"></i> Filter Reports
+              </button>
+              <a href="?" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-clockwise"></i> Clear Filters
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+  <div id="bulkActionsBar" class="alert alert-primary d-flex justify-content-between align-items-center mt-3" style="display: none;">
+    <div>
+      <i class="bi bi-check-square me-2"></i>
+      <span id="selectedCount">0</span> report(s) selected
+      <span id="selectedFromTotal" class="text-muted ms-2"></span>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllReports()">
+        <i class="bi bi-check-all me-1"></i>Select All ({{ summaries|length }})
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+        <i class="bi bi-x-square me-1"></i>Clear Selection
+      </button>
+      <button type="button" class="btn btn-danger btn-sm" onclick="bulkDeleteReports()">
+        <i class="bi bi-trash me-1"></i>Delete Selected
+      </button>
+    </div>
+  </div>
+
+    </div>
+  </div>
+
+  <!-- Reports Table -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">
+            Task Summary Reports 
+            <span class="badge bg-light">{{ summaries|length }} records</span>
+          </h5>
+
+          {% if summaries %}
+          <div class="table-responsive">
+            <table class="table table-hover" id="reportsTable">
+              <thead>
+                <tr>
+                  <th scope="col">
+                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()" class="form-check-input">
+                  </th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Mode</th>
+                  <th scope="col">Requested</th>
+                  <th scope="col">Sent</th>
+                  <th scope="col">Failed</th>
+                  <th scope="col">Rate</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for summary in summaries %}
+                <tr data-task-id="{{ summary.task_id }}"
+                    data-date="{{ summary.date|date:'M d, Y' }}"
+                    data-mode="{% if summary.processing_mode == 'automated' %}<span class='badge bg-info'>{{ summary.get_processing_mode_display }}</span>{% else %}<span class='badge bg-warning'>{{ summary.get_processing_mode_display }}</span>{% endif %}"
+                    data-requested="{{ summary.requested_solicitations }}"
+                    data-sent="{{ summary.total_successful_sent }}"
+                    data-failed="{{ summary.total_failed }}"
+                    data-success-rate="{{ summary.success_rate }}"
+                    data-status="{{ summary.status_display }}"
+                    data-duration="{{ summary.duration_formatted }}"
+                    data-start-time="{{ summary.start_time|date:'M d, Y H:i:s' }}"
+                    data-completed-time="{% if summary.completed_time %}{{ summary.completed_time|date:'M d, Y H:i:s' }}{% endif %}"
+                    data-email-sent="{{ summary.summary_email_sent|yesno:'true,false' }}"
+                    data-email-sent-at="{% if summary.summary_email_sent_at %}{{ summary.summary_email_sent_at|date:'M d, Y H:i' }}{% endif %}"
+                    onclick="handleRowClick(event, '{{ summary.task_id }}')">
+                  <td onclick="event.stopPropagation();">
+                    <input type="checkbox" class="form-check-input report-checkbox" 
+                           value="{{ summary.id }}" onchange="updateBulkActions()"
+                           data-task-id="{{ summary.task_id }}">
+                  </td>
+                  <td>{{ summary.date|date:"M d, Y" }}</td>
+                  <td>{{ summary.get_processing_mode_display }}</td>
+                  <td>{{ summary.requested_solicitations }}</td>
+                  <td>
+                    <span class="text-success fw-bold">{{ summary.total_successful_sent }}</span>
+                  </td>
+                  <td>
+                    {% if summary.total_failed > 0 %}
+                      <span class="text-danger fw-bold">{{ summary.total_failed }}</span>
+                    {% else %}
+                      <span class="text-muted">0</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if summary.success_rate >= 90 %}
+                      <span class="badge bg-info">{{ summary.success_rate }}%</span>
+                    {% elif summary.success_rate >= 70 %}
+                      <span class="badge bg-warning">{{ summary.success_rate }}%</span>
+                    {% else %}
+                      <span class="badge bg-danger">{{ summary.success_rate }}%</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <small class="text-muted">{{ summary.duration_formatted }}</small>
+                  </td>
+                  <td>
+                    {% if summary.status == 'completed' %}
+                      <span class="badge bg-info">{{ summary.status_display }}</span>
+                    {% elif summary.status == 'partial' %}
+                      <span class="badge bg-warning">{{ summary.status_display }}</span>
+                    {% else %}
+                      <span class="badge bg-danger">{{ summary.status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td onclick="event.stopPropagation();" class='text-center'>
+                    <div class="dropdown">
+                      <a class="text-muted text-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-caret-down-fill"></i>
+                      </a>
+                      <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="viewDetails('{{ summary.task_id }}')">
+                          <i class="bi bi-eye me-1"></i>View Details</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="#" onclick="deleteSingleReport('{{ summary.id }}')">
+                          <i class="bi bi-trash me-1"></i>Delete</a></li>
+                      </ul>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Updated Pagination with Complex Style -->
+          {% if is_paginated %}
+          <div class="text-center mt-4 mb-2">
+              <div class="text-muted small mb-2">
+                  Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} 
+                  (Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} items)
+              </div>
+              
+              <div class="ms-1 rounded me-1 container d-flex justify-content-center pagination">
+                  <ul class="pagination mb-0">
+                      <!-- Previous button -->
+                      {% if page_obj.has_previous %}
+                          <li class="page-item">
+                              <a class="page-link text-secondary" href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.previous_page_number }}">&laquo; Previous</a>
+                          </li>
+                      {% else %}
+                          <li class="page-item disabled">
+                              <span class="page-link text-muted">&laquo; Previous</span>
+                          </li>
+                      {% endif %}
+                      
+                      <!-- First page -->
+                      {% if page_obj.number > 3 %}
+                          <li class="page-item">
+                              <a class="page-link text-secondary" href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page=1">1</a>
+                          </li>
+                          {% if page_obj.number > 4 %}
+                              <li class="page-item disabled">
+                                  <span class="page-link text-muted">...</span>
+                              </li>
+                          {% endif %}
+                      {% endif %}
+                      
+                      <!-- Pages around current page -->
+                      {% for num in page_obj.paginator.page_range %}
+                          {% if num >= page_obj.number|add:'-2' and num <= page_obj.number|add:'2' %}
+                              {% if num == page_obj.number %}
+                                  <li class="page-item active">
+                                      <span class="page-link">{{ num }}</span>
+                                  </li>
+                              {% else %}
+                                  <li class="page-item">
+                                      <a class="page-link text-secondary" href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ num }}">{{ num }}</a>
+                                  </li>
+                              {% endif %}
+                          {% endif %}
+                      {% endfor %}
+                      
+                      <!-- Last page -->
+                      {% if page_obj.number < page_obj.paginator.num_pages|add:'-2' %}
+                          {% if page_obj.number < page_obj.paginator.num_pages|add:'-3' %}
+                              <li class="page-item disabled">
+                                  <span class="page-link text-muted">...</span>
+                              </li>
+                          {% endif %}
+                          <li class="page-item">
+                              <a class="page-link text-secondary" href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.paginator.num_pages }}">{{ page_obj.paginator.num_pages }}</a>
+                          </li>
+                      {% endif %}
+                      
+                      <!-- Next button -->
+                      {% if page_obj.has_next %}
+                          <li class="page-item">
+                              <a class="page-link text-secondary" href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}page={{ page_obj.next_page_number }}">Next &raquo;</a>
+                          </li>
+                      {% else %}
+                          <li class="page-item disabled">
+                              <span class="page-link text-muted">Next &raquo;</span>
+                          </li>
+                      {% endif %}
+                  </ul>
+              </div>
+          </div>
+          {% endif %}
+
+          {% else %}
+          <div class="text-center py-5">
+            <i class="bi bi-inbox display-1 text-muted"></i>
+            <h5 class="mt-3 text-muted">No task summaries found</h5>
+            <p class="text-muted">No RFQ tasks have been completed yet, or they don't match your current filters.</p>
+            <a href="{% url 'solicitations:solicitations' %}" class="btn btn-primary">
+              <i class="bi bi-plus-circle"></i> Start Processing RFQs
+            </a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="detailsModalLabel">Task Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- This will be populated via AJAX, but we can also include a fallback template -->
+        <div class="text-center" id="loadingSpinner">
+          <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+        
+        <!-- Template for task details (hidden by default) -->
+        <div id="taskDetailsTemplate" style="display: none;">
+          <div class="row">
+            <div class="col-md-6">
+              <h6 class="fw-bold">Task Information</h6>
+              <table class="table table-sm">
+                <tr>
+                  <td><strong>Task ID:</strong></td>
+                  <td><span class="badge bg-secondary" id="modalTaskId"></span></td>
+                </tr>
+                <tr>
+                  <td><strong>Date:</strong></td>
+                  <td id="modalDate"></td>
+                </tr>
+                <tr>
+                  <td><strong>Processing Mode:</strong></td>
+                  <td id="modalMode"></td>
+                </tr>
+                <tr>
+                  <td><strong>Start Time:</strong></td>
+                  <td id="modalStartTime"></td>
+                </tr>
+                <tr>
+                  <td><strong>Completed Time:</strong></td>
+                  <td id="modalCompletedTime"></td>
+                </tr>
+                <tr>
+                  <td><strong>Duration:</strong></td>
+                  <td id="modalDuration"></td>
+                </tr>
+              </table>
+            </div>
+            
+            <div class="col-md-6">
+              <h6 class="fw-bold">Results Summary</h6>
+              <table class="table table-sm">
+                <tr>
+                  <td><strong>Requested:</strong></td>
+                  <td><span class="badge bg-primary" id="modalRequested"></span></td>
+                </tr>
+                <tr>
+                  <td><strong>Successfully Sent:</strong></td>
+                  <td><span class="badge bg-success" id="modalSent"></span></td>
+                </tr>
+                <tr>
+                  <td><strong>Failed:</strong></td>
+                  <td><span class="badge" id="modalFailed"></span></td>
+                </tr>
+                <tr>
+                  <td><strong>Success Rate:</strong></td>
+                  <td><span class="badge" id="modalSuccessRate"></span></td>
+                </tr>
+                <tr>
+                  <td><strong>Status:</strong></td>
+                  <td><span class="badge" id="modalStatus"></span></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="row">
+            <div class="col-12">
+              <h6 class="fw-bold">Email Summary Status</h6>
+              <div class="alert" id="modalEmailStatus">
+                <span id="modalEmailContent"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12">
+              <h6 class="fw-bold">Performance Metrics</h6>
+              <div class="row">
+                <div class="col-md-4">
+                  <div class="card border-info">
+                    <div class="card-body text-center">
+                      <h5 class="card-title text-info" id="modalDurationMinutes">0</h5>
+                      <p class="card-text small">Total Minutes</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="card border-success">
+                    <div class="card-body text-center">
+                      <h5 class="card-title text-success" id="modalEfficiency">0</h5>
+                      <p class="card-text small">RFQs per Minute</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <div class="card border-primary">
+                    <div class="card-body text-center">
+                      <h5 class="card-title text-primary" id="modalEfficiencyRate">0%</h5>
+                      <p class="card-text small">Efficiency Rate</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Delete Confirmation Modal -->
+<div class="modal fade" id="bulkDeleteModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkDeleteModalLabel">Delete Multiple Reports</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>This will permanently delete <span id="bulkDeleteCount">0</span> report(s).</strong>
+                </div>
+                <p><strong>Warning:</strong> This action cannot be undone. The selected task summary reports will be permanently removed.</p>
+                
+                <div id="bulkDeleteList" class="bg-light p-3 rounded mb-3" style="max-height: 200px; overflow-y: auto;">
+                    <!-- Selected reports will be listed here -->
+                </div>
+                
+                <form id="bulkDeleteForm" method="POST" action="{% url 'solicitations:bulk-delete-reports' %}">
+                    {% csrf_token %}
+                    <input type="hidden" id="bulkDeleteIds" name="report_ids" value="">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i> Cancel</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i>Yes, Delete All Selected
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Single Delete Confirmation Modal -->
+<div class="modal fade" id="singleDeleteModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="singleDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="singleDeleteModalLabel">
+                    <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                    Delete Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>This will permanently delete this report.</strong>
+                </div>
+                <p><strong>Warning:</strong> This action cannot be undone. The selected task summary report will be permanently removed.</p>
+                
+                <div id="singleDeleteDetails" class="bg-light p-3 rounded mb-3">
+                    <!-- Report details will be populated here -->
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-file-earmark-text me-3 text-muted" style="font-size: 2rem;"></i>
+                        <div>
+                            <h6 class="mb-1" id="singleDeleteTaskId">Task ID</h6>
+                            <small class="text-muted" id="singleDeleteDetails">
+                                <span id="singleDeleteDate"></span> 
+                                <span id="singleDeleteMode"></span> 
+                                <span id="singleDeleteStatus"></span>
+                            </small>
+                            <div class="mt-1">
+                                <small class="text-success">
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    <span id="singleDeleteSent">0</span> sent
+                                </small>
+                                <small class="text-danger ms-3">
+                                    <i class="bi bi-x-circle me-1"></i>
+                                    <span id="singleDeleteFailed">0</span> failed
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <form id="singleDeleteForm" method="POST" action="{% url 'solicitations:delete-single-report' %}">
+                    {% csrf_token %}
+                    <input type="hidden" id="singleDeleteId" name="report_id" value="">
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-circle me-1"></i> Cancel
+                        </button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i> Yes, Delete This Report
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Select All Reports Confirmation Modal -->
+<div class="modal fade" id="selectAllReportsModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="selectAllModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="selectAllModalLabel">Select All Reports</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    <strong>This will select all {{ summaries|length }} reports across all pages.</strong>
+                </div>
+                <p>You are about to select all reports in your filtered results, including those on other pages. This action will prepare them for bulk operations.</p>
+                <p><strong>Note:</strong> You can still deselect individual reports or clear the selection if needed.</p>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmSelectAllReports()">
+                        <i class="bi bi-check-all me-1"></i>Yes, Select All {{ summaries|length }} Reports
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    {% if messages %}
+        {% for message in messages %}
+            <div class="toast align-items-center text-white border-0 {% if message.tags == 'success' %}bg-success{% elif message.tags == 'error' %}bg-danger{% elif message.tags == 'warning' %}bg-warning text-dark{% else %}bg-info{% endif %}" 
+                 role="alert" aria-live="assertive" aria-atomic="true" id="toast-{{ forloop.counter }}">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        {% if message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'error' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {% if 'safe' in message.extra_tags %}
+                            {{ message|safe }}
+                        {% else %}
+                            {{ message }}
+                        {% endif %}
+                    </div>
+                    <button type="button" class="btn-close {% if message.tags == 'warning' %}btn-close-dark{% else %}btn-close-white{% endif %} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+
+<script>
+// Global variables for bulk actions
+let selectedReports = new Set();
+let reportData = {};
+let allReportsSelected = false;
+let totalReports = {{ summaries|length }};
+
+// Store report data for bulk operations
+{% for summary in summaries %}
+reportData[{{ summary.id }}] = {
+    'task_id': '{{ summary.task_id|escapejs }}',
+    'date': '{{ summary.date|date:"M d, Y"|escapejs }}',
+    'mode': '{{ summary.get_processing_mode_display|escapejs }}',
+    'status': '{{ summary.status_display|escapejs }}'
+};
+{% endfor %}
+
+document.addEventListener('DOMContentLoaded', function() {
+
+    const singleDeleteForm = document.getElementById('singleDeleteForm');
+    if (singleDeleteForm) {
+        singleDeleteForm.addEventListener('submit', function(e) {
+            // You can add additional validation here if needed
+            console.log('Deleting single report:', document.getElementById('singleDeleteId').value);
+        });
+    }
+    // Restore selection state from sessionStorage
+    restoreSelectionState();
+    
+    // Initialize toasts
+    initializeToasts();
+});
+
+// Save selection state to sessionStorage
+function saveSelectionState() {
+    const selectionData = {
+        selectedReports: Array.from(selectedReports),
+        allReportsSelected: allReportsSelected
+    };
+    sessionStorage.setItem('reportSelection', JSON.stringify(selectionData));
+}
+
+// Restore selection state from sessionStorage
+function restoreSelectionState() {
+    const savedData = sessionStorage.getItem('reportSelection');
+    if (savedData) {
+        try {
+            const selectionData = JSON.parse(savedData);
+            selectedReports = new Set(selectionData.selectedReports);
+            allReportsSelected = selectionData.allReportsSelected || false;
+            
+            // Update checkboxes on current page
+            document.querySelectorAll('.report-checkbox').forEach(checkbox => {
+                if (selectedReports.has(parseInt(checkbox.value))) {
+                    checkbox.checked = true;
+                }
+            });
+            
+            updateBulkActions();
+        } catch (e) {
+            console.error('Error restoring selection state:', e);
+        }
+    }
+}
+
+// Initialize toasts
+function initializeToasts() {
+    if (typeof bootstrap === 'undefined') {
+        console.error('Bootstrap JavaScript is not loaded!');
+        return;
+    }
+    
+    const toastElements = document.querySelectorAll('.toast');
+    if (toastElements.length > 0) {
+        toastElements.forEach(function(toastElement, index) {
+            try {
+                const toast = new bootstrap.Toast(toastElement, {
+                    autohide: true,
+                    delay: 5000
+                });
+                toast.show();
+            } catch (error) {
+                console.error('Error showing toast:', error);
+            }
+        });
+    }
+}
+
+// Handle row clicks
+function handleRowClick(event, taskId) {
+    // Only navigate if not clicking on checkbox or dropdown
+    if (!event.target.matches('input[type="checkbox"]') && 
+        !event.target.closest('.dropdown') && 
+        !event.target.closest('.form-check-input')) {
+        viewDetails(taskId);
+    }
+}
+
+// Bulk Actions Functions
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.report-checkbox');
+    
+    if (selectAllCheckbox.checked && allReportsSelected) {
+        // Clear all selection
+        clearSelection();
+        return;
+    }
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        if (selectAllCheckbox.checked) {
+            selectedReports.add(parseInt(checkbox.value));
+        } else {
+            selectedReports.delete(parseInt(checkbox.value));
+        }
+    });
+    
+    // Reset allReportsSelected if unchecking
+    if (!selectAllCheckbox.checked) {
+        allReportsSelected = false;
+    }
+    
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.report-checkbox:checked');
+    const bulkActionsBar = document.getElementById('bulkActionsBar');
+    const selectedCount = document.getElementById('selectedCount');
+    const selectedFromTotal = document.getElementById('selectedFromTotal');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    
+    // Update selected reports set for current page
+    document.querySelectorAll('.report-checkbox').forEach(checkbox => {
+        if (checkbox.checked) {
+            selectedReports.add(parseInt(checkbox.value));
+        } else {
+            selectedReports.delete(parseInt(checkbox.value));
+        }
+    });
+    
+    // Show/hide bulk actions bar
+    if (selectedReports.size > 0 || allReportsSelected) {
+        bulkActionsBar.style.display = 'block';
+        if (allReportsSelected) {
+            selectedCount.textContent = totalReports;
+            selectedFromTotal.textContent = '(All Reports selected)';
+        } else {
+            selectedCount.textContent = selectedReports.size;
+            selectedFromTotal.textContent = `(from ${totalReports} total)`;
+        }
+    } else {
+        bulkActionsBar.style.display = 'none';
+    }
+    
+    // Update select all checkbox state
+    const totalCheckboxes = document.querySelectorAll('.report-checkbox').length;
+    const checkedOnPage = document.querySelectorAll('.report-checkbox:checked').length;
+    
+    if (allReportsSelected) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = true;
+    } else if (selectedReports.size === 0) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = false;
+    } else if (checkedOnPage === totalCheckboxes && selectedReports.size === totalReports) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = true;
+    } else {
+        selectAllCheckbox.indeterminate = true;
+    }
+    
+    saveSelectionState();
+}
+
+function selectAllReports() {
+    // Show confirmation modal for selecting all reports
+    const selectAllModal = new bootstrap.Modal(document.getElementById('selectAllReportsModal'));
+    selectAllModal.show();
+}
+
+function confirmSelectAllReports() {
+    // Close the modal first
+    const selectAllModal = bootstrap.Modal.getInstance(document.getElementById('selectAllReportsModal'));
+    selectAllModal.hide();
+    
+    // Select all reports across all pages
+    allReportsSelected = true;
+    
+    // Also check all checkboxes on current page
+    document.querySelectorAll('.report-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+        selectedReports.add(parseInt(checkbox.value));
+    });
+    document.getElementById('selectAllCheckbox').checked = true;
+    
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.report-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('selectAllCheckbox').checked = false;
+    document.getElementById('selectAllCheckbox').indeterminate = false;
+    selectedReports.clear();
+    allReportsSelected = false;
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function bulkDeleteReports() {
+    if (selectedReports.size === 0 && !allReportsSelected) {
+        alert('Please select reports to delete.');
+        return;
+    }
+    
+    const deleteCount = allReportsSelected ? totalReports : selectedReports.size;
+    
+    // Update modal content
+    document.getElementById('bulkDeleteCount').textContent = deleteCount;
+    
+    if (allReportsSelected) {
+        document.getElementById('bulkDeleteIds').value = 'all';
+        
+        // Show message for all reports
+        const bulkDeleteList = document.getElementById('bulkDeleteList');
+        bulkDeleteList.innerHTML = '<div class="text-center"><i class="bi bi-file-earmark-text me-2"></i><strong>All ' + totalReports + ' reports will be deleted</strong></div>';
+    } else {
+        document.getElementById('bulkDeleteIds').value = Array.from(selectedReports).join(',');
+        
+        // Create list of selected reports
+        const bulkDeleteList = document.getElementById('bulkDeleteList');
+        bulkDeleteList.innerHTML = '';
+        
+        selectedReports.forEach(reportId => {
+            if (reportData[reportId]) {
+                const reportInfo = document.createElement('div');
+                reportInfo.className = 'mb-1';
+                reportInfo.innerHTML = `<i class="bi bi-file-earmark-text me-2"></i><strong>${reportData[reportId].task_id}</strong> - ${reportData[reportId].date} (${reportData[reportId].mode})`;
+                bulkDeleteList.appendChild(reportInfo);
+            }
+        });
+    }
+    
+    // Show modal
+    const bulkDeleteModal = new bootstrap.Modal(document.getElementById('bulkDeleteModal'));
+    bulkDeleteModal.show();
+}
+
+
+
+// Single report actions
+function deleteSingleReport(reportId) {
+    // Find the report data
+    const reportInfo = reportData[reportId];
+    if (!reportInfo) {
+        alert('Report data not found');
+        return;
+    }
+    
+    // Find the row to get additional data
+    const row = document.querySelector(`tr[data-task-id="${reportInfo.task_id}"]`);
+    if (!row) {
+        alert('Report row not found');
+        return;
+    }
+    
+    // Populate the modal with report details
+    populateSingleDeleteModal(reportId, reportInfo, row);
+    
+    // Show the modal
+    const singleDeleteModal = new bootstrap.Modal(document.getElementById('singleDeleteModal'));
+    singleDeleteModal.show();
+}
+
+function populateSingleDeleteModal(reportId, reportInfo, row) {
+    // Set the report ID in the hidden form field
+    document.getElementById('singleDeleteId').value = reportId;
+    
+    // Populate basic information
+    document.getElementById('singleDeleteTaskId').textContent = reportInfo.task_id;
+    document.getElementById('singleDeleteDate').textContent = reportInfo.date;
+    document.getElementById('singleDeleteMode').textContent = reportInfo.mode;
+    document.getElementById('singleDeleteStatus').textContent = reportInfo.status;
+    
+    // Get additional data from the row
+    const sent = row.getAttribute('data-sent') || '0';
+    const failed = row.getAttribute('data-failed') || '0';
+    
+    document.getElementById('singleDeleteSent').textContent = sent;
+    document.getElementById('singleDeleteFailed').textContent = failed;
+}
+
+// Original functions from your template
+function viewDetails(taskId) {
+    // Find the row data for this task
+    const row = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (!row) {
+        alert('Task data not found');
+        return;
+    }
+    
+    // Get data from the row's data attributes
+    const taskData = {
+        taskId: row.getAttribute('data-task-id'),
+        date: row.getAttribute('data-date'),
+        mode: row.getAttribute('data-mode'),
+        requested: row.getAttribute('data-requested'),
+        sent: row.getAttribute('data-sent'),
+        failed: row.getAttribute('data-failed'),
+        successRate: row.getAttribute('data-success-rate'),
+        status: row.getAttribute('data-status'),
+        duration: row.getAttribute('data-duration'),
+        startTime: row.getAttribute('data-start-time'),
+        completedTime: row.getAttribute('data-completed-time'),
+        emailSent: row.getAttribute('data-email-sent'),
+        emailSentAt: row.getAttribute('data-email-sent-at')
+    };
+    
+    // Populate the modal
+    populateModal(taskData);
+    
+    // Show the modal
+    const detailsModal = new bootstrap.Modal(document.getElementById('detailsModal'));
+    detailsModal.show();
+}
+
+function populateModal(data) {
+    // Hide loading spinner and show template
+    document.getElementById('loadingSpinner').style.display = 'none';
+    document.getElementById('taskDetailsTemplate').style.display = 'block';
+    
+    // Populate basic info
+    document.getElementById('modalTaskId').textContent = data.taskId;
+    document.getElementById('modalDate').textContent = data.date;
+    document.getElementById('modalMode').innerHTML = data.mode;
+    document.getElementById('modalStartTime').textContent = data.startTime;
+    document.getElementById('modalCompletedTime').textContent = data.completedTime || 'Not completed';
+    document.getElementById('modalDuration').textContent = data.duration;
+    
+    // Populate results
+    document.getElementById('modalRequested').textContent = data.requested;
+    document.getElementById('modalSent').textContent = data.sent;
+    
+    // Handle failed count with proper styling
+    const failedElement = document.getElementById('modalFailed');
+    failedElement.textContent = data.failed;
+    failedElement.className = data.failed > 0 ? 'badge bg-danger' : 'badge bg-secondary';
+    
+    // Handle success rate with proper styling
+    const successRateElement = document.getElementById('modalSuccessRate');
+    successRateElement.textContent = data.successRate + '%';
+    const rate = parseFloat(data.successRate);
+    if (rate >= 90) {
+        successRateElement.className = 'badge bg-success';
+    } else if (rate >= 70) {
+        successRateElement.className = 'badge bg-warning';
+    } else {
+        successRateElement.className = 'badge bg-danger';
+    }
+    
+    // Handle status with proper styling
+    const statusElement = document.getElementById('modalStatus');
+    statusElement.textContent = data.status;
+    if (data.status.includes('All Successful') || data.status.includes('Completed')) {
+        statusElement.className = 'badge bg-success';
+    } else if (data.status.includes('Partial')) {
+        statusElement.className = 'badge bg-warning';
+    } else {
+        statusElement.className = 'badge bg-danger';
+    }
+    
+    // Handle processing/email status
+    const emailStatusDiv = document.getElementById('modalEmailStatus');
+    const emailContentSpan = document.getElementById('modalEmailContent');
+
+    const sentCount = parseInt(data.sent, 10) || 0;
+    const failedCount = parseInt(data.failed, 10) || 0;
+    const totalCount = parseInt(data.requested, 10) || 0;
+    const summaryEmailSent = data.emailSent === 'true';
+    const summaryEmailAt = data.emailSentAt || 'N/A';
+
+    let mainStatusHtml = '';
+    if (sentCount === totalCount && totalCount > 0) {
+        emailStatusDiv.className = 'alert alert-success';
+        mainStatusHtml = `<i class="bi bi-check-circle"></i> RFQ sending completed successfully (${sentCount}/${totalCount}).`;
+    } else if (sentCount > 0 && failedCount > 0) {
+        emailStatusDiv.className = 'alert alert-warning';
+        mainStatusHtml = `<i class="bi bi-exclamation-triangle"></i> RFQ sending partially completed (${sentCount} sent, ${failedCount} failed).`;
+    } else if (sentCount === 0 && failedCount > 0) {
+        emailStatusDiv.className = 'alert alert-danger';
+        mainStatusHtml = `<i class="bi bi-x-circle"></i> RFQ sending failed (${failedCount}/${totalCount} failed).`;
+    } else {
+        emailStatusDiv.className = 'alert alert-secondary';
+        mainStatusHtml = '<i class="bi bi-hourglass-split"></i> RFQ sending status is not available.';
+    }
+
+    const summaryStatusHtml = summaryEmailSent
+        ? `<br><small class="text-muted">Summary report email sent on ${summaryEmailAt}.</small>`
+        : '<br><small class="text-muted">Summary report email was not sent.</small>';
+
+    emailContentSpan.innerHTML = mainStatusHtml + summaryStatusHtml;
+    
+    // Calculate performance metrics
+    const durationInMinutes = parseDurationToMinutes(data.duration);
+    const sent = parseInt(data.sent);
+    const requested = parseInt(data.requested);
+    
+    document.getElementById('modalDurationMinutes').textContent = durationInMinutes.toFixed(1);
+    
+    const rfqsPerMinute = durationInMinutes > 0 ? (sent / durationInMinutes).toFixed(1) : '0';
+    document.getElementById('modalEfficiency').textContent = rfqsPerMinute;
+    
+    const efficiencyRate = requested > 0 ? Math.round((sent / requested) * 100) : 0;
+    document.getElementById('modalEfficiencyRate').textContent = efficiencyRate + '%';
+}
+
+function parseDurationToMinutes(duration) {
+    if (!duration || duration === 'N/A') return 0;
+    
+    // Parse duration like "5m 30s" or "1h 15m" or "45 seconds"
+    let totalMinutes = 0;
+    
+    const hourMatch = duration.match(/(\d+)h/);
+    const minuteMatch = duration.match(/(\d+)m/);
+    const secondMatch = duration.match(/(\d+)\s*s/);
+    
+    if (hourMatch) totalMinutes += parseInt(hourMatch[1]) * 60;
+    if (minuteMatch) totalMinutes += parseInt(minuteMatch[1]);
+    if (secondMatch) totalMinutes += parseInt(secondMatch[1]) / 60;
+    
+    return totalMinutes;
+}
+
+// Reset modal when closed
+document.getElementById('detailsModal').addEventListener('hidden.bs.modal', function () {
+    document.getElementById('loadingSpinner').style.display = 'block';
+    document.getElementById('taskDetailsTemplate').style.display = 'none';
+});
+
+// Handle form submissions for bulk actions
+document.getElementById('bulkDeleteForm').addEventListener('submit', function() {
+    // Clear selection after successful submission
+    clearSelection();
+    sessionStorage.removeItem('reportSelection');
+});
+
+
+// Handle page navigation while preserving selection
+window.addEventListener('beforeunload', function() {
+    saveSelectionState();
+});
+</script>
+
+<style>
+.table th {
+  font-weight: 600;
+  background-color: #f8f9fa;
+}
+
+.badge {
+  font-size: 0.75em;
+}
+
+.back {
+  background-color: #c8e8f7;
+}
+
+.btn-group .btn {
+  margin-right: 2px;
+}
+
+/* Complex pagination styling - matching the template you provided */
+.pagination {
+    justify-content: center;
+}
+
+.pagination .page-link {
+    color: #6c757d;
+    border-color: #dee2e6;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    color: white;
+    font-weight: 500;
+}
+
+.pagination .page-link:hover:not(.disabled) {
+    color: var(--bs-primary, #0d6efd);
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    transform: translateY(-1px);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: #6c757d;
+    background-color: #fff;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+}
+
+.pagination .page-link:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Bulk Actions Bar Styling */
+#bulkActionsBar {
+    border-left: 4px solid #0d6efd;
+    background-color: #e7f3ff;
+    border-color: #b8daff;
+    animation: slideDown 0.3s ease-in-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#bulkActionsBar .btn {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Toast Styling */
+.toast-container {
+    z-index: 1055 !important;
+}
+
+.toast {
+    min-width: 300px;
+    max-width: 450px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    margin-bottom: 0.5rem;
+    border-radius: 0.5rem;
+}
+
+.toast-body {
+    font-weight: 500;
+    padding: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    line-height: 1.4;
+}
+
+.toast-body i {
+    font-size: 1.1rem;
+    margin-top: 0.1rem;
+    flex-shrink: 0;
+}
+
+/* Checkbox styling improvements */
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Indeterminate checkbox styling */
+.form-check-input:indeterminate {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e");
+}
+
+/* Table row hover effect */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.075);
+    cursor: pointer;
+}
+
+/* Selected row styling */
+.table tbody tr:has(.form-check-input:checked) {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+/* Modal improvements */
+.modal-header .modal-title {
+    font-weight: 600;
+}
+
+.alert-warning {
+    border-left: 4px solid #ffc107;
+}
+
+.alert-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.alert-info {
+    border-left: 4px solid #0dcaf0;
+}
+
+@media (max-width: 768px) {
+  .table-responsive {
+    font-size: 0.85rem;
+  }
+  
+  .btn-group .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .col-xxl-3 {
+    margin-bottom: 1rem;
+  }
+  
+  /* Stack bulk action buttons on mobile */
+  #bulkActionsBar .d-flex {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  
+  #bulkActionsBar .d-flex .d-flex {
+    flex-direction: row;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+}
+</style>
+{% endblock %}

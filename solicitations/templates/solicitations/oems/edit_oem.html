@@ -1,0 +1,173 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="mt-5">
+    <div class="d-flex justify-content-between">
+        <div class="">
+            Customize OEM Data for <span class="badge bg-light text-dark">{{oem.cage}}</span>
+        </div>
+        <div class="d-flex gap-3">
+            <a href="{% url 'solicitations:oem-detail' oem.id %}" class="btn bg-secondary text-white">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="mt-5">
+        <div>
+            <div class="">
+                Original OEM Data...
+            </div>
+            <div class="mt-2">
+                <div class="card">
+                    <div class="card-body my-3">
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Name: {{oem.name}}
+                            </div>
+                            <div class="col-md-4">
+                                Email: {{oem.email}}
+                            </div>
+                            <div class="col-md-4">
+                                Phone: {{oem.phone}}
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Fax: {{oem.fax}}
+                            </div>
+                            <div class="col-md-4">
+                                POC: {{oem.poc}}
+                            </div>
+                            <div class="col-md-4">
+                                City: {{oem.city}}
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="row my-2">
+                            <div class="col-md-4">
+                                Street: {{oem.street}}
+                            </div>
+                            <div class="col-md-4">
+                                Postal Code: {{oem.postal_code}}
+                            </div>
+                            <div class="col-md-4">
+                                CAGE Code: {{oem.cage}} (Cannot be changed)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="my-2">
+            <div class="">
+                Customization Form...
+            </div>
+            <div class="mt-2">
+                <div class="card">
+                    <div class="card-body my-3">
+                        <form method="POST">
+                            {% csrf_token %}
+                            
+                            <!-- Contact Information -->
+                            <div class="row my-2">
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom Name:</label>
+                                    {{form.custom_name}}
+                                    <small class="text-muted">Leave empty to use: {{oem.name}}</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom Email:</label>
+                                    {{form.custom_email}}
+                                    <small class="text-muted">Leave empty to use: {{oem.email}}</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom Phone:</label>
+                                    {{form.custom_phone}}
+                                    <small class="text-muted">Leave empty to use: {{oem.phone}}</small>
+                                </div>
+                            </div>
+                            <hr>
+                            
+                            <!-- Additional Contact Info -->
+                            <div class="row my-2">
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom Fax:</label>
+                                    {{form.custom_fax}}
+                                    <small class="text-muted">Leave empty to use: {{oem.fax}}</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom POC:</label>
+                                    {{form.custom_poc}}
+                                    <small class="text-muted">Leave empty to use: {{oem.poc}}</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom City:</label>
+                                    {{form.custom_city}}
+                                    <small class="text-muted">Leave empty to use: {{oem.city}}</small>
+                                </div>
+                            </div>
+                            <hr>
+                            
+                            <!-- Address Information -->
+                            <div class="row my-2">
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom Street:</label>
+                                    {{form.custom_street}}
+                                    <small class="text-muted">Leave empty to use: {{oem.street}}</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Custom Postal Code:</label>
+                                    {{form.custom_postal_code}}
+                                    <small class="text-muted">Leave empty to use: {{oem.postal_code}}</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <!-- Empty column for layout consistency -->
+                                </div>
+                            </div>
+                            <hr>
+                            
+                            <!-- Important Notes -->
+                            <div class="row my-2">
+                                <div class="mt-3">Important Notes:</div>
+                                <div class="bg-light p-3 rounded-3">
+                                    <strong>Email Usage:</strong> Custom email addresses will be used when sending RFQs to this OEM.
+                                    <br><strong>Empty Fields:</strong> Any field left empty will automatically use the original OEM value.
+                                    <br><strong>Privacy:</strong> These customizations are private and only visible to your account.
+                                </div>
+                            </div>
+                            <hr>
+                            
+                            <!-- Action Buttons -->
+                            <div class="d-flex justify-content-end gap-2 my-2">
+                                <div class="">
+                                    <a href="{% url 'solicitations:oem-detail' oem.id %}" class="btn btn-outline-secondary">
+                                        <i class="bi bi-x-lg me-1"></i>Cancel Changes
+                                    </a>
+                                </div>
+                                <div class="">
+                                    <button type="submit" class="btn btn-secondary">
+                                        <i class="bi bi-check-lg me-1"></i>Save My Customizations
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Help Section -->
+                <div class="text-center">
+                    <span class="text-center mt-2">
+                        <i class="bi bi-info-circle text-info"></i>
+                        <small class="text-muted">Your customizations will be preserved and used in all RFQ communications</small>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock content %}

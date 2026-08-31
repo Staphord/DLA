@@ -1,0 +1,482 @@
+{% extends 'solicitations/base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+<section class="vh-100">
+    <div class="d-flex justify-content-between">
+        <div class="">
+            <a href="{% url 'solicitations:disabled-oems' %}" class="btn mybg hoverbg text-white position-relative">Disabled OEMs</a>
+            <a href="{% url 'solicitations:active-oems' %}" class="btn btn-secondary text-white position-relative">Active OEMs</a>
+            
+            <div class="mt-3">
+                {% if is_search %}
+                    <div class="mt-2">
+                        Total Disabled OEMs <span class="badge bg-dark text-white">{{disabled_oem_users.count}}</span>
+                    </div>
+                {% else %}
+                    Total Disabled OEMs <span class="badge bg-dark text-white">{{disabled_oem_users.count}}</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="d-flex gap-3">
+            <form action="{% url 'solicitations:search-disabled-oem' %}" method="post">
+                {% csrf_token %}
+                <div class="d-flex gap-2">
+                    <input type="text" name="search-oem" class="form-control" placeholder="Search by Cage Code or Name..." value="{{searched|default:''}}">
+                    <button type="submit" class="btn bg-warning"><i class="bi bi-search text-white"></i></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Messages for search feedback -->
+    {% if messages %}
+        <div class="my-3">
+            {% for message in messages %}
+                <div class="alert alert-{{message.tags}} alert-dismissible fade show" role="alert">
+                    {% if message.tags == 'warning' and 'Download failed rows' in message %}
+                        {{message|safe}}
+                    {% else %}
+                        {{message}}
+                    {% endif %}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="my-4">
+        <div class="card">
+            <div class="card-body my-3">
+                {% if disabled %}
+                
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                      <th class="text-secondary">Cage Code</th>
+                      <th class="text-secondary">Name</th>
+                      <th class="text-secondary">City</th>
+                      <th class="text-secondary">Phone</th>
+                      <th class="text-secondary">Reason</th>
+                      <th class="text-secondary text-center">Actions</th>
+                    </thead>
+                    <tbody>
+                        {% for disabled_oem in disabled %}
+                        <tr class="" onclick="handleRowClick(event, this, '{% url 'solicitations:oem-detail' disabled_oem.oem.id %}');">
+                            <td>
+                                <i class="bi bi-lock me-2" title="Disabled OEM"></i>
+                                {{disabled_oem.oem.cage}}
+                            </td>
+                            <td>
+                                {{disabled_oem.display_name|title}}
+                            </td>
+                            <td>{{disabled_oem.display_city|title}}</td>
+                            <td>{{disabled_oem.display_phone}}</td>
+                            <td>
+                                {% if disabled_oem.reason %}
+                                    <span class="text-muted small" title="{{disabled_oem.reason}}">
+                                        {{disabled_oem.reason|truncatechars:30}}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted small">No reason provided</span>
+                                {% endif %}
+                            </td>
+                           
+                            <td onclick="event.stopPropagation();">
+                                <div class="dropdown text-center">
+                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-caret-down-fill"></i>
+                                </a>
+                              
+                                <ul class="dropdown-menu">
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:oem-detail' disabled_oem.oem.id %}">
+                                    <i class="bi bi-eye me-1"></i>View Details</a></li>
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:edit-oem' disabled_oem.oem.id %}">
+                                    <i class="bi bi-pencil me-1"></i>Customize</a></li>
+                                  <li><hr class="dropdown-divider"></li>
+                                  <li><a class="dropdown-item text-success" href="#" data-bs-toggle="modal" data-bs-target="#enableOem-{{disabled_oem.id}}">
+                                    <i class="bi bi-check-circle me-1"></i>Enable OEM</a></li>
+                                </ul>
+                              </div>
+                            </td>
+                          </tr>
+
+                          <!--Enable OEM Modal -->
+                          <div class="modal fade" id="enableOem-{{disabled_oem.id}}" data-bs-backdrop="static" tabindex="-1" aria-labelledby="enableOemLabel" aria-hidden="true">
+                            <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                <h5 class="modal-title" id="enableOemLabel">Enable OEM</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle-fill me-2"></i>
+                                    <strong>This will re-enable {{disabled_oem.display_name}} for your account.</strong>
+                                </div>
+                                <p>Are you sure you want to enable this OEM? It will be added back to your active OEM list.</p>
+                                
+                                {% if disabled_oem.reason %}
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Original disable reason:</strong></label>
+                                    <div class="form-control-plaintext bg-light p-2 rounded">
+                                        {{disabled_oem.reason}}
+                                    </div>
+                                </div>
+                                {% endif %}
+                                
+                                <form method="POST" action="{% url 'solicitations:enable-oem' disabled_oem.id %}">
+                                    {% csrf_token %}
+                                    <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No, Cancel</button>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="bi bi-check-circle me-1"></i>Yes, Enable OEM
+                                    </button>
+                                    </div>
+                                </form>
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                  </table>
+                  
+                  <!-- ========== PAGINATION SECTION ========== -->
+                  {% if disabled and disabled.paginator.num_pages > 1 %}
+                  <div class="text-center mt-4 mb-2">
+                      <div class="text-muted small mb-2">
+                          Page {{ disabled.number }} of {{ disabled.paginator.num_pages }} 
+                          (Showing {{ disabled.start_index }}-{{ disabled.end_index }} of {{ disabled.paginator.count }} items)
+                          {% if is_search %}
+                              - Search results for "{{searched}}"
+                          {% endif %}
+                      </div>
+                      
+                      <div class="ms-1 rounded me-1 container d-flex justify-content-center pagination">
+                          <ul class="pagination mb-0">
+                              <!-- Previous button -->
+                              {% if disabled.has_previous %}
+                                  <li class="page-item">
+                                      {% if is_search %}
+                                          <a class="page-link text-secondary" href="?page={{ disabled.previous_page_number }}&search-oem={{ searched }}">&laquo; Previous</a>
+                                      {% else %}
+                                          <a class="page-link text-secondary" href="?page={{ disabled.previous_page_number }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">&laquo; Previous</a>
+                                      {% endif %}
+                                  </li>
+                              {% else %}
+                                  <li class="page-item disabled">
+                                      <span class="page-link text-muted">&laquo; Previous</span>
+                                  </li>
+                              {% endif %}
+                              
+                              <!-- First page -->
+                              {% if disabled.number > 3 %}
+                                  <li class="page-item">
+                                      {% if is_search %}
+                                          <a class="page-link text-secondary" href="?page=1&search-oem={{ searched }}">1</a>
+                                      {% else %}
+                                          <a class="page-link text-secondary" href="?page=1{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">1</a>
+                                      {% endif %}
+                                  </li>
+                                  {% if disabled.number > 4 %}
+                                      <li class="page-item disabled">
+                                          <span class="page-link text-muted">...</span>
+                                      </li>
+                                  {% endif %}
+                              {% endif %}
+                              
+                              <!-- Pages around current page -->
+                              {% for num in disabled.paginator.page_range %}
+                                  {% if num >= disabled.number|add:'-2' and num <= disabled.number|add:'2' %}
+                                      {% if num == disabled.number %}
+                                          <li class="page-item active">
+                                              <span class="page-link">{{ num }}</span>
+                                          </li>
+                                      {% else %}
+                                          <li class="page-item">
+                                              {% if is_search %}
+                                                  <a class="page-link text-secondary" href="?page={{ num }}&search-oem={{ searched }}">{{ num }}</a>
+                                              {% else %}
+                                                  <a class="page-link text-secondary" href="?page={{ num }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">{{ num }}</a>
+                                              {% endif %}
+                                          </li>
+                                      {% endif %}
+                                  {% endif %}
+                              {% endfor %}
+                              
+                              <!-- Last page -->
+                              {% if disabled.number < disabled.paginator.num_pages|add:'-2' %}
+                                  {% if disabled.number < disabled.paginator.num_pages|add:'-3' %}
+                                      <li class="page-item disabled">
+                                          <span class="page-link text-muted">...</span>
+                                      </li>
+                                  {% endif %}
+                                  <li class="page-item">
+                                      {% if is_search %}
+                                          <a class="page-link text-secondary" href="?page={{ disabled.paginator.num_pages }}&search-oem={{ searched }}">{{ disabled.paginator.num_pages }}</a>
+                                      {% else %}
+                                          <a class="page-link text-secondary" href="?page={{ disabled.paginator.num_pages }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">{{ disabled.paginator.num_pages }}</a>
+                                      {% endif %}
+                                  </li>
+                              {% endif %}
+                              
+                              <!-- Next button -->
+                              {% if disabled.has_next %}
+                                  <li class="page-item">
+                                      {% if is_search %}
+                                          <a class="page-link text-secondary" href="?page={{ disabled.next_page_number }}&search-oem={{ searched }}">Next &raquo;</a>
+                                      {% else %}
+                                          <a class="page-link text-secondary" href="?page={{ disabled.next_page_number }}{% if request.POST %}{% for key, value in request.POST.items %}{% if key != 'csrfmiddlewaretoken' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% endif %}">Next &raquo;</a>
+                                      {% endif %}
+                                  </li>
+                              {% else %}
+                                  <li class="page-item disabled">
+                                      <span class="page-link text-muted">Next &raquo;</span>
+                                  </li>
+                              {% endif %}
+                          </ul>
+                      </div>
+                  </div>
+                  {% endif %}
+                  
+                {% else %}
+                  <!-- No Disabled OEMs or No Search Results -->
+                  <div class="text-center py-5">
+                    <div class="mb-4">
+                        {% if is_search %}
+                            <i class="bi bi-search display-1 text-warning"></i>
+                            <h4 class="text-muted mt-3">No Search Results</h4>
+                            <p class="text-muted">
+                                No disabled OEMs found for "{{searched}}".
+                            </p>
+                            <div class="mt-4">
+                                <a href="{% url 'solicitations:disabled-oems' %}" class="btn btn-primary">
+                                    <i class="bi bi-arrow-left me-1"></i>Back to All Disabled OEMs
+                                </a>
+                            </div>
+                        {% else %}
+                            <i class="bi bi-check-circle display-1 text-success"></i>
+                            <h4 class="text-muted mt-3">No Disabled OEMs</h4>
+                            <p class="text-muted">
+                                You don't have any disabled OEMs. All your OEMs are currently active.
+                            </p>
+                            <div class="mt-4">
+                                <a href="{% url 'solicitations:active-oems' %}" class="btn btn-primary">
+                                    <i class="bi bi-list me-1"></i>View Active OEMs
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                  </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+// JavaScript for row interactions
+function handleRowClick(event, row, url) {
+    // Don't navigate if clicking on dropdown, modal triggers, buttons, or links
+    if (event.target.closest('.dropdown') || 
+        event.target.closest('[data-bs-toggle="modal"]') ||
+        event.target.closest('button') ||
+        event.target.closest('a')) {
+        return;
+    }
+    window.location.href = url;
+}
+</script>
+
+<style>
+/* Pagination styling - matching other templates */
+.pagination {
+    justify-content: center;
+}
+
+.pagination .page-link {
+    color: #6c757d;
+    border-color: #dee2e6;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    color: white;
+    font-weight: 500;
+}
+
+.pagination .page-link:hover:not(.disabled) {
+    color: var(--bs-primary, #0d6efd);
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    transform: translateY(-1px);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: #6c757d;
+    background-color: #fff;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+}
+
+.pagination .page-link:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Custom styling for disabled OEMs page */
+.table-danger-subtle {
+    background-color: rgba(248, 215, 218, 0.3) !important;
+}
+
+.table-danger-subtle:hover {
+    background-color: rgba(248, 215, 218, 0.5) !important;
+}
+
+
+.bi-pencil-square {
+    color: #0dcaf0 !important;
+    font-size: 0.8rem;
+}
+
+.dropdown-item.text-success:hover {
+    background-color: #d1e7dd;
+    color: #0a3622 !important;
+}
+
+.form-control-plaintext {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.alert-success {
+    background-color: #d1e7dd;
+    border-color: #badbcc;
+    color: #0a3622;
+}
+
+.alert-info {
+    background-color: #cff4fc;
+    border-color: #9eeaf9;
+    color: #055160;
+}
+
+.card-header {
+    border-bottom: 2px solid #dee2e6;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+/* Bulk selection styles */
+.btn-sm {
+    font-size: 0.8rem;
+}
+
+/* Row click styles */
+tbody tr {
+    cursor: pointer;
+}
+
+tbody tr:hover {
+    background-color: rgba(248, 215, 218, 0.6) !important;
+}
+
+/* Prevent text selection on row clicks */
+tbody tr {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* Re-enable text selection for input elements */
+tbody tr input,
+tbody tr select,
+tbody tr textarea {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+}
+
+/* Animation for empty state */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.text-center.py-5 {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .d-flex.justify-content-between {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .dropdown-menu {
+        font-size: 0.875rem;
+    }
+    
+    /* Stack buttons on mobile */
+    .d-flex.gap-3 {
+        flex-direction: column;
+        gap: 0.5rem !important;
+    }
+}
+
+/* Loading state styles */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Enhanced table responsiveness */
+@media (max-width: 992px) {
+    .table-responsive {
+        border: none;
+    }
+    
+    .table th,
+    .table td {
+        padding: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    /* Hide reason column on smaller screens */
+    .table th:nth-child(6),
+    .table td:nth-child(6) {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Hide city and phone columns on mobile */
+    .table th:nth-child(4),
+    .table td:nth-child(4),
+    .table th:nth-child(5),
+    .table td:nth-child(5) {
+        display: none;
+    }
+}
+</style>
+
+{% endblock content %}

@@ -1,0 +1,105 @@
+{% extends 'solicitations/base.html' %}
+
+{% block content %}
+<section class="py-4">
+    <div class="container">
+        <div class="row g-4 justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <h4 class="mb-1">Django-Q Monitoring</h4>
+                            </div>
+                            <a href="{% url 'solicitations:settings' %}" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-arrow-left me-1"></i> Back
+                            </a>
+                        </div>
+
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="fw-semibold">Monitoring Status</div>
+                            <div>
+                                {% if config.is_monitoring_enabled %}
+                                    <span class="badge bg-success">Monitoring is ON</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Monitoring is OFF</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if health_summary %}
+                        <div class="p-3 bg-light rounded mb-4">
+                            <small class="text-muted d-block mb-2"><strong>Current cluster snapshot</strong></small>
+                            <div class="small">
+                                <div>Last completed task: <strong>{{ health_summary.last_success_display }}</strong></div>
+                                <div>Running tasks: <strong>{{ health_summary.running_tasks }}</strong></div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <form method="post">
+                            {% csrf_token %}
+
+                            <div class="mb-3">
+                                <label for="{{ form.notification_emails.id_for_label }}" class="form-label fw-semibold">
+                                    Notification Email(s)
+                                </label>
+                                {{ form.notification_emails }}
+                                {% if form.notification_emails.help_text %}
+                                    <div class="form-text">{{ form.notification_emails.help_text }}</div>
+                                {% endif %}
+                                {% if form.notification_emails.errors %}
+                                    <div class="text-danger small mt-1">{{ form.notification_emails.errors }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="{{ form.stall_threshold_minutes.id_for_label }}" class="form-label fw-semibold">
+                                        Stall Threshold (minutes)
+                                    </label>
+                                    {{ form.stall_threshold_minutes }}
+                                    {% if form.stall_threshold_minutes.errors %}
+                                        <div class="text-danger small mt-1">{{ form.stall_threshold_minutes.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.alert_debounce_minutes.id_for_label }}" class="form-label fw-semibold">
+                                        Alert Debounce (minutes)
+                                    </label>
+                                    {{ form.alert_debounce_minutes }}
+                                    {% if form.alert_debounce_minutes.errors %}
+                                        <div class="text-danger small mt-1">{{ form.alert_debounce_minutes.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="form-check mt-4 mb-3">
+                                {{ form.is_monitoring_enabled }}
+                                <label class="form-check-label fw-semibold" for="{{ form.is_monitoring_enabled.id_for_label }}">
+                                    Enable Django-Q health monitoring
+                                </label>
+                            </div>
+
+                            <div class="mt-4 d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save me-1"></i> Save Configuration
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

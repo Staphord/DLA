@@ -1,0 +1,1774 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+
+<style>
+/* Reset and Base Styles */
+.export-config-container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Page Header */
+.page-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.page-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.page-header .breadcrumb {
+  color: rgba(255,255,255,0.9);
+  font-size: 14px;
+  margin: 0;
+}
+
+.page-header .breadcrumb a {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.page-header .breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.field-count-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 10px;
+}
+
+/* Stats Bar */
+.stats-bar {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  flex: 1;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  border-left: 4px solid;
+}
+
+.stat-card.mandatory {
+  border-left-color: #dc3545;
+}
+
+.stat-card.conditional {
+  border-left-color: #ffc107;
+}
+
+.stat-card.optional {
+  border-left-color: #0dcaf0;
+}
+
+.stat-card.reserved {
+  border-left-color: #6c757d;
+}
+
+.stat-card .stat-number {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1;
+}
+
+.stat-card .stat-label {
+  font-size: 14px;
+  color: #6c757d;
+  margin: 5px 0 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Main Card */
+.config-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+  padding: 20px 30px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.search-box {
+  flex: 1;
+  max-width: 400px;
+  position: relative;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 10px 40px 10px 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-box .search-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  font-size: 16px;
+}
+
+
+
+/* Tabs */
+.tabs-container {
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.tabs {
+  display: flex;
+  padding: 0 30px;
+  margin: 0;
+  list-style: none;
+  gap: 5px;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  padding: 15px 25px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-button:hover {
+  color: #495057;
+  background: #f8f9fa;
+}
+
+.tab-button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.tab-badge {
+  background: #e0e0e0;
+  color: #495057;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tab-button.active .tab-badge {
+  background: #667eea;
+  color: white;
+}
+
+/* Tab Content */
+.tab-content-wrapper {
+  padding: 30px;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Table Styles */
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.config-table thead {
+  background: #f8f9fa;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.config-table th {
+  padding: 15px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.config-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: all 0.2s;
+}
+
+.config-table tbody tr:hover {
+  background: #f8f9ff;
+}
+
+.config-table td {
+  padding: 15px 12px;
+  vertical-align: middle;
+}
+
+/* Position Cell */
+.pos-cell {
+  text-align: center;
+  font-weight: 700;
+  color: #667eea;
+  font-size: 16px;
+}
+
+/* Field Name Cell */
+.field-name {
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 4px;
+}
+
+.field-meta {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+
+
+/* Form Inputs */
+.input-field,
+.select-field {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: all 0.3s;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+}
+
+.input-field:focus,
+.select-field:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.input-field::placeholder {
+  color: #adb5bd;
+  font-style: italic;
+}
+
+/* Info Badges */
+.info-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.info-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-default {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.badge-max {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.badge-affects {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.badge-dropdown {
+  background: #d4edda;
+  color: #155724;
+}
+
+/* Save Section */
+.save-section {
+  padding: 20px 30px;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  gap: 15px;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  z-index: 9999;
+}
+
+.toast {
+  background: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast.success {
+  border-left: 4px solid #28a745;
+}
+
+.toast.error {
+  border-left: 4px solid #dc3545;
+}
+
+.toast-icon {
+  font-size: 20px;
+}
+
+.toast.success .toast-icon {
+  color: #28a745;
+}
+
+.toast.error .toast-icon {
+  color: #dc3545;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  color: #212529;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .stats-bar {
+    flex-wrap: wrap;
+  }
+
+  .stat-card {
+    flex: 1 1 calc(50% - 10px);
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box {
+    max-width: 100%;
+  }
+
+  .action-buttons {
+    justify-content: stretch;
+  }
+
+  .btn-custom {
+    flex: 1;
+  }
+
+  .tabs {
+    overflow-x: auto;
+  }
+
+  .save-section {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .btn-save {
+    width: 100%;
+    justify-content: center;
+  }
+}
+</style>
+
+<div class="export-config-container">
+
+  <!-- Main Configuration Card -->
+  <div class="config-card">
+    <form action="{% url 'solicitations:export-config' %}" method="post" id="exportConfigForm">
+      {% csrf_token %}
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-box">
+          <input
+            type="text"
+            id="searchField"
+            placeholder="Search by position or field name..."
+            onkeyup="filterTable()"
+          >
+          <span class="search-icon"></span>
+        </div>
+        <div style="color: #6c757d; font-size: 14px;">
+          <strong>121 Fields</strong> - Configure values for DLA export
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs-container">
+        <ul class="tabs">
+          <li>
+            <button type="button" class="tab-button active" onclick="switchTab(event, 'mandatory')">
+              Mandatory
+              <span class="tab-badge">{{ mandatory_configs.count }}</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="tab-button" onclick="switchTab(event, 'conditional')">
+              Conditional
+              <span class="tab-badge">{{ conditional_configs.count }}</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="tab-button" onclick="switchTab(event, 'optional')">
+              Optional
+              <span class="tab-badge">{{ optional_configs.count }}</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="tab-button" onclick="switchTab(event, 'reserved')">
+              Reserved
+              <span class="tab-badge">{{ reserved_configs.count }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content-wrapper">
+        <div id="mandatory" class="tab-pane active">
+          {% include 'solicitations/clients/export_config_table.html' with configs=mandatory_configs %}
+        </div>
+        <div id="conditional" class="tab-pane">
+          {% include 'solicitations/clients/export_config_table.html' with configs=conditional_configs %}
+        </div>
+        <div id="optional" class="tab-pane">
+          {% include 'solicitations/clients/export_config_table.html' with configs=optional_configs %}
+        </div>
+        <div id="reserved" class="tab-pane">
+          {% include 'solicitations/clients/export_config_table.html' with configs=reserved_configs %}
+        </div>
+      </div>
+
+      <!-- Save Section -->
+      <div class="save-section">
+        <button type="submit" name="export_config_update" id="saveConfigButton" class="btn mybg hoverbg text-white">
+          Save Configuration
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast Notifications -->
+{% if messages %}
+<div class="toast-container">
+  {% for message in messages %}
+  <div class="toast {% if message.tags == 'success' %}success{% else %}error{% endif %}">
+    <div class="toast-icon"></div>
+    <div class="toast-message">{{ message }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+// Switch tabs
+function switchTab(event, tabName) {
+  // Remove active class from all tabs and buttons
+  const tabButtons = document.querySelectorAll('.tab-button');
+  const tabPanes = document.querySelectorAll('.tab-pane');
+
+  tabButtons.forEach(btn => btn.classList.remove('active'));
+  tabPanes.forEach(pane => pane.classList.remove('active'));
+
+  // Add active class to clicked button and corresponding pane
+  event.currentTarget.classList.add('active');
+  document.getElementById(tabName).classList.add('active');
+}
+
+// Filter table by search input
+function filterTable() {
+  const input = document.getElementById('searchField');
+  const filter = input.value.toLowerCase();
+  const activeTab = document.querySelector('.tab-pane.active');
+  const rows = activeTab.querySelectorAll('tbody tr');
+
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const isVisible = text.includes(filter);
+    row.style.display = isVisible ? '' : 'none';
+    if (isVisible) visibleCount++;
+  });
+}
+
+
+
+// DLA business rules - enforce positions 18, 19, 24, 27 based on positions 2, 3, 13, 18, 27
+function dlaMsg(position, html) {
+  const el = document.getElementById('dla-rule-msg-' + position);
+  if (!el) return;
+
+  const isAutoApplied = html && (
+    html.includes('Auto-cleared') ||
+    html.includes('Auto-set')
+  );
+
+  if (isAutoApplied) {
+    html = html
+      .replace(/color:#c62828/g, 'color:#0b5e8e;background:#e8f4ff;border-left:3px solid #7bb7e5;padding:6px 8px;border-radius:4px;')
+      .replace(/&#10006;/g, '&#9432;');
+
+    const field = document.querySelector('[data-position="' + position + '"]');
+    if (field) {
+      field.style.borderColor = '#7bb7e5';
+      field.style.backgroundColor = '#f5fbff';
+    }
+  }
+
+  el.innerHTML = html;
+}
+
+function dlaBorder(el, color) {
+  if (!el) return;
+  el.style.borderColor = color;
+  if (!color || color === '#dc3545') {
+    el.style.backgroundColor = '';
+  }
+}
+
+function enforceDlaRulesOnConfig() {
+  const f3  = document.querySelector('[data-position="3"]');
+  const f13 = document.querySelector('[data-position="13"]');
+  const f18 = document.querySelector('[data-position="18"]');
+  const f19 = document.querySelector('[data-position="19"]');
+
+  // --- Rules for pos 18 and 19 ---
+  if (f3 && f18) {
+    const v3  = (f3.value  || '').trim().toUpperCase();
+    const v13 = f13 ? (f13.value || '').trim().toUpperCase() : '';
+
+    // Pos 18: must be blank when Set Aside == "N" or Small Biz Code not in {B, M}
+    if (v3 === 'N' || !['B', 'M'].includes(v13)) {
+      f18.value = '';
+      dlaBorder(f18, '#dc3545');
+      dlaMsg(18, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Joint Venture must be blank when Set Aside = N or Small Business Code is not B or M.</div>');
+    } else {
+      dlaBorder(f18, '');
+      dlaMsg(18, '');
+    }
+
+    // Pos 19: must be blank when pos 18 != "JV"; must be completed when pos 18 == "JV"
+    if (f19) {
+      const v18 = (f18.value || '').trim().toUpperCase();
+      if (v18 !== 'JV') {
+        f19.value = '';
+        dlaBorder(f19, '#dc3545');
+        dlaMsg(19, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Joint Venture Remarks must be blank when Joint Venture is not JV.</div>');
+      } else {
+        const v19 = (f19.value || '').trim();
+        if (!v19) {
+          dlaBorder(f19, '#dc3545');
+          dlaMsg(19, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Joint Venture Remarks must be completed when Joint Venture = JV.</div>');
+        } else {
+          dlaBorder(f19, '');
+          dlaMsg(19, '');
+        }
+      }
+    }
+  }
+
+  // --- Rules for pos 24 (Bid Type Code), driven by pos 27 and pos 28 ---
+  const f2  = document.querySelector('[data-position="2"]');
+  const f23 = document.querySelector('[data-position="23"]');
+  const f24 = document.querySelector('[data-position="24"]');
+  const f27 = document.querySelector('[data-position="27"]');
+  const f28 = document.querySelector('[data-position="28"]');
+
+  let pos24Reasons = [];
+
+  // Pos 23 rule: Alternate Disputes Resolution must use DIBBS A/B codes.
+  if (f23) {
+    const v23 = (f23.value || '').trim().toUpperCase();
+    if (v23 === 'Y' || v23 === 'N') {
+      const convertedValue = v23 === 'Y' ? 'A' : 'B';
+      f23.value = convertedValue;
+      dlaBorder(f23, '#dc3545');
+      dlaMsg(23, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Converted legacy value to ' + convertedValue + '. Valid codes are A or B.</div>');
+    } else if (!v23) {
+      dlaBorder(f23, '#dc3545');
+      dlaMsg(23, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Alternate Disputes Resolution must be completed. Valid codes: A (Agree), B (Do Not Agree).</div>');
+    } else if (!['A', 'B'].includes(v23)) {
+      dlaBorder(f23, '#dc3545');
+      dlaMsg(23, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code. Valid codes: A (Agree), B (Do Not Agree).</div>');
+    } else {
+      dlaBorder(f23, '');
+      dlaMsg(23, '');
+    }
+  }
+
+  // Pos 27 rule: if pos 2 == "I" and pos 27 < 90, pos 24 must be BW or AB
+  if (f2 && f27) {
+    const v2 = (f2.value || '').trim().toUpperCase();
+    if (v2 === 'I') {
+      const daysRaw = (f27.value || '').trim();
+      const daysVal = parseInt(daysRaw, 10);
+      if (daysRaw && !isNaN(daysVal) && daysVal < 90) {
+        dlaBorder(f27, '#dc3545');
+        dlaMsg(27, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; DLA rule: When Solicitation Type Indicator = I, Days Quote Valid must be at least 90.</div>');
+        pos24Reasons.push('Days Quote Valid &lt; 90 when Solicitation Type Indicator = I');
+      } else {
+        dlaBorder(f27, '');
+        dlaMsg(27, '');
+      }
+    } else {
+      dlaBorder(f27, '');
+      dlaMsg(27, '');
+    }
+  }
+
+  // Pos 28 rule: if pos 28 == "N", pos 24 must be BW or AB
+  if (f28) {
+    const v28 = (f28.value || '').trim().toUpperCase();
+    if (v28 === 'N') {
+      dlaMsg(28, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; DLA rule: Accept Packaging = N requires Bid Type Code to be BW or AB.</div>');
+      pos24Reasons.push('Accept Packaging = N');
+    } else {
+      dlaMsg(28, '');
+    }
+  }
+
+  // --- Rules for pos 70 (Buy American / Trade Agreement certification) driven by pos 62, 68, 69 ---
+  const f62 = document.querySelector('[data-position="62"]');
+  const f68 = document.querySelector('[data-position="68"]');
+  const f69 = document.querySelector('[data-position="69"]');
+  const f70 = document.querySelector('[data-position="70"]');
+  const f64 = document.querySelector('[data-position="64"]');
+  const f66 = document.querySelector('[data-position="66"]');
+  const f73 = document.querySelector('[data-position="73"]');
+  const f74 = document.querySelector('[data-position="74"]');
+  const f75 = document.querySelector('[data-position="75"]');
+  const f76 = document.querySelector('[data-position="76"]');
+  const f96 = document.querySelector('[data-position="96"]');
+  const f97 = document.querySelector('[data-position="97"]');
+  const f98 = document.querySelector('[data-position="98"]');
+  const f99 = document.querySelector('[data-position="99"]');
+  const f100 = document.querySelector('[data-position="100"]');
+  const f101 = document.querySelector('[data-position="101"]');
+  const f102 = document.querySelector('[data-position="102"]');
+  const f103 = document.querySelector('[data-position="103"]');
+  const f104 = document.querySelector('[data-position="104"]');
+  const f105 = document.querySelector('[data-position="105"]');
+  const f106 = document.querySelector('[data-position="106"]');
+  const f107 = document.querySelector('[data-position="107"]');
+  const f108 = document.querySelector('[data-position="108"]');
+  const f109 = document.querySelector('[data-position="109"]');
+  const f110 = document.querySelector('[data-position="110"]');
+  const f111 = document.querySelector('[data-position="111"]');
+  const f112 = document.querySelector('[data-position="112"]');
+  const f113 = document.querySelector('[data-position="113"]');
+  const f114 = document.querySelector('[data-position="114"]');
+  const f115 = document.querySelector('[data-position="115"]');
+  const f116 = document.querySelector('[data-position="116"]');
+  const f117 = document.querySelector('[data-position="117"]');
+  const f118 = document.querySelector('[data-position="118"]');
+  const f119 = document.querySelector('[data-position="119"]');
+  const f120 = document.querySelector('[data-position="120"]');
+  const f121 = document.querySelector('[data-position="121"]');
+
+  if (f70) {
+    const v62 = f62 ? (f62.value || '').trim().toUpperCase() : '';
+    const v68 = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const v69 = f69 ? (f69.value || '').trim().toUpperCase() : '';
+    const v70 = (f70.value || '').trim().toUpperCase();
+
+    let validCodes = null;
+    let codeLabel = '';
+    let codeList  = '';
+
+    if (v62 === 'Y') {
+      validCodes = ['US', 'QD', 'DE', 'ND'];
+      codeLabel  = 'Trade Agreements End Product';
+      codeList   = 'US (US Made), QD (Qualifying Country), DE (Designated Country), ND (Non-Designated Country)';
+    } else if (v69 === 'Y') {
+      validCodes = ['D', 'N', 'QA', 'O'];
+      codeLabel  = 'FTA-BAA-BOPP';
+      codeList   = 'D (Domestic), N (Free Trade Country), QA (Qualifying Country), O (Other Foreign)';
+    } else if (v69 === 'A') {
+      validCodes = ['D', 'C', 'QE', 'O'];
+      codeLabel  = 'FTA ALT I (BAA-BOPP)';
+      codeList   = 'D (Domestic), C (Canadian), QE (Qualifying Country), O (Other Foreign)';
+    } else if (v69 === 'B') {
+      validCodes = ['D', 'P', 'QA', 'O'];
+      codeLabel  = 'FTA ALT IV';
+      codeList   = 'D (Domestic), P (Free Trade Country), QA (Qualifying Country), O (Other Foreign)';
+    } else if (['Y', 'I'].includes(v68) || (v62 === 'N' && v68 === 'N' && v69 === 'N')) {
+      validCodes = ['D', 'Q', 'NQ'];
+      codeLabel  = 'BAA-BOPP';
+      codeList   = 'D (Domestic End Products), Q (Qualifying Country), NQ (Non-Qualifying Country)';
+    }
+
+    if (validCodes) {
+      if (!v70) {
+        dlaBorder(f70, '#dc3545');
+        dlaMsg(70, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: ' + codeLabel + ' certification must be completed. Valid codes: ' + codeList + '.</div>');
+      } else if (!validCodes.includes(v70)) {
+        dlaBorder(f70, '#dc3545');
+        dlaMsg(70, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v70 + '" is not valid for ' + codeLabel + '. Valid codes: ' + codeList + '.</div>');
+      } else {
+        dlaBorder(f70, '');
+        dlaMsg(70, '');
+      }
+    } else {
+      dlaBorder(f70, '');
+      dlaMsg(70, '');
+    }
+  }
+
+  // Pos 64 is RFQ-data dependent: it only applies when NSN/Part Number (47)
+  // is 0001S00000052 or 0001S00000053. Position 47 is system-controlled on
+  // this global config page, so final enforcement happens during preview/export.
+  if (f64) {
+    const v64 = (f64.value || '').trim().toUpperCase();
+    if (v64 && !['N', 'Y'].includes(v64)) {
+      dlaBorder(f64, '#dc3545');
+      dlaMsg(64, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v64 + '". Valid codes: N (No Waiver Requested), Y (Yes. Request Waiver).</div>');
+    } else {
+      dlaBorder(f64, '');
+      dlaMsg(64, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared during export unless National Stock Number / Part Number is 0001S00000052 or 0001S00000053.</div>');
+    }
+  }
+
+  // Pos 66 must be one of the DLA Hazardous Warning Label codes.
+  if (f66) {
+    const v66 = (f66.value || '').trim();
+    const validHazardousWarningLabels = ['1', '2', '3', '4', '5', '6', '7'];
+    if (v66 && !validHazardousWarningLabels.includes(v66)) {
+      dlaBorder(f66, '#dc3545');
+      dlaMsg(66, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v66 + '". Valid codes: 1 (Hazardous Communication Standard), 2 (Federal Insecticide, Fungicide and Rodenicide Act), 3 (Federal Food, Drug, and Cosmetic Act), 4 (Consumer Product Safety Act), 5 (Federal Hazardous Substance Act), 6 (Federal Alcohol Administration Act), 7 (Not Applicable).</div>');
+    } else {
+      dlaBorder(f66, '');
+      dlaMsg(66, '');
+    }
+  }
+
+  // --- Rules for pos 76 driven by pos 68 and pos 75 ---
+  if (f76) {
+    const v68_76 = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const v75_76 = f75 ? (f75.value || '').trim().toUpperCase() : '';
+
+    if (v68_76 === 'I') {
+      f76.value = '';
+      dlaBorder(f76, '#dc3545');
+      dlaMsg(76, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Buy American Indicator = I.</div>');
+    } else if (v75_76 !== 'N') {
+      f76.value = '';
+      dlaBorder(f76, '#dc3545');
+      dlaMsg(76, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: only applies when Duty Free Entry Duty Paid (75) = N.</div>');
+    } else {
+      dlaBorder(f76, '');
+      dlaMsg(76, '');
+    }
+  }
+
+  // --- Rule for pos 96 (Quantity Variance Plus) ---
+  if (f96) {
+    const v96 = (f96.value || '').trim();
+    const v96Num = parseInt(v96, 10);
+    if (v96 && !/^\d+$/.test(v96)) {
+      dlaBorder(f96, '#dc3545');
+      dlaMsg(96, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Quantity Variance Plus must be a whole number from 0 to 10.</div>');
+    } else if (v96 && v96.length > 2) {
+      dlaBorder(f96, '#dc3545');
+      dlaMsg(96, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Quantity Variance Plus cannot exceed 2 characters.</div>');
+    } else if (v96 && (isNaN(v96Num) || v96Num < 0 || v96Num > 10)) {
+      dlaBorder(f96, '#dc3545');
+      dlaMsg(96, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Quantity Variance Plus must be between 0 and 10.</div>');
+    } else {
+      dlaBorder(f96, '');
+      dlaMsg(96, '');
+    }
+  }
+
+  // --- Rule for pos 97 (Quantity Variance Minus) ---
+  if (f97) {
+    const v97 = (f97.value || '').trim();
+    const v97Num = parseInt(v97, 10);
+    if (v97 && !/^\d+$/.test(v97)) {
+      dlaBorder(f97, '#dc3545');
+      dlaMsg(97, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Quantity Variance Minus must be a whole number from 0 to 10.</div>');
+    } else if (v97 && v97.length > 2) {
+      dlaBorder(f97, '#dc3545');
+      dlaMsg(97, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Quantity Variance Minus cannot exceed 2 characters.</div>');
+    } else if (v97 && (isNaN(v97Num) || v97Num < 0 || v97Num > 10)) {
+      dlaBorder(f97, '#dc3545');
+      dlaMsg(97, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Quantity Variance Minus must be between 0 and 10.</div>');
+    } else {
+      dlaBorder(f97, '');
+      dlaMsg(97, '');
+    }
+  }
+
+  // --- Rule for pos 98 (Minimum Order Quantity Code) driven by pos 2 ---
+  if (f98) {
+    const v2_98 = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const v98 = (f98.value || '').trim().toUpperCase();
+    if (['', 'F', 'P'].includes(v2_98) && !v98) {
+      dlaBorder(f98, '#dc3545');
+      dlaMsg(98, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Minimum Order Quantity Code must be completed when Solicitation Type is blank, F, or P. Valid codes: Y (Yes), N (No).</div>');
+    } else if (v98 && !['Y', 'N'].includes(v98)) {
+      dlaBorder(f98, '#dc3545');
+      dlaMsg(98, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v98 + '". Valid codes: Y (Yes), N (No).</div>');
+    } else {
+      dlaBorder(f98, '');
+      dlaMsg(98, '');
+    }
+  }
+
+  // --- Rule for pos 99 (Minimum Order Maximum Quantity) driven by pos 98 ---
+  if (f99) {
+    const v98_99 = f98 ? (f98.value || '').trim().toUpperCase() : '';
+    const v99 = (f99.value || '').trim();
+    const v99Num = parseInt(v99, 10);
+    if (v98_99 === 'Y' && !v99) {
+      dlaBorder(f99, '#dc3545');
+      dlaMsg(99, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Minimum Order Maximum Quantity must be completed when Minimum Order Quantity Code = Y.</div>');
+    } else if (v99 && !/^\d+$/.test(v99)) {
+      dlaBorder(f99, '#dc3545');
+      dlaMsg(99, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Minimum Order Maximum Quantity must be a whole number.</div>');
+    } else if (v99 && v99.length > 10) {
+      dlaBorder(f99, '#dc3545');
+      dlaMsg(99, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Minimum Order Maximum Quantity cannot exceed 10 digits.</div>');
+    } else if (v99 && (isNaN(v99Num) || v99Num < 1 || v99Num > 9999999999)) {
+      dlaBorder(f99, '#dc3545');
+      dlaMsg(99, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Minimum Order Maximum Quantity must be between 1 and 9999999999.</div>');
+    } else {
+      dlaBorder(f99, '');
+      dlaMsg(99, '');
+    }
+  }
+
+  // --- Rule for pos 100 (Immediate Shipment Available) driven by pos 2 ---
+  if (f100) {
+    const v2_100 = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const v100 = (f100.value || '').trim().toUpperCase();
+    if (v2_100 === 'I') {
+      if (v100 !== 'N') {
+        f100.value = 'N';
+        dlaBorder(f100, '#7bb7e5');
+        dlaMsg(100, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set: Immediate Shipment Available must be N when Solicitation Type = I.</div>');
+      } else {
+        dlaBorder(f100, '');
+        dlaMsg(100, '');
+      }
+    } else if (['', 'F', 'P'].includes(v2_100) && !v100) {
+      dlaBorder(f100, '#dc3545');
+      dlaMsg(100, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Immediate Shipment Available must be completed when Solicitation Type is blank, F, or P. Valid codes: Y (Yes), N (No).</div>');
+    } else if (v100 && !['Y', 'N'].includes(v100)) {
+      dlaBorder(f100, '#dc3545');
+      dlaMsg(100, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v100 + '". Valid codes: Y (Yes), N (No).</div>');
+    } else {
+      dlaBorder(f100, '');
+      dlaMsg(100, '');
+    }
+  }
+
+  // --- Rules for pos 101 and 103-116 ---
+  if (f101) {
+    const v100_101 = f100 ? (f100.value || '').trim().toUpperCase() : '';
+    const v101 = (f101.value || '').trim();
+    const v101Num = parseInt(v101, 10);
+    if (v100_101 !== 'Y') {
+      f101.value = '';
+      dlaBorder(f101, '#dc3545');
+      dlaMsg(101, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Immediate Shipment Quantity must be blank unless Immediate Shipment Available = Y.</div>');
+    } else if (!v101) {
+      dlaBorder(f101, '#dc3545');
+      dlaMsg(101, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Immediate Shipment Quantity must be completed when Immediate Shipment Available = Y.</div>');
+    } else if (!/^\d+$/.test(v101)) {
+      dlaBorder(f101, '#dc3545');
+      dlaMsg(101, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Immediate Shipment Quantity must be a whole number.</div>');
+    } else if (v101.length > 10 || isNaN(v101Num) || v101Num < 0 || v101Num > 9999999999) {
+      dlaBorder(f101, '#dc3545');
+      dlaMsg(101, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid value: Immediate Shipment Quantity must be between 0 and 9999999999.</div>');
+    } else {
+      dlaBorder(f101, '');
+      dlaMsg(101, '');
+    }
+  }
+
+  if (f102) {
+    const v102 = (f102.value || '').trim().toUpperCase();
+    const v103 = f103 ? (f103.value || '').trim() : '';
+    const v104 = f104 ? (f104.value || '').trim() : '';
+    if (v102 === 'MM' || v102 === 'QM') {
+      if (f103) { f103.value = ''; dlaBorder(f103, '#dc3545'); dlaMsg(103, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Manufacturer/Dealer = MM or QM.</div>'); }
+      if (f104) { f104.value = ''; dlaBorder(f104, '#dc3545'); dlaMsg(104, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Manufacturer/Dealer = MM or QM.</div>'); }
+    } else if (v102 === 'DD' || v102 === 'QD') {
+      if (!v103 && !v104) {
+        if (f103) { dlaBorder(f103, '#dc3545'); dlaMsg(103, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: enter Source CAGE or complete row 104.</div>'); }
+        if (f104) { dlaBorder(f104, '#dc3545'); dlaMsg(104, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: enter Source Name and Address or complete row 103.</div>'); }
+      } else {
+        if (f103) { dlaBorder(f103, ''); dlaMsg(103, ''); }
+        if (f104) { dlaBorder(f104, ''); dlaMsg(104, ''); }
+      }
+    } else {
+      if (f103) { dlaBorder(f103, ''); dlaMsg(103, ''); }
+      if (f104) { dlaBorder(f104, ''); dlaMsg(104, ''); }
+    }
+  }
+
+  if (f105) {
+    const v105 = (f105.value || '').trim().toUpperCase();
+    const v106 = f106 ? (f106.value || '').trim().toUpperCase() : '';
+    const v110 = f110 ? (f110.value || '').trim().toUpperCase() : '';
+
+    if (!['P', 'B', 'N'].includes(v105)) {
+      [{f:f106,pos:106},{f:f107,pos:107},{f:f108,pos:108},{f:f109,pos:109}].forEach(function(item) {
+        if (!item.f) return;
+        item.f.value = '';
+        dlaBorder(item.f, '#dc3545');
+        dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Item Description Indicator is not P, B, or N.</div>');
+      });
+    } else {
+      const valid106 = v105 === 'B' ? ['1', '2'] : ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'];
+      if (f106) {
+        if (!v106) { dlaBorder(f106, '#dc3545'); dlaMsg(106, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Part Number Offered Code must be completed.</div>'); }
+        else if (!valid106.includes(v106)) { dlaBorder(f106, '#dc3545'); dlaMsg(106, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code for the current Item Description Indicator.</div>'); }
+        else { dlaBorder(f106, ''); dlaMsg(106, ''); }
+      }
+      [{f:f107,pos:107,label:'Part Number Offered CAGE code'}, {f:f108,pos:108,label:'Part Number Offered - Part Number'}].forEach(function(item) {
+        if (!item.f) return;
+        if (!(item.f.value || '').trim()) { dlaBorder(item.f, '#dc3545'); dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: ' + item.label + ' must be completed.</div>'); }
+        else { dlaBorder(item.f, ''); dlaMsg(item.pos, ''); }
+      });
+      if (v106 === '2' && f24) {
+        f24.value = 'AB';
+        dlaBorder(f24, '#dc3545');
+        dlaMsg(24, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set to AB: Part Number Offered Code = 2 requires Alternate Bid.</div>');
+      }
+      if (f109) {
+        if (v106 === '1') {
+          f109.value = '';
+          dlaBorder(f109, '#dc3545');
+          dlaMsg(109, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: remarks must be blank when Part Number Offered Code = 1.</div>');
+        } else {
+          dlaBorder(f109, '');
+          dlaMsg(109, '');
+        }
+      }
+    }
+
+    if (!['D', 'B', 'Q'].includes(v105)) {
+      [{f:f110,pos:110},{f:f111,pos:111}].forEach(function(item) {
+        if (!item.f) return;
+        item.f.value = '';
+        dlaBorder(item.f, '#dc3545');
+        dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Item Description Indicator is not D, B, or Q.</div>');
+      });
+    } else {
+      if (f110) {
+        if (!v110) { dlaBorder(f110, '#dc3545'); dlaMsg(110, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Supplies Offered must be completed.</div>'); }
+        else if (!['1', '2', '3', '4'].includes(v110)) { dlaBorder(f110, '#dc3545'); dlaMsg(110, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code. Valid codes: 1, 2, 3, 4.</div>'); }
+        else { dlaBorder(f110, ''); dlaMsg(110, ''); }
+      }
+      if (f111) {
+        if (v110 === '1') {
+          f111.value = '';
+          dlaBorder(f111, '#dc3545');
+          dlaMsg(111, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: remarks must be blank when Supplies Offered = 1.</div>');
+        } else {
+          dlaBorder(f111, '');
+          dlaMsg(111, '');
+        }
+      }
+    }
+
+    const qualificationRows = [{f:f112,pos:112,required:true},{f:f113,pos:113},{f:f114,pos:114},{f:f115,pos:115},{f:f116,pos:116}];
+    if (v105 !== 'Q') {
+      qualificationRows.forEach(function(item) {
+        if (!item.f) return;
+        item.f.value = '';
+        dlaBorder(item.f, '#dc3545');
+        dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Item Description Indicator is not Q.</div>');
+      });
+    } else {
+      qualificationRows.forEach(function(item) {
+        if (!item.f) return;
+        if (item.required && !(item.f.value || '').trim()) {
+          dlaBorder(item.f, '#dc3545');
+          dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: must be completed when Item Description Indicator = Q.</div>');
+        } else {
+          dlaBorder(item.f, '');
+          dlaMsg(item.pos, '');
+        }
+      });
+    }
+  }
+
+  // --- Rules for pos 118-121 driven by pos 117, pos 120, pos 2, and pos 24 ---
+  if (f117) {
+    const v117 = (f117.value || '').trim().toUpperCase();
+    const v118 = f118 ? (f118.value || '').trim().toUpperCase() : '';
+    const v119 = f119 ? (f119.value || '').trim() : '';
+    const v120 = f120 ? (f120.value || '').trim().toUpperCase() : '';
+    const v121 = f121 ? (f121.value || '').trim() : '';
+    const v2_121 = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const v24_118 = f24 ? (f24.value || '').trim().toUpperCase() : '';
+    const validQualityCodes = {
+      '8': ['8', '2', '1'],
+      '7': ['8', '7', '2', '1'],
+      '6': ['8', '7', '6', '2', '1']
+    };
+
+    if (v117 === 'N') {
+      if (f118) {
+        f118.value = '';
+        dlaBorder(f118, '#dc3545');
+        dlaMsg(118, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Higher-Level Quality Code must be blank when Higher-Level Quality Indicator = N.</div>');
+      }
+      if (f119) {
+        f119.value = '';
+        dlaBorder(f119, '#dc3545');
+        dlaMsg(119, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Higher-Level Quality Remarks must be blank when Higher-Level Quality Indicator = N.</div>');
+      }
+    } else if (validQualityCodes[v117]) {
+      if (f118) {
+        if (!v118) {
+          dlaBorder(f118, '#dc3545');
+          dlaMsg(118, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Higher-Level Quality Code must be completed when Higher-Level Quality Indicator is not N.</div>');
+        } else if (!validQualityCodes[v117].includes(v118)) {
+          dlaBorder(f118, '#dc3545');
+          dlaMsg(118, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code for the current Higher-Level Quality Indicator.</div>');
+        } else {
+          dlaBorder(f118, '');
+          dlaMsg(118, '');
+        }
+      }
+
+      if (v118 === '1' && f24) {
+        if (!['BW', 'AB'].includes(v24_118)) {
+          f24.value = 'BW';
+        }
+        dlaBorder(f24, '#dc3545');
+        dlaMsg(24, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set to BW: Bid Type Code must be BW or AB when Higher-Level Quality Code = 1.</div>');
+      }
+
+      if (f119) {
+        if (v118 === '2') {
+          if (!v119) {
+            dlaBorder(f119, '#dc3545');
+            dlaMsg(119, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Higher-Level Quality Remarks must be completed when Higher-Level Quality Code = 2.</div>');
+          } else {
+            dlaBorder(f119, '');
+            dlaMsg(119, '');
+          }
+        } else {
+          f119.value = '';
+          dlaBorder(f119, '#dc3545');
+          dlaMsg(119, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Higher-Level Quality Remarks must be blank unless Higher-Level Quality Code = 2.</div>');
+        }
+      }
+    } else {
+      if (f118) { dlaBorder(f118, ''); dlaMsg(118, ''); }
+      if (f119) { dlaBorder(f119, ''); dlaMsg(119, ''); }
+    }
+
+    if (f120) {
+      if (!v120) {
+        f120.value = 'N';
+        dlaBorder(f120, '#dc3545');
+        dlaMsg(120, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set: Child Labor Certification Code defaults to N.</div>');
+      } else if (!['N', 'U', 'Y'].includes(v120)) {
+        dlaBorder(f120, '#dc3545');
+        dlaMsg(120, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code. Valid codes: N, U, Y.</div>');
+      } else {
+        dlaBorder(f120, '');
+        dlaMsg(120, '');
+      }
+      if (v120 === 'Y' && f24) {
+        const currentBidType = (f24.value || '').trim().toUpperCase();
+        if (!['BW', 'AB'].includes(currentBidType)) {
+          f24.value = 'BW';
+        }
+        dlaBorder(f24, '#dc3545');
+        dlaMsg(24, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set to BW: Bid Type Code must be BW or AB when Child Labor Certification Code = Y.</div>');
+      }
+    }
+
+    if (f121) {
+      const currentBidType = f24 ? (f24.value || '').trim().toUpperCase() : '';
+      if (v121 && ['F', 'P'].includes(v2_121) && currentBidType === 'BI') {
+        f121.value = '';
+        dlaBorder(f121, '#dc3545');
+        dlaMsg(121, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Quote Remarks must be blank when Solicitation Type is F or P and Bid Type Code = BI.</div>');
+      } else if (v121 && f24 && !['BW', 'AB'].includes(currentBidType)) {
+        f24.value = 'BW';
+        dlaBorder(f24, '#dc3545');
+        dlaMsg(24, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set to BW: Bid Type Code must be BW or AB when Quote Remarks are entered.</div>');
+      } else {
+        dlaBorder(f121, '');
+        dlaMsg(121, '');
+      }
+    }
+  }
+
+  // --- Rules for pos 75 (Duty Free Entry - Duty Paid) driven by pos 68 and pos 74 ---
+  if (f75) {
+    const v68_75 = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const v74_75 = f74 ? (f74.value || '').trim().toUpperCase() : '';
+    const v75    = (f75.value || '').trim().toUpperCase();
+
+    if (v68_75 === 'I') {
+      f75.value = '';
+      dlaBorder(f75, '#dc3545');
+      dlaMsg(75, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Buy American Indicator = I.</div>');
+    } else if (v74_75 !== 'Y') {
+      f75.value = '';
+      dlaBorder(f75, '#dc3545');
+      dlaMsg(75, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: only applies when Duty Free Entry Foreign Supplies in US (74) = Y.</div>');
+    } else if (v75 && !['Y', 'N'].includes(v75)) {
+      dlaBorder(f75, '#dc3545');
+      dlaMsg(75, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v75 + '". Valid codes: Y (Yes), N (No).</div>');
+    } else {
+      dlaBorder(f75, '');
+      dlaMsg(75, '');
+    }
+  }
+
+  // --- Rules for pos 74 (Duty Free Entry - Foreign Supplies in U.S.) driven by pos 68 and pos 73 ---
+  if (f74) {
+    const v68_74 = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const v73_74 = f73 ? (f73.value || '').trim().toUpperCase() : '';
+    const v74    = (f74.value || '').trim().toUpperCase();
+
+    if (v68_74 === 'I') {
+      f74.value = '';
+      dlaBorder(f74, '#dc3545');
+      dlaMsg(74, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: must be blank when Buy American Indicator = I.</div>');
+    } else if (v73_74 !== 'Y') {
+      f74.value = '';
+      dlaBorder(f74, '#dc3545');
+      dlaMsg(74, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: only applies when Duty Free Entry Requested (73) = Y.</div>');
+    } else if (v74 && !['Y', 'N'].includes(v74)) {
+      dlaBorder(f74, '#dc3545');
+      dlaMsg(74, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v74 + '". Valid codes: Y (Yes), N (No).</div>');
+    } else {
+      dlaBorder(f74, '');
+      dlaMsg(74, '');
+    }
+  }
+
+  // --- Rules for pos 73 (Duty Free Entry Requested) driven by pos 68 ---
+  if (f73) {
+    const v68_73 = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const v73    = (f73.value || '').trim().toUpperCase();
+    if (v68_73 === 'I') {
+      f73.value = '';
+      dlaBorder(f73, '#dc3545');
+      dlaMsg(73, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Duty Free Entry Requested must be blank when Buy American Indicator = I.</div>');
+    } else if (v73 && !['Y', 'N'].includes(v73)) {
+      dlaBorder(f73, '#dc3545');
+      dlaMsg(73, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v73 + '". Valid codes: Y (Yes), N (No).</div>');
+    } else {
+      dlaBorder(f73, '');
+      dlaMsg(73, '');
+    }
+  }
+
+  // --- Rules for pos 72 (Qualifying/Designated/FTA Country) driven by pos 70 ---
+  const Q_CODES  = ['AU','AT','BE','CA','CZ','DK','EG','EE','FI','FR','DE','GR','IL','IT','JP','LV','LT','LU','NL','NO','PL','PT','SI','ES','SE','CH','TR','GB'];
+  const QA_CODES = ['AT','BE','CZ','DK','EG','EE','FI','FR','DE','GR','IL','IT','JP','LV','LT','LU','NL','NO','PL','PT','SI','ES','SE','CH','TR','GB'];
+  const QD_CODES = ['AU','AT','BE','CA','CZ','DK','EG','EE','FI','FR','DE','GR','IL','IT','JP','LV','LT','LU','NL','NO','PL','PT','SI','ES','SE','CH','TR','GB'];
+  const QE_CODES = ['AU','AT','BE','CZ','DK','EG','EE','FI','FR','DE','GR','IL','IT','JP','LV','LT','LU','NL','NO','PL','PT','SI','ES','SE','CH','TR','GB'];
+  const C_CODES  = ['CA'];
+  const N_CODES  = ['AU','CA','CL','CO','CR','DO','SV','GT','HN','KR','MX','NI','SG'];
+  const P_CODES  = ['AU','CA','CL','CO','CR','DO','SV','GT','HN','MX','NI','SG'];
+  const DE_CODES = ['AF','AO','AG','AM','AW','BS','BH','BD','BB','BZ','BJ','BT','BQ','BG','BF','BI','KH','CF','TD','CL','CO','KM','CD','CR','HR','CW','CY','DJ','DM','DO','SV','GQ','ER','ET','GM','GD','GT','GN','GW','GY','HT','HN','HK','HU','IS','IE','JM','KI','KR','LA','LS','LR','LI','MG','MW','ML','MT','MR','MX','MD','ME','MS','MA','MZ','NP','NZ','NI','NE','MK','PA','PE','RO','RW','KN','LC','VC','WS','ST','SN','SL','SG','SX','SK','SB','SO','SS','TW','TZ','TL','TG','TT','TV','UG','UA','VU','VG','YE','ZM'];
+
+  const f72 = document.querySelector('[data-position="72"]');
+  if (f72) {
+    const v70_72 = f70 ? (f70.value || '').trim().toUpperCase() : '';
+    const v72    = (f72.value || '').trim().toUpperCase();
+
+    const BLANK_WHEN = ['D', 'NQ', 'O', 'ND', 'US'];
+
+    if (BLANK_WHEN.includes(v70_72)) {
+      f72.value = '';
+      dlaBorder(f72, v70_72 ? '#dc3545' : '');
+      dlaMsg(72, v70_72 ? '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Country code must be blank when End Product = ' + v70_72 + '.</div>' : '');
+    } else {
+      let validCodes72 = null;
+      let codeLabel72  = '';
+
+      if      (v70_72 === 'Q')  { validCodes72 = Q_CODES;  codeLabel72 = 'BAA Qualifying Country End Products (Q)'; }
+      else if (v70_72 === 'QA') { validCodes72 = QA_CODES; codeLabel72 = 'FTA Qualifying Country excl. Canada & Australia (QA)'; }
+      else if (v70_72 === 'QD') { validCodes72 = QD_CODES; codeLabel72 = 'Trade Agreement Qualified Country (QD)'; }
+      else if (v70_72 === 'QE') { validCodes72 = QE_CODES; codeLabel72 = 'FTA Qualifying Country excl. Canada (QE)'; }
+      else if (v70_72 === 'C')  { validCodes72 = C_CODES;  codeLabel72 = 'FTA Canadian End Products (C)'; }
+      else if (v70_72 === 'N')  { validCodes72 = N_CODES;  codeLabel72 = 'FTA ALT I Country End Products (N)'; }
+      else if (v70_72 === 'P')  { validCodes72 = P_CODES;  codeLabel72 = 'FTA Country End Products (P)'; }
+      else if (v70_72 === 'DE') { validCodes72 = DE_CODES; codeLabel72 = 'Trade Agreement Designated Country (DE)'; }
+
+      if (validCodes72) {
+        if (!v72) {
+          dlaBorder(f72, '#dc3545');
+          dlaMsg(72, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Country code must be completed for ' + codeLabel72 + '.</div>');
+        } else if (!validCodes72.includes(v72)) {
+          dlaBorder(f72, '#dc3545');
+          dlaMsg(72, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v72 + '" is not valid for ' + codeLabel72 + '.</div>');
+        } else {
+          dlaBorder(f72, '');
+          dlaMsg(72, '');
+        }
+      } else {
+        dlaBorder(f72, '');
+        dlaMsg(72, '');
+      }
+    }
+  }
+
+  // --- Rules for pos 71 (Country of Origin) driven by pos 62, 68, 69, 70 ---
+  const FTA_A_CODES = ['AF','AL','DZ','AS','AD','AO','AI','AQ','AG','AR','AM','AW','AZ','BS','BH','BD','BB','BY','BZ','BJ','BM','BT','BO','BQ','BA','BW','BV','BR','IO','BN','BG','BF','BI','CV','KH','CM','KY','CF','TD','CL','CN','CX','CC','CO','KM','CG','CD','CK','CR','CI','HR','CW','CY','DJ','DM','DO','EC','SV','GQ','ER','SZ','ET','FK','FO','FJ','GF','PF','TF','GA','GM','GE','GH','GI','GL','GD','GP','GU','GT','GN','GW','GY','HT','HM','VA','HN','HK','HU','IS','IN','ID','IQ','IE','IM','JM','JO','KZ','KE','KI','KR','XK','KW','KG','LA','LB','LS','LR','LY','LI','MO','MG','MW','MY','MV','ML','MT','MH','MQ','MR','MU','YT','MX','FM','MD','MC','MN','ME','MS','MA','MZ','NA','NR','NP','NC','NZ','NI','NE','NG','NU','NF','MK','MP','OM','PK','PW','PS','PA','PG','PY','PE','PH','PN','PR','QA','RE','RO','RU','RW','SH','KN','LC','MF','PM','VC','WS','SM','ST','SA','SN','RS','SC','SL','SG','SX','SK','SB','SO','ZA','GS','SS','LK','SR','SJ','SY','TW','TJ','TZ','TH','TL','TG','TK','TT','TN','TM','TC','TV','UG','UA','AE','UM','UY','UZ','VU','VE','VN','VI','VG','WF','EH','YE','ZM','ZW'];
+  const FTA_B_CODES = ['AF','AL','DZ','AS','AD','AO','AI','AQ','AG','AR','AM','AW','AZ','BS','BH','BD','BB','BY','BZ','BJ','BM','BT','BO','BQ','BA','BW','BV','BR','IO','BN','BG','BF','BI','CV','KH','CM','KY','CF','TD','CN','CX','CC','KM','CG','CD','CK','CI','HR','CW','CY','DJ','DM','EC','GQ','ER','SZ','ET','FK','FO','FJ','GF','PF','TF','GA','GM','GE','GH','GI','GL','GD','GP','GU','GN','GW','GY','HT','HM','VA','HK','HU','IS','IN','ID','IQ','IE','IM','JM','JO','KZ','KE','KI','KR','XK','KW','KG','LA','LB','LS','LR','LY','LI','MO','MG','MW','MY','MV','ML','MT','MH','MQ','MR','MU','YT','FM','MD','MC','MN','ME','MS','MA','MZ','NA','NR','NP','NC','NZ','NE','NG','NU','NF','MK','MP','OM','PK','PW','PS','PA','PG','PY','PE','PH','PN','PR','QA','RE','RO','RU','RW','SH','KN','LC','MF','PM','VC','WS','SM','ST','SA','SN','RS','SC','SL','SX','SK','SB','SO','ZA','GS','SS','LK','SR','SJ','SY','TW','TJ','TZ','TH','TL','TG','TK','TT','TN','TM','TC','TV','UG','UA','AE','UM','UY','UZ','VU','VE','VN','VI','VG','WF','EH','YE','ZM','ZW'];
+  const FTA_Y_CODES = ['AF','AL','DZ','AS','AD','AO','AI','AQ','AG','AR','AM','AW','AZ','BS','BH','BD','BB','BY','BZ','BJ','BM','BT','BO','BQ','BA','BW','BV','BR','IO','BN','BG','BF','BI','CV','KH','CM','KY','CF','TD','CN','CX','CC','KM','CG','CD','CK','CI','FK','HR','CW','CY','DJ','DM','EC','GQ','ER','SZ','ET','FO','FJ','GF','PF','TF','GA','GM','GE','GH','GI','GL','GD','GP','GU','GN','GW','GY','HT','HM','VA','HK','HU','IS','IN','ID','IQ','IE','IM','JM','JO','KZ','KE','KI','XK','KW','KG','LA','LB','LS','LR','LY','LI','MO','MG','MW','MY','MV','ML','MT','MH','MQ','MR','MU','YT','FM','MD','MC','MN','ME','MS','MA','MZ','NA','NR','NP','NC','NZ','NE','NG','NU','NF','MK','MP','OM','PK','PW','PS','PG','PY','PE','PH','PN','PR','QA','RE','RO','RU','RW','SH','KN','LC','MF','PM','VC','WS','SM','SA','ST','SN','RS','SC','SL','SX','SK','SB','SO','ZA','GS','SS','LK','SR','SJ','SY','TW','TJ','TZ','TH','TL','TG','TK','TT','TN','TM','TC','TV','UG','UA','AE','UM','UY','UZ','VU','VE','VN','VI','VG','WF','EH','YE','ZM','ZW'];
+  const NQ_CODES = ['AF','AL','DZ','AS','AD','AO','AI','AQ','AG','AR','AM','AW','AZ','BS','BH','BD','BB','BY','BZ','BJ','BM','BT','BO','BQ','BA','BW','BV','BR','IO','BN','BG','BF','BI','CV','KH','CM','KY','CF','TD','CL','CN','CX','CC','CO','KM','CG','CD','CK','CR','CI','HR','CW','CY','DJ','DM','DO','EC','SV','GQ','ER','SZ','ET','FK','FO','FJ','GF','PF','TF','GA','GM','GE','GH','GI','GL','GD','GP','GU','GT','GN','GW','GY','HT','HM','VA','HN','HK','HU','IS','IN','ID','IQ','IE','IM','JM','JO','KZ','KE','KI','KR','XK','KW','KG','LA','LB','LS','LR','LY','LI','MO','MG','MW','MY','MV','ML','MT','MH','MQ','MR','MU','YT','MX','FM','MD','MC','MN','ME','MS','MA','MZ','NA','NR','NP','NC','NZ','NI','NE','NG','NU','NF','MK','MP','OM','PK','PW','PS','PA','PG','PY','PE','PH','PN','PR','QA','RE','RO','RU','RW','SH','KN','LC','MF','PM','VC','WS','SM','ST','SA','SN','RS','SC','SL','SG','SX','SK','SB','SO','ZA','GS','SS','LK','SR','SJ','SY','TW','TJ','TZ','TH','TL','TG','TK','TT','TN','TM','TC','TV','UG','UA','AE','UM','UY','UZ','VU','VE','VN','VI','VG','WF','EH','YE','ZM','ZW'];
+  const ND_CODES = ['AL','DZ','AS','AD','AI','AQ','AR','AZ','BY','BM','BO','BA','BW','BV','BR','IO','BN','CV','CM','KY','CN','CX','CC','CG','CK','CI','EC','SZ','FK','FO','FJ','GF','PF','TF','GA','GE','GH','GI','GL','GP','GU','HM','VA','IN','ID','IQ','IM','JO','KZ','KE','XK','KW','KG','LB','LY','MO','MY','MV','MH','MQ','MU','YT','FM','MC','MN','NA','NR','NC','NG','NU','NF','MP','OM','PK','PW','PS','PG','PY','PH','PN','PR','QA','RE','RU','SH','PM','SM','SA','RS','SC','ZA','GS','LK','SR','SJ','SY','TJ','TH','TK','TT','TN','TM','TC','AE','UM','UY','UZ','VE','VN','VI','WF','EH','ZW'];
+
+  const f71 = document.querySelector('[data-position="71"]');
+  if (f71) {
+    // Reuse f62, f68, f69, f70 already declared above
+    const v62_71 = f62 ? (f62.value || '').trim().toUpperCase() : '';
+    const v68_71 = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const v69_71 = f69 ? (f69.value || '').trim().toUpperCase() : '';
+    const v70_71 = f70 ? (f70.value || '').trim().toUpperCase() : '';
+    const v71    = (f71.value || '').trim().toUpperCase();
+
+    if (!['NQ', 'O', 'ND', 'US'].includes(v70_71)) {
+      // Must be blank when pos 70 not in {NQ, O, ND, US}
+      f71.value = '';
+      dlaBorder(f71, v70_71 ? '#dc3545' : '');
+      dlaMsg(71, v70_71 ? '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Country of Origin must be blank when End Product code is not NQ, O, ND, or US.</div>' : '');
+    } else {
+      // Determine applicable code set and label
+      let validCodes71 = null;
+      let codeLabel71  = '';
+
+      if (v70_71 === 'O' && v69_71 === 'A') {
+        validCodes71 = FTA_A_CODES;
+        codeLabel71  = 'Free Trade Agreements ALT I (pos 69 = A)';
+      } else if (v70_71 === 'O' && v69_71 === 'B') {
+        validCodes71 = FTA_B_CODES;
+        codeLabel71  = 'Free Trade Agreements ALT IV (pos 69 = B)';
+      } else if (v70_71 === 'O' && v69_71 === 'Y') {
+        validCodes71 = FTA_Y_CODES;
+        codeLabel71  = 'Free Trade Agreements (pos 69 = Y)';
+      } else if (v70_71 === 'NQ' && ['Y', 'I'].includes(v68_71)) {
+        validCodes71 = NQ_CODES;
+        codeLabel71  = 'Non-Qualifying Country End Products (pos 68 = ' + v68_71 + ')';
+      } else if (v70_71 === 'ND' && v62_71 === 'Y') {
+        validCodes71 = ND_CODES;
+        codeLabel71  = 'Non-Designated Country End Products (pos 62 = Y)';
+      }
+
+      if (validCodes71) {
+        if (!v71) {
+          dlaBorder(f71, '#dc3545');
+          dlaMsg(71, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Country of Origin must be completed for ' + codeLabel71 + '.</div>');
+        } else if (!validCodes71.includes(v71)) {
+          dlaBorder(f71, '#dc3545');
+          dlaMsg(71, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v71 + '" is not a valid country code for ' + codeLabel71 + '.</div>');
+        } else {
+          dlaBorder(f71, '');
+          dlaMsg(71, '');
+        }
+      } else {
+        // pos 70 is US, or no matching condition - no country of origin required
+        dlaBorder(f71, '');
+        dlaMsg(71, '');
+      }
+    }
+  }
+
+  // --- Rules for pos 67 (Material Requirements) driven by pos 2 ---
+  const f67 = document.querySelector('[data-position="67"]');
+  if (f67) {
+    const v67  = (f67.value || '').trim();
+    const v2_67 = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const validMaterialCodes = ['0', '1', '2', '3', '4'];
+    if (v67 && !validMaterialCodes.includes(v67)) {
+      dlaBorder(f67, '#dc3545');
+      dlaMsg(67, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v67 + '". Valid codes: 0 (No), 1 (Used), 2 (Reconditioned), 3 (Remanufactured), 4 (Unused Former Gov Surplus).</div>');
+    } else if (v2_67 === 'I' && v67 === '4') {
+      pos24Reasons.push('Material Requirements = 4 (Unused Former Gov Surplus) when Solicitation Type = I');
+      dlaBorder(f67, '#dc3545');
+      dlaMsg(67, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; DLA rule: Bid Type Code (24) must be BW or AB when Solicitation Type = I and Material Requirements = 4.</div>');
+    } else {
+      dlaBorder(f67, '');
+      dlaMsg(67, '');
+    }
+  }
+
+  // --- Rules for pos 58 (Waiver of HUBZone Preference) driven by pos 57 and pos 13 ---
+  const f57 = document.querySelector('[data-position="57"]');
+  const f58 = document.querySelector('[data-position="58"]');
+  if (f57) {
+    const v57 = (f57.value || '').trim().toUpperCase();
+    const v13_58 = f13 ? (f13.value || '').trim().toUpperCase() : '';
+
+    if (v57 === 'N') {
+      // HUBZone = N: pos 58 must be blank
+      if (f58) {
+        f58.value = '';
+        dlaBorder(f58, '#dc3545');
+        dlaMsg(58, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Waiver of HUBZone Preference must be blank when HUBZone Preference Indicator = N.</div>');
+      }
+    } else if (v57 === 'Y' && !['B', 'M'].includes(v13_58)) {
+      // HUBZone = Y but Small Biz Code not B or M: pos 58 must be blank
+      if (f58) {
+        f58.value = '';
+        dlaBorder(f58, '#dc3545');
+        dlaMsg(58, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Waiver of HUBZone Preference must be blank when Small Business Code is not B or M.</div>');
+      }
+    } else if (v57 === 'Y' && ['B', 'M'].includes(v13_58)) {
+      // HUBZone = Y and Small Biz Code B or M: pos 58 required, validate Y/N/A
+      if (f58) {
+        const v58 = (f58.value || '').trim().toUpperCase();
+        if (!v58) {
+          dlaBorder(f58, '#dc3545');
+          dlaMsg(58, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Waiver of HUBZone Preference must be completed when HUBZone Preference = Y and Small Business Code = B or M. Valid codes: Y (Yes, request waiver), N (No waiver requested), A (Not Applicable).</div>');
+        } else if (!['Y', 'N', 'A'].includes(v58)) {
+          dlaBorder(f58, '#dc3545');
+          dlaMsg(58, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v58 + '". Valid codes: Y (Yes, request waiver), N (No waiver requested), A (Not Applicable).</div>');
+        } else {
+          dlaBorder(f58, '');
+          dlaMsg(58, '');
+        }
+      }
+    } else {
+      if (f58) { dlaBorder(f58, ''); dlaMsg(58, ''); }
+    }
+  }
+
+  // --- Rules for pos 56 (No DO Minimum Quantity) driven by pos 2 ---
+  const f56 = document.querySelector('[data-position="56"]');
+  if (f56 && f2) {
+    const v2_56 = (f2.value || '').trim().toUpperCase();
+    const v56   = (f56.value || '').trim().toUpperCase();
+    if (v2_56 !== 'I') {
+      // Must be blank when Solicitation Type != I
+      f56.value = '';
+      dlaBorder(f56, '#dc3545');
+      dlaMsg(56, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: No DO Minimum Quantity must be blank when Solicitation Type Indicator is not I.</div>');
+    } else {
+      // Solicitation Type == I: must be completed with Y or N
+      if (!v56) {
+        dlaBorder(f56, '#dc3545');
+        dlaMsg(56, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: No DO Minimum Quantity must be completed when Solicitation Type Indicator = I. Valid codes: Y (Yes), N (No).</div>');
+      } else if (!['Y', 'N'].includes(v56)) {
+        dlaBorder(f56, '#dc3545');
+        dlaMsg(56, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v56 + '". Valid codes: Y (Yes), N (No).</div>');
+      } else {
+        dlaBorder(f56, '');
+        dlaMsg(56, '');
+      }
+    }
+  }
+
+  // --- Rules for pos 49 (Quantity) ---
+  const f49 = document.querySelector('[data-position="49"]');
+  let pos49IsZero = false;
+  if (f49) {
+    const v49raw = (f49.value || '').trim();
+    const v49 = parseFloat(v49raw);
+    if (v49raw !== '' && !isNaN(v49) && v49 === 0) {
+      pos49IsZero = true;
+      dlaBorder(f49, '#dc3545');
+      dlaMsg(49, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Zero quantity: Bid Type Code (24) must be DQ (No Bid).</div>' +
+        '<div style="color:#6c757d;font-size:11px;margin-top:3px;">&#9432; Note: Offering a different quantity than solicited on NSN/Part # 0001S00000052 or 0001S00000053 is prohibited. If Solicitation Type (2) = I, quantity is an estimate and must match the estimated quantity.</div>');
+    } else if (v49raw !== '') {
+      dlaBorder(f49, '');
+      dlaMsg(49, '<div style="color:#6c757d;font-size:11px;margin-top:3px;">&#9432; Note: If quantity differs from the RFQ requirement, Bid Type Code (24) must be BW or AB. Offering a different quantity on NSN/Part # 0001S00000052 or 0001S00000053 is prohibited. If Solicitation Type (2) = I, quantity must match the estimated quantity.</div>');
+    } else {
+      dlaBorder(f49, '');
+      dlaMsg(49, '');
+    }
+  }
+
+  // Apply final state for pos 24 (DQ overrides BW/AB when quantity is zero)
+  if (f24) {
+    if (pos49IsZero) {
+      f24.value = 'DQ';
+      dlaBorder(f24, '#dc3545');
+      dlaMsg(24, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set to DQ: Bid Type Code must be DQ (No Bid) when quantity is zero.</div>');
+    } else if (pos24Reasons.length > 0) {
+      const v24 = (f24.value || '').trim().toUpperCase();
+      if (v24 !== 'BW' && v24 !== 'AB') {
+        f24.value = 'BW';
+      }
+      dlaBorder(f24, '#dc3545');
+      dlaMsg(24, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-set to BW: Bid Type Code must be BW or AB (' + pos24Reasons.join('; ') + ').</div>');
+    } else {
+      dlaBorder(f24, '');
+      dlaMsg(24, '');
+    }
+  }
+
+  // --- Rules for pos 32 (FOB), pos 33 (City), pos 34 (State/Province), pos 35 (Country) ---
+  const US_STATES = ['AK','AL','AR','AS','AZ','CA','CO','CT','DC','DE','FL','FM','GA','GU','HI',
+    'IA','ID','IL','IN','KS','KY','LA','MA','MD','ME','MH','MI','MN','MO','MS','MT',
+    'NC','ND','NE','NH','NJ','NM','NV','NY','OH','OK','OR','PA','PR','PW','RI',
+    'SC','SD','TN','TX','UT','VA','VI','VT','WA','WV','WI','WY'];
+  const CA_PROVINCES = ['AB','BC','MB','NB','NF','NS','NT','ON','PE','QC','SK','YT'];
+  const VALID_COUNTRIES = [
+    'AF','AL','DZ','AS','AD','AO','AI','AQ','AG','AR','AM','AW','AU','AT','AZ',
+    'BS','BH','BD','BB','BY','BE','BZ','BJ','BM','BT','BO','BQ','BA','BW','BV',
+    'BR','IO','BN','BG','BF','CV','KH','CM','BI','CA','KY','CF','TD','CL','CN',
+    'CX','CC','CO','KM','CG','CD','CK','CR','CI','HR','CU','CW','CY','CZ','DK',
+    'DJ','DM','DO','EC','EG','SV','GQ','ER','EE','SZ','ET','FK','FO','FJ','FI',
+    'FR','GF','PF','TF','GA','GM','GE','DE','GH','GI','GR','GL','GD','GP','GU',
+    'GT','GN','GW','GY','HT','HM','VA','HN','HK','HU','IS','IN','ID','IR','IQ',
+    'IE','IM','IL','IT','JM','JP','JO','KZ','KE','KI','KP','KR','XK','KW','KG',
+    'LA','LV','LB','LS','LR','LY','LI','LT','LU','NF','MO','MG','MW','MY','MV',
+    'ML','MT','MH','MQ','MR','MU','YT','MX','FM','MD','MC','MN','ME','MS','MA',
+    'MZ','MM','NA','NR','NP','NL','NC','NZ','NI','NE','NG','NU','MK','MP','NO',
+    'OM','PK','PW','PS','PA','PG','PY','PE','PH','PN','PL','PT','PR','QA','RE',
+    'RO','RU','RW','SH','LC','KN','MF','PM','VC','WS','SM','ST','SA','SN','RS',
+    'SC','SL','SG','SX','SK','SI','SB','SO','ZA','GS','SS','ES','LK','SD','SR',
+    'SJ','SE','CH','SY','TW','TJ','TZ','TH','TL','TG','TK','TT','TN','TO','TR',
+    'TM','TC','TV','UG','UA','AE','GB','US','UM','UY','UZ','VU','VE','VN','VI',
+    'VG','WF','EH','YE','ZM','ZW'
+  ];
+
+  const f32 = document.querySelector('[data-position="32"]');
+  const f33 = document.querySelector('[data-position="33"]');
+  const f34 = document.querySelector('[data-position="34"]');
+  const f35 = document.querySelector('[data-position="35"]');
+
+  if (f32) {
+    const v32 = (f32.value || '').trim().toUpperCase();
+    const v35 = f35 ? (f35.value || '').trim().toUpperCase() : '';
+
+    if (v32 === 'D') {
+      // Destination FOB: auto-blank City, State/Province, Country
+      [{ f: f33, pos: 33, label: 'City' }, { f: f34, pos: 34, label: 'State/Province' }, { f: f35, pos: 35, label: 'Country' }].forEach(function(item) {
+        if (!item.f) return;
+        item.f.value = '';
+        dlaBorder(item.f, '#dc3545');
+        dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: ' + item.label + ' must be blank when FOB = D (Destination).</div>');
+      });
+      dlaMsg(32, '');
+
+    } else if (v32 === 'O') {
+      pos24Reasons.push('FOB = O (Origin) - not in accordance with standard Destination requirement');
+      dlaMsg(32, '');
+
+      // Pos 33 (City): always required when FOB = O
+      if (f33) {
+        const v33 = (f33.value || '').trim();
+        if (!v33) { dlaBorder(f33, '#dc3545'); dlaMsg(33, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: City must be completed when FOB = O (Origin).</div>'); }
+        else       { dlaBorder(f33, ''); dlaMsg(33, ''); }
+      }
+
+      // Pos 35 (Country): always required when FOB = O; must be a valid country code
+      if (f35) {
+        if (!v35) {
+          dlaBorder(f35, '#dc3545');
+          dlaMsg(35, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Country must be completed when FOB = O (Origin).</div>');
+        } else if (!VALID_COUNTRIES.includes(v35)) {
+          dlaBorder(f35, '#dc3545');
+          dlaMsg(35, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v35 + '" is not a valid country code.</div>');
+        } else {
+          dlaBorder(f35, '');
+          dlaMsg(35, '');
+        }
+      }
+
+      // Pos 34 (State/Province): required only when Country = US or CA; blank otherwise
+      if (f34) {
+        if (!v35 || !['US', 'CA'].includes(v35)) {
+          // Country not US or CA: auto-blank State/Province
+          f34.value = '';
+          dlaBorder(f34, '#dc3545');
+          dlaMsg(34, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: State/Province must be blank when Country is not US or CA.</div>');
+        } else {
+          const v34 = (f34.value || '').trim().toUpperCase();
+          if (!v34) {
+            dlaBorder(f34, '#dc3545');
+            dlaMsg(34, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: State/Province must be completed when Country = ' + v35 + '.</div>');
+          } else if (v35 === 'US' && !US_STATES.includes(v34)) {
+            dlaBorder(f34, '#dc3545');
+            dlaMsg(34, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v34 + '" is not a valid U.S. State or Territory code.</div>');
+          } else if (v35 === 'CA' && !CA_PROVINCES.includes(v34)) {
+            dlaBorder(f34, '#dc3545');
+            dlaMsg(34, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code: "' + v34 + '" is not a valid Canadian Province code.</div>');
+          } else {
+            dlaBorder(f34, '');
+            dlaMsg(34, '');
+          }
+        }
+      }
+
+    } else if (v32) {
+      dlaBorder(f32, '#dc3545');
+      dlaMsg(32, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code. Valid FOB codes: D (Destination), O (Origin).</div>');
+    } else {
+      dlaBorder(f32, '');
+      dlaMsg(32, '');
+      [{ f: f33, pos: 33 }, { f: f34, pos: 34 }, { f: f35, pos: 35 }].forEach(function(item) {
+        if (item.f) { dlaBorder(item.f, ''); dlaMsg(item.pos, ''); }
+      });
+    }
+  }
+
+  // --- Rules for pos 36 (Inspection Point Code), pos 37 (Packaging CAGE), pos 38 (Supplies CAGE) ---
+  const f36 = document.querySelector('[data-position="36"]');
+  const f37 = document.querySelector('[data-position="37"]');
+  const f38 = document.querySelector('[data-position="38"]');
+  if (f36) {
+    const v36 = (f36.value || '').trim().toUpperCase();
+    if (v36 === 'O') {
+      pos24Reasons.push('Inspection Point = O (Origin) - changed from standard Destination requirement');
+      dlaBorder(f36, '#dc3545');
+      dlaMsg(36, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Bid Type Code (24) must be BW or AB when Inspection Point is changed from the RFQ requirement.</div>');
+      // Pos 37 and 38: required when Inspection Point = O
+      [{ f: f37, pos: 37, label: 'Packaging CAGE code' }, { f: f38, pos: 38, label: 'Supplies CAGE code' }].forEach(function(item) {
+        if (!item.f) return;
+        const v = (item.f.value || '').trim();
+        if (!v) { dlaBorder(item.f, '#dc3545'); dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: ' + item.label + ' must be completed when Inspection Point = O (Origin).</div>'); }
+        else     { dlaBorder(item.f, ''); dlaMsg(item.pos, ''); }
+      });
+    } else if (v36 === 'D') {
+      dlaBorder(f36, '');
+      dlaMsg(36, '');
+      // Pos 37 and 38: must be blank when Inspection Point = D
+      [{ f: f37, pos: 37, label: 'Packaging CAGE code' }, { f: f38, pos: 38, label: 'Supplies CAGE code' }].forEach(function(item) {
+        if (!item.f) return;
+        item.f.value = '';
+        dlaBorder(item.f, '#dc3545');
+        dlaMsg(item.pos, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: ' + item.label + ' must be blank when Inspection Point = D (Destination).</div>');
+      });
+    } else if (v36 === '') {
+      dlaBorder(f36, '');
+      dlaMsg(36, '');
+      [{ f: f37, pos: 37 }, { f: f38, pos: 38 }].forEach(function(item) {
+        if (item.f) { dlaBorder(item.f, ''); dlaMsg(item.pos, ''); }
+      });
+    } else {
+      dlaBorder(f36, '#dc3545');
+      dlaMsg(36, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid code. Valid Inspection Point codes: D (Destination), O (Origin).</div>');
+    }
+  }
+
+  // --- Rules for pos 29 (BOA/FSS/BPA code), pos 30 (Contract #), pos 31 (Expiration Date) ---
+  const f29 = document.querySelector('[data-position="29"]');
+  const f30 = document.querySelector('[data-position="30"]');
+  const f31 = document.querySelector('[data-position="31"]');
+
+  if (f29) {
+    const v29 = (f29.value || '').trim().toUpperCase();
+    if (v29 === 'NAP') {
+      // Auto-clear pos 30 and 31
+      if (f30) { f30.value = ''; dlaBorder(f30, '#dc3545'); dlaMsg(30, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Contract # must be blank when BOA/FSS/BPA = NAP.</div>'); }
+      if (f31) { f31.value = ''; dlaBorder(f31, '#dc3545'); dlaMsg(31, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Auto-cleared: Expiration Date must be blank when BOA/FSS/BPA = NAP.</div>'); }
+      dlaMsg(29, '');
+    } else if (['BOA', 'FSS', 'BPA'].includes(v29)) {
+      // Pos 30 and 31 must be completed; pos 31 must be MM/DD/YYYY
+      const v30 = f30 ? (f30.value || '').trim() : '';
+      const v31 = f31 ? (f31.value || '').trim() : '';
+      const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+      if (f30) {
+        if (!v30) { dlaBorder(f30, '#dc3545'); dlaMsg(30, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Contract # must be completed when BOA/FSS/BPA = ' + v29 + '.</div>'); }
+        else      { dlaBorder(f30, ''); dlaMsg(30, ''); }
+      }
+      if (f31) {
+        if (!v31) {
+          dlaBorder(f31, '#dc3545');
+          dlaMsg(31, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Required: Expiration Date must be completed when BOA/FSS/BPA = ' + v29 + '. Format: MM/DD/YYYY.</div>');
+        } else if (!datePattern.test(v31)) {
+          dlaBorder(f31, '#dc3545');
+          dlaMsg(31, '<div style="color:#c62828;font-size:12px;margin-top:5px;font-weight:500;">&#10006; Invalid format: Expiration Date must be MM/DD/YYYY (e.g. 12/31/2025).</div>');
+        } else {
+          dlaBorder(f31, '');
+          dlaMsg(31, '');
+        }
+      }
+      dlaMsg(29, '');
+    } else {
+      // No value set - clear all messages
+      if (f30) { dlaBorder(f30, ''); dlaMsg(30, ''); }
+      if (f31) { dlaBorder(f31, ''); dlaMsg(31, ''); }
+      dlaMsg(29, '');
+    }
+  }
+}
+
+// Auto-hide toasts after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+  const toasts = document.querySelectorAll('.toast');
+  toasts.forEach(toast => {
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  });
+
+  // Run DLA rules on load, then watch trigger fields
+  enforceDlaRulesOnConfig();
+  [2, 3, 13, 18, 23, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 49, 56, 57, 58, 62, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121].forEach(function(pos) {
+    const el = document.querySelector('[data-position="' + pos + '"]');
+    if (el) {
+      el.addEventListener('change', enforceDlaRulesOnConfig);
+      el.addEventListener('input', enforceDlaRulesOnConfig);
+    }
+  });
+
+  // Add form submission loading state and ensure all fields are submitted
+  const form = document.getElementById('exportConfigForm');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      // Ensure all form fields are enabled and included in submission
+      // This is important because fields in hidden tabs might be excluded
+      const allInputs = form.querySelectorAll('input, select, textarea');
+      let enabledCount = 0;
+      allInputs.forEach(function(input) {
+        // Remove disabled attribute if present (except for truly locked fields)
+        if (input.hasAttribute('disabled') && !input.hasAttribute('readonly')) {
+          input.removeAttribute('disabled');
+          enabledCount++;
+        }
+      });
+      
+      // Log form data for debugging BEFORE submission
+      const formData = new FormData(form);
+      const customValueFields = [];
+      const isEnabledFields = [];
+      for (let [key, value] of formData.entries()) {
+        if (key.startsWith('custom_value_')) {
+          customValueFields.push({key: key, value: value});
+        }
+        if (key.startsWith('is_enabled_')) {
+          isEnabledFields.push({key: key, value: value});
+        }
+      }
+      console.log('Form submission:', {
+        customValueFields: customValueFields.length,
+        isEnabledFields: isEnabledFields.length,
+        enabledInputs: enabledCount,
+        csrfToken: formData.get('csrfmiddlewaretoken') ? 'Present' : 'Missing'
+      });
+      
+      // Check if CSRF token is present
+      if (!formData.get('csrfmiddlewaretoken')) {
+        console.error('ERROR: CSRF token is missing! Form will be rejected.');
+        alert('Error: Security token missing. Please refresh the page and try again.');
+        e.preventDefault();
+        return false;
+      }
+      
+      // Don't disable button until AFTER form validation passes
+      // This ensures form can submit even if there are issues
+      const button = document.getElementById('saveConfigButton');
+      if (button) {
+        // Use setTimeout to allow form to submit first
+        setTimeout(function() {
+          button.textContent = 'Saving...';
+          button.disabled = true;
+        }, 100);
+      }
+      
+      // Allow form to submit normally - don't prevent default
+      return true;
+    });
+  } else {
+    console.error('ERROR: Form with id "exportConfigForm" not found!');
+  }
+});
+</script>
+
+{% endblock %}

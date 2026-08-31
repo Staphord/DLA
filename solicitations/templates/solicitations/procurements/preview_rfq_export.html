@@ -1,0 +1,3304 @@
+{% extends 'solicitations/base.html' %}
+
+{% block content %}
+
+<section class="mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      {% if total_in_batch and current_index %}
+        <div class="text-muted" style="font-size: 0.8rem;">
+          RFQ {{ current_index }} of {{ total_in_batch }} in export set
+        </div>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      {% if batch_mode %}
+        {% if prev_rfq_id %}
+        <a href="{% url 'solicitations:export-single-rfq-reply-preview' prev_rfq_id %}?mode=batch{% if request.GET.selected == 'true' %}&selected=true{% endif %}" class="btn btn-outline-secondary btn-sm" id="prevButton">
+          &laquo; Previous
+        </a>
+        {% endif %}
+        {% if next_rfq_id %}
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="nextButton" data-next-url="{% url 'solicitations:export-single-rfq-reply-preview' next_rfq_id %}?mode=batch{% if request.GET.selected == 'true' %}&selected=true{% endif %}">
+          Next &raquo;
+        </button>
+        {% endif %}
+      {% endif %}
+      <a href="{% url 'solicitations:rfq-assessment' rfq_reply.id %}" class="btn btn-outline-primary btn-sm">
+        <i class="bi bi-clipboard2-check me-1"></i>Reassess
+      </a>
+      <a href="{% url 'solicitations:replied-rfq' %}" class="btn btn-outline-secondary btn-sm">
+        Back to Replied RFQs
+      </a>
+    </div>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if batch_mode %}
+      <input type="hidden" name="mode" value="batch">
+      {% if request.GET.selected == 'true' %}
+        <input type="hidden" name="selected" value="true">
+      {% endif %}
+    {% endif %}
+    {% if next_rfq_id %}
+      <input type="hidden" name="next_rfq_id" value="{{ next_rfq_id }}">
+    {% endif %}
+
+    <div class="card">
+      <div class="card-body">
+        <div style="max-height: 600px; overflow-y: auto;">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 70px;" class="text-center">Pos</th>
+                <th style="width: 260px;">Field Name</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              <tr id="row_{{ row.position }}" class="{% if row.is_mandatory and row.is_empty %}missing-mandatory{% endif %}">
+                <td class="text-center fw-semibold">
+                  {% if row.is_mandatory %}
+                    <span class="text-danger" title="Mandatory field">*</span>
+                  {% endif %}
+                  {{ row.position|stringformat:"03d" }}
+                </td>
+                <td>
+                  {% if row.is_mandatory %}
+                    <strong class="text-danger">{{ row.name }}</strong>
+                  {% else %}
+                    {{ row.name }}
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.field_type == 'reserved' %}
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           value="{{ row.value }}"
+                           readonly
+                           disabled>
+                    <input type="hidden" name="field_{{ row.position }}" value="{{ row.value }}">
+                  {% else %}
+                    <input type="text"
+                           class="form-control form-control-sm field-input"
+                           data-position="{{ row.position }}"
+                           data-mandatory="{% if row.is_mandatory %}true{% else %}false{% endif %}"
+                           data-requirement="{{ row.requirement_value|default:'' }}"
+                           name="field_{{ row.position }}"
+                           value="{{ row.value }}"
+                           {% if row.max_length %}maxlength="{{ row.max_length }}"{% endif %}
+                           {% if row.is_mandatory and row.is_empty %}style="border: 2px solid #dc3545; box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);"{% endif %}>
+                    <div class="dla-rule-reason small mt-1 d-none" id="dla_rule_reason_{{ row.position }}"></div>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <button type="submit" name="cancel" class="btn btn-outline-secondary">
+        Cancel
+      </button>
+      <div class="d-flex gap-2">
+        {% if not batch_mode %}
+          <button type="submit" name="save" class="btn btn-secondary">
+            Save Changes
+          </button>
+          <button type="submit" name="save_and_export" class="btn mybg hoverbg text-white">
+            Save &amp; Export
+          </button>
+        {% else %}
+          {% if next_rfq_id %}
+          <button type="submit" name="save_and_continue" class="btn mybg hoverbg text-white">
+            Save &amp; Continue
+          </button>
+          {% else %}
+          <button type="submit" name="save_and_export" class="btn mybg hoverbg text-white">
+            Save &amp; Export
+          </button>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </form>
+</section>
+
+<style>
+.missing-mandatory {
+  background-color: #fff5f5 !important;
+}
+.missing-mandatory td {
+  border-color: #fecaca !important;
+}
+.field-input.missing-mandatory-field {
+  border: 2px solid #dc3545 !important;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+.field-input.dla-rule-cleared {
+  background-color: #f8f9fa !important;
+  border-color: #0dcaf0 !important;
+}
+.field-input.dla-rule-cleared::placeholder {
+  color: #0a58ca;
+  opacity: 1;
+}
+.field-input.dla-rule-cleared.missing-mandatory-field {
+  border: 2px solid #dc3545 !important;
+}
+.dla-rule-reason {
+  color: #0a58ca;
+  line-height: 1.25;
+}
+.missing-mandatory .dla-rule-reason {
+  color: #dc3545;
+}
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 0.4rem rgba(220, 53, 69, 0.4);
+  }
+}
+</style>
+
+{{ mandatory_positions|json_script:"mandatory-positions" }}
+
+<script>
+// DLA business rules - enforced via AJAX whenever trigger fields change
+const DLA_RULES_URL = "{% url 'solicitations:ajax-dla-rules' %}";
+const DLA_CSRF = "{{ csrf_token }}";
+
+function applyDlaRules(blankedPositions) {
+  let cleared = false;
+  blankedPositions.forEach(function(pos) {
+    const el = document.querySelector('input[name="field_' + pos + '"]');
+    if (!el) return;
+    if (el.value) cleared = true;
+    el.value = '';
+    let message = 'Cleared by DLA business rule.';
+    if (pos === 18) {
+      message = 'Must be blank because field 3 is N or field 13 is not B or M.';
+    } else if (pos === 19) {
+      message = 'Must be blank because field 18 is not JV.';
+    } else if (pos === 30 || pos === 31) {
+      message = 'Must be blank because field 29 is NAP.';
+    }
+    setInputRuleMessage(pos, message);
+  });
+  return cleared;
+}
+
+function setInputRuleMessage(position, message) {
+  const input = document.querySelector('input[name="field_' + position + '"]');
+  if (!input) return;
+  if (!input.dataset.originalPlaceholder) {
+    input.dataset.originalPlaceholder = input.getAttribute('placeholder') || '';
+  }
+  input.title = message;
+  input.classList.add('dla-rule-cleared');
+  const reason = document.getElementById('dla_rule_reason_' + position);
+  if (reason) {
+    reason.textContent = message;
+    reason.classList.remove('d-none');
+  }
+}
+
+function clearInputRuleMessage(position) {
+  const input = document.querySelector('input[name="field_' + position + '"]');
+  if (!input) return;
+  input.placeholder = input.dataset.originalPlaceholder || '';
+  input.title = '';
+  input.classList.remove('dla-rule-cleared');
+  const reason = document.getElementById('dla_rule_reason_' + position);
+  if (reason) {
+    reason.textContent = '';
+    reason.classList.add('d-none');
+  }
+}
+
+function enforceDlaRulesAjax() {
+  const f3  = document.querySelector('input[name="field_3"]');
+  const f13 = document.querySelector('input[name="field_13"]');
+  const f18 = document.querySelector('input[name="field_18"]');
+  if (!f3) return;
+
+  const body = new URLSearchParams({
+    field_3:  f3  ? f3.value  : '',
+    field_13: f13 ? f13.value : '',
+    field_18: f18 ? f18.value : '',
+    field_29: (document.querySelector('input[name="field_29"]') || {}).value || '',
+  });
+
+  fetch(DLA_RULES_URL, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': DLA_CSRF,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: body.toString(),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.blank) applyDlaRules(data.blank);
+  })
+  .catch(function() {}); // silent fail - don't break the form
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.querySelector('form');
+  if (!form) return;
+
+  const field70 = document.querySelector('input[name="field_70"]');
+  if (field70) {
+    field70.addEventListener('change', applyField72Rule);
+    field70.addEventListener('blur', applyField72Rule);
+  }
+  applyField72Rule();
+  
+  // Get mandatory positions from template
+  const mandatoryPositionsElement = document.getElementById('mandatory-positions');
+  const mandatoryPositions = mandatoryPositionsElement ? JSON.parse(mandatoryPositionsElement.textContent) : [];
+
+  function applyField18Rule() {
+    const f3 = document.querySelector('input[name="field_3"]');
+    const f13 = document.querySelector('input[name="field_13"]');
+    const f18 = document.querySelector('input[name="field_18"]');
+    const f19 = document.querySelector('input[name="field_19"]');
+    if (!f18) return;
+
+    const setAside = f3 ? (f3.value || '').trim().toUpperCase() : '';
+    const smallBusiness = f13 ? (f13.value || '').trim().toUpperCase() : '';
+    const jointVenture = (f18.value || '').trim().toUpperCase();
+    const row18 = f18.closest('tr');
+    const row19 = f19 ? f19.closest('tr') : null;
+    if (setAside === 'N' || !['B', 'M'].includes(smallBusiness)) {
+      f18.value = '';
+      f18.classList.remove('missing-mandatory-field');
+      if (row18) row18.classList.remove('missing-mandatory');
+      setInputRuleMessage(18, 'Must be blank because field 3 is N or field 13 is not B or M.');
+      if (f19) {
+        f19.value = '';
+        f19.classList.remove('missing-mandatory-field');
+        if (row19) row19.classList.remove('missing-mandatory');
+        setInputRuleMessage(19, 'Must be blank because field 18 is not JV.');
+      }
+      return;
+    }
+
+    if (jointVenture && !['JV', 'JN'].includes(jointVenture)) {
+      f18.value = '';
+      f18.classList.remove('missing-mandatory-field');
+      if (row18) row18.classList.remove('missing-mandatory');
+      setInputRuleMessage(18, 'Only JV or JN is allowed.');
+      if (f19) {
+        f19.value = '';
+        f19.classList.remove('missing-mandatory-field');
+        if (row19) row19.classList.remove('missing-mandatory');
+        setInputRuleMessage(19, 'Must be blank because field 18 is not JV.');
+      }
+      return;
+    }
+
+    clearInputRuleMessage(18);
+
+    if (f19) {
+      if (jointVenture !== 'JV') {
+        f19.value = '';
+        f19.classList.remove('missing-mandatory-field');
+        if (row19) row19.classList.remove('missing-mandatory');
+        setInputRuleMessage(19, 'Must be blank because field 18 is not JV.');
+      } else {
+        clearInputRuleMessage(19);
+      }
+    }
+  }
+
+  function applyField104Rule() {
+    const f102 = document.querySelector('input[name="field_102"]');
+    const f103 = document.querySelector('input[name="field_103"]');
+    const f104 = document.querySelector('input[name="field_104"]');
+    if (!f102) return;
+
+    const manufacturerDealer = (f102.value || '').trim().toUpperCase();
+    if (manufacturerDealer === 'MM' || manufacturerDealer === 'QM') {
+      if (f103) {
+        f103.value = '';
+        f103.classList.remove('missing-mandatory-field');
+        setInputRuleMessage(103, 'Must be blank when Manufacturer/Dealer is MM or QM.');
+        const row103 = f103.closest('tr');
+        if (row103) row103.classList.remove('missing-mandatory');
+      }
+      if (f104) {
+        f104.value = '';
+        f104.classList.remove('missing-mandatory-field');
+        setInputRuleMessage(104, 'Must be blank when Manufacturer/Dealer is MM or QM.');
+        const row104 = f104.closest('tr');
+        if (row104) row104.classList.remove('missing-mandatory');
+      }
+    } else if (manufacturerDealer === 'DD' || manufacturerDealer === 'QD') {
+      const sourceCage = f103 ? (f103.value || '').trim() : '';
+      const sourceName = f104 ? (f104.value || '').trim() : '';
+      if (!sourceCage && !sourceName) {
+        if (f103) setInputRuleMessage(103, 'Required because field 102 is DD or QD and field 104 is blank.');
+        if (f104) setInputRuleMessage(104, 'Required because field 102 is DD or QD and field 103 is blank.');
+      } else {
+        if (f103) clearInputRuleMessage(103);
+        if (f104) clearInputRuleMessage(104);
+      }
+    }
+  }
+
+  function isField72BlankExempt() {
+    const f70 = document.querySelector('input[name="field_70"]');
+    const endProductCode = f70 ? (f70.value || '').trim().toUpperCase() : '';
+    return ['D', 'NQ', 'O', 'ND', 'US'].includes(endProductCode);
+  }
+
+  function isField29Nap() {
+    const f29 = document.querySelector('input[name="field_29"]');
+    const boaCode = f29 ? (f29.value || '').trim().toUpperCase() : '';
+    return boaCode === 'NAP';
+  }
+
+  function isField32Destination() {
+    const f32 = document.querySelector('input[name="field_32"]');
+    const fobPoint = f32 ? (f32.value || '').trim().toUpperCase() : '';
+    return fobPoint === 'D';
+  }
+
+  function normalizeAlternateDisputesResolution(value) {
+    const text = (value || '').trim().toUpperCase();
+    if (text === 'Y') return 'A';
+    if (text === 'N') return 'B';
+    return text;
+  }
+
+  function validateAlternateDisputesResolution(value) {
+    const text = normalizeAlternateDisputesResolution(value);
+    if (!text) return 'Required.';
+    if (!['A', 'B'].includes(text)) return 'Must be A or B.';
+    return '';
+  }
+
+  function applyField23Rule() {
+    const f23 = document.querySelector('input[name="field_23"]');
+    if (!f23) return;
+    const originalValue = (f23.value || '').trim().toUpperCase();
+    const normalizedValue = normalizeAlternateDisputesResolution(f23.value);
+    if (originalValue && normalizedValue !== originalValue) {
+      f23.value = normalizedValue;
+      setInputRuleMessage(23, 'Converted legacy value to ' + normalizedValue + '. Valid codes are A or B.');
+      return;
+    }
+    const message = validateAlternateDisputesResolution(f23.value);
+    if (message) {
+      setInputRuleMessage(23, message);
+      return;
+    }
+    f23.classList.remove('missing-mandatory-field');
+    const row23 = f23.closest('tr');
+    if (row23) row23.classList.remove('missing-mandatory');
+    clearInputRuleMessage(23);
+  }
+
+  function isField34BlankExempt() {
+    const f32 = document.querySelector('input[name="field_32"]');
+    const f35 = document.querySelector('input[name="field_35"]');
+    const fobPoint = f32 ? (f32.value || '').trim().toUpperCase() : '';
+    const fobCountry = f35 ? (f35.value || '').trim().toUpperCase() : '';
+    return fobPoint === 'D' || !['US', 'CA'].includes(fobCountry);
+  }
+
+  function isField35BlankExempt() {
+    const f32 = document.querySelector('input[name="field_32"]');
+    const fobPoint = f32 ? (f32.value || '').trim().toUpperCase() : '';
+    return fobPoint === 'D';
+  }
+
+  function isField36Destination() {
+    const f36 = document.querySelector('input[name="field_36"]');
+    const inspectionPoint = f36 ? (f36.value || '').trim().toUpperCase() : '';
+    return inspectionPoint === 'D';
+  }
+
+  function isField56BlankExempt() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const solicitationType = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    return solicitationType !== 'I';
+  }
+
+  function isField58BlankExempt() {
+    const f13 = document.querySelector('input[name="field_13"]');
+    const f57 = document.querySelector('input[name="field_57"]');
+    const hubzone = f57 ? (f57.value || '').trim().toUpperCase() : '';
+    const smallBusinessCode = f13 ? (f13.value || '').trim().toUpperCase() : '';
+    return hubzone === 'N' || (hubzone === 'Y' && !['B', 'M'].includes(smallBusinessCode));
+  }
+
+  function isField59BlankExempt() {
+    const f100 = document.querySelector('input[name="field_100"]');
+    const immediateAvailable = f100 ? (f100.value || '').trim().toUpperCase() : '';
+    return immediateAvailable !== 'Y';
+  }
+
+  function isField60BlankExempt() {
+    const f100 = document.querySelector('input[name="field_100"]');
+    const immediateAvailable = f100 ? (f100.value || '').trim().toUpperCase() : '';
+    return immediateAvailable !== 'Y';
+  }
+
+  function isField63BlankExempt() {
+    const f102 = document.querySelector('input[name="field_102"]');
+    const manufacturerDealer = f102 ? (f102.value || '').trim().toUpperCase() : '';
+    return manufacturerDealer !== 'QD';
+  }
+
+  function isField64BlankExempt() {
+    const f47 = document.querySelector('input[name="field_47"]');
+    const nsnPart = f47 ? (f47.value || '').trim().toUpperCase() : '';
+    return !['0001S00000052', '0001S00000053'].includes(nsnPart);
+  }
+
+  function isValidMmDdYyyy(value) {
+    const text = (value || '').trim();
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return false;
+    const month = parseInt(text.substring(0, 2), 10);
+    const day = parseInt(text.substring(3, 5), 10);
+    const year = parseInt(text.substring(6, 10), 10);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year &&
+      date.getMonth() === month - 1 &&
+      date.getDate() === day;
+  }
+
+  function parseQuantity(value) {
+    const text = (value || '').trim().replace(/,/g, '');
+    if (!text) return null;
+    const numberValue = Number(text);
+    return Number.isFinite(numberValue) ? numberValue : null;
+  }
+
+  function quantitiesMatch(left, right) {
+    const leftNumber = parseQuantity(left);
+    const rightNumber = parseQuantity(right);
+    if (leftNumber !== null && rightNumber !== null) {
+      return leftNumber === rightNumber;
+    }
+    return (left || '').trim() === (right || '').trim();
+  }
+
+  function validateUnitPrice(value) {
+    const text = (value || '').trim().replace(/,/g, '');
+    if (!text) return 'Unit Price cannot be blank.';
+    if (text.startsWith('+') || text.startsWith('-')) {
+      return 'Unit Price must be between 0 and 9999999.99999.';
+    }
+    const parts = text.split('.');
+    if (parts.length > 2) return 'Unit Price must be numeric.';
+    const whole = parts[0];
+    const decimals = parts.length === 2 ? parts[1] : '';
+    if (!whole && !decimals) return 'Unit Price must be numeric.';
+    if (whole && !/^\d+$/.test(whole)) return 'Unit Price must be numeric.';
+    if (decimals && !/^\d+$/.test(decimals)) return 'Unit Price must be numeric.';
+    if (decimals.length > 5) return 'Unit Price cannot have more than 5 decimal places.';
+    const amount = Number(text);
+    if (!Number.isFinite(amount)) return 'Unit Price must be numeric.';
+    if (amount < 0 || amount > 9999999.99999) {
+      return 'Unit Price must be between 0 and 9999999.99999.';
+    }
+    return '';
+  }
+
+  function validateDeliveryDays(value, solicitationNumber) {
+    const text = (value || '').trim();
+    if (!text) return 'Delivery Days cannot be blank.';
+    if (!/^\d+$/.test(text)) return 'Delivery Days must be a whole number.';
+    const maxLength = (solicitationNumber || '').trim().toUpperCase().startsWith('SPM') ? 3 : 4;
+    if (text.length > maxLength) return 'Delivery Days cannot exceed ' + maxLength + ' digits.';
+    const days = parseInt(text, 10);
+    if (!Number.isFinite(days) || days < 0 || days > 9999) {
+      return 'Delivery Days must be between 0 and 9999.';
+    }
+    return '';
+  }
+
+  function validateNoDoMinimum(value, solicitationType) {
+    const text = (value || '').trim().toUpperCase();
+    const solType = (solicitationType || '').trim().toUpperCase();
+    if (solType !== 'I') {
+      return text ? 'Must be blank because field 2 is not I.' : '';
+    }
+    if (!text) return 'Required because field 2 is I.';
+    if (!['Y', 'N'].includes(text)) return 'Must be Y or N.';
+    return '';
+  }
+
+  function validateHubzoneWaiver(value, hubzone, smallBusinessCode) {
+    const text = (value || '').trim().toUpperCase();
+    const hubzoneValue = (hubzone || '').trim().toUpperCase();
+    const smallBusinessValue = (smallBusinessCode || '').trim().toUpperCase();
+    if (hubzoneValue === 'N') {
+      return text ? 'Must be blank because field 57 is N.' : '';
+    }
+    if (hubzoneValue === 'Y' && !['B', 'M'].includes(smallBusinessValue)) {
+      return text ? 'Must be blank because field 13 is not B or M.' : '';
+    }
+    if (hubzoneValue === 'Y' && ['B', 'M'].includes(smallBusinessValue)) {
+      if (!text) return 'Required because field 57 is Y and field 13 is B or M.';
+      if (!['Y', 'N', 'A'].includes(text)) return 'Must be Y, N, or A.';
+    }
+    return '';
+  }
+
+  function validateImmediateShipmentPrice(value, immediateAvailable) {
+    const text = (value || '').trim();
+    const available = (immediateAvailable || '').trim().toUpperCase();
+    if (available === 'N') {
+      return text ? 'Must be blank because field 100 is N.' : '';
+    }
+    if (available === 'Y') {
+      if (!text) return 'Required because field 100 is Y.';
+      const priceMessage = validateUnitPrice(text);
+      return priceMessage ? priceMessage.replace('Unit Price', 'Immediate Shipment Price') : '';
+    }
+    return '';
+  }
+
+  function validateImmediateShipmentDelivery(value, immediateAvailable) {
+    const text = (value || '').trim();
+    const available = (immediateAvailable || '').trim().toUpperCase();
+    if (available === 'N') {
+      return text ? 'Must be blank because field 100 is N.' : '';
+    }
+    if (available === 'Y') {
+      if (!text) return 'Required because field 100 is Y.';
+      const deliveryMessage = validateDeliveryDays(text, '');
+      return deliveryMessage ? deliveryMessage.replace('Delivery Days', 'Immediate Shipment Delivery Days') : '';
+    }
+    return '';
+  }
+
+  function validateSourceSupplyCage(value, manufacturerDealer) {
+    const text = (value || '').trim();
+    const dealer = (manufacturerDealer || '').trim().toUpperCase();
+    if (dealer !== 'QD') {
+      return text ? 'Must be blank because field 102 is not QD.' : '';
+    }
+    if (!text) return 'Required because field 102 is QD.';
+    if (text.length > 5) return 'Cannot exceed 5 characters.';
+    return '';
+  }
+
+  function validateFirstArticleWaiver(value, nsnPart) {
+    const text = (value || '').trim().toUpperCase();
+    const part = (nsnPart || '').trim().toUpperCase();
+    const allowedParts = ['0001S00000052', '0001S00000053'];
+    if (!allowedParts.includes(part)) {
+      return text ? 'Must be blank because field 47 is not 0001S00000052 or 0001S00000053.' : '';
+    }
+    if (!text) return 'Required because field 47 is 0001S00000052 or 0001S00000053.';
+    if (!['N', 'Y'].includes(text)) return 'Must be N or Y.';
+    return '';
+  }
+
+  function validateMaterialRequirements(value, solicitationType, bidType) {
+    const text = (value || '').trim();
+    const solType = (solicitationType || '').trim().toUpperCase();
+    const bid = (bidType || '').trim().toUpperCase();
+    if (!text) return 'Required.';
+    if (!['0', '1', '2', '3', '4'].includes(text)) return 'Must be 0, 1, 2, 3, or 4.';
+    if (solType === 'I' && text === '4' && !['BW', 'AB'].includes(bid)) {
+      return 'Field 24 must be BW or AB when field 2 is I and field 67 is 4.';
+    }
+    return '';
+  }
+
+  function getField70Rule(tradeAgreement, buyAmerican, freeTrade) {
+    const trade = (tradeAgreement || '').trim().toUpperCase();
+    const buy = (buyAmerican || '').trim().toUpperCase();
+    const free = (freeTrade || '').trim().toUpperCase();
+    if (trade === 'Y') {
+      return { codes: ['US', 'QD', 'DE', 'ND'], label: 'Trade Agreements End Product' };
+    }
+    if (free === 'Y') {
+      return { codes: ['D', 'N', 'QA', 'O'], label: 'FTA-BAA-BOPP' };
+    }
+    if (free === 'A') {
+      return { codes: ['D', 'C', 'QE', 'O'], label: 'FTA ALT I' };
+    }
+    if (free === 'B') {
+      return { codes: ['D', 'P', 'QA', 'O'], label: 'FTA ALT IV' };
+    }
+    if (['Y', 'I'].includes(buy) || (trade === 'N' && buy === 'N' && free === 'N')) {
+      return { codes: ['D', 'Q', 'NQ'], label: 'BAA-BOPP' };
+    }
+    return { codes: [], label: '' };
+  }
+
+  function validateEndProduct(value, tradeAgreement, buyAmerican, freeTrade) {
+    const text = (value || '').trim().toUpperCase();
+    const rule = getField70Rule(tradeAgreement, buyAmerican, freeTrade);
+    if (rule.codes.length === 0) {
+      return text ? 'No valid field 70 rule matches fields 62, 68, and 69.' : 'Required after fields 62, 68, and 69 are set.';
+    }
+    if (!text) return 'Required for ' + rule.label + '.';
+    if (!rule.codes.includes(text)) {
+      return 'Must be one of ' + rule.codes.join(', ') + ' for ' + rule.label + '.';
+    }
+    return '';
+  }
+
+  function splitCodes(value) {
+    return value.split(' ').filter(function(code) { return code; });
+  }
+
+  const ROW_71_FTA_A_CODES = splitCodes('AF AL DZ AS AD AO AI AQ AG AR AM AW AZ BS BH BD BB BY BZ BJ BM BT BO BQ BA BW BV BR IO BN BG BF BI CV KH CM KY CF TD CL CN CX CC CO KM CG CD CK CR CI HR CW CY DJ DM DO EC SV GQ ER SZ ET FK FO FJ GF PF TF GA GM GE GH GI GL GD GP GU GT GN GW GY HT HM VA HN HK HU IS IN ID IQ IE IM JM JO KZ KE KI KR XK KW KG LA LB LS LR LY LI MO MG MW MY MV ML MT MH MQ MR MU YT MX FM MD MC MN ME MS MA MZ NA NR NP NC NZ NI NE NG NU NF MK MP OM PK PW PS PA PG PY PE PH PN PR QA RE RO RU RW SH KN LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SB SO ZA GS SS LK SR SJ SY TW TJ TZ TH TL TG TK TT TN TM TC TV UG UA AE UM UY UZ VU VE VN VI VG WF EH YE ZM ZW');
+  const ROW_71_FTA_B_CODES = splitCodes('AF AL DZ AS AD AO AI AQ AG AR AM AW AZ BS BH BD BB BY BZ BJ BM BT BO BQ BA BW BV BR IO BN BG BF BI CV KH CM KY CF TD CN CX CC KM CG CD CK CI HR CW CY DJ DM EC GQ ER SZ ET FK FO FJ GF PF TF GA GM GE GH GI GL GD GP GU GN GW GY HT HM VA HK HU IS IN ID IQ IE IM JM JO KZ KE KI KR XK KW KG LA LB LS LR LY LI MO MG MW MY MV ML MT MH MQ MR MU YT FM MD MC MN ME MS MA MZ NA NR NP NC NZ NE NG NU NF MK MP OM PK PW PS PA PG PY PE PH PN PR QA RE RO RU RW SH KN LC MF PM VC WS SM ST SA SN RS SC SL SX SK SB SO ZA GS SS LK SR SJ SY TW TJ TZ TH TL TG TK TT TN TM TC TV UG UA AE UM UY UZ VU VE VN VI VG WF EH YE ZM ZW');
+  const ROW_71_FTA_Y_CODES = splitCodes('AF AL DZ AS AD AO AI AQ AG AR AM AW AZ BS BH BD BB BY BZ BJ BM BT BO BQ BA BW BV BR IO BN BG BF BI CV KH CM KY CF TD CN CX CC KM CG CD CK CI FK HR CW CY DJ DM EC GQ ER SZ ET FO FJ GF PF TF GA GM GE GH GI GL GD GP GU GN GW GY HT HM VA HK HU IS IN ID IQ IE IM JM JO KZ KE KI XK KW KG LA LB LS LR LY LI MO MG MW MY MV ML MT MH MQ MR MU YT FM MD MC MN ME MS MA MZ NA NR NP NC NZ NE NG NU NF MK MP OM PK PW PS PG PY PE PH PN PR QA RE RO RU RW SH KN LC MF PM VC WS SM SA ST SN RS SC SL SX SK SB SO ZA GS SS LK SR SJ SY TW TJ TZ TH TL TG TK TT TN TM TC TV UG UA AE UM UY UZ VU VE VN VI VG WF EH YE ZM ZW');
+  const ROW_71_NQ_CODES = ROW_71_FTA_A_CODES;
+  const ROW_71_ND_CODES = splitCodes('AL DZ AS AD AI AQ AR AZ BY BM BO BA BW BV BR IO BN CV CM KY CN CX CC CG CK CI EC SZ FK FO FJ GF PF TF GA GE GH GI GL GP GU HM VA IN ID IQ IM JO KZ KE XK KW KG LB LY MO MY MV MH MQ MU YT FM MC MN NA NR NC NG NU NF MP OM PK PW PS PG PY PH PN PR QA RE RU SH PM SM SA RS SC ZA GS LK SR SJ SY TJ TH TK TT TN TM TC AE UM UY UZ VE VN VI WF EH ZW');
+
+  function getField71Rule(tradeAgreement, buyAmerican, freeTrade, endProduct) {
+    const trade = (tradeAgreement || '').trim().toUpperCase();
+    const buy = (buyAmerican || '').trim().toUpperCase();
+    const free = (freeTrade || '').trim().toUpperCase();
+    const end = (endProduct || '').trim().toUpperCase();
+    if (end === 'O' && free === 'A') {
+      return { codes: ROW_71_FTA_A_CODES, label: 'Free Trade Agreements ALT I' };
+    }
+    if (end === 'O' && free === 'B') {
+      return { codes: ROW_71_FTA_B_CODES, label: 'Free Trade Agreements ALT IV' };
+    }
+    if (end === 'O' && free === 'Y') {
+      return { codes: ROW_71_FTA_Y_CODES, label: 'Free Trade Agreements' };
+    }
+    if (end === 'NQ' && ['Y', 'I'].includes(buy)) {
+      return { codes: ROW_71_NQ_CODES, label: 'Non-Qualifying Country End Products' };
+    }
+    if (end === 'ND' && trade === 'Y') {
+      return { codes: ROW_71_ND_CODES, label: 'Non-Designated Country End Products' };
+    }
+    return { codes: [], label: '' };
+  }
+
+  function validateCountryOrigin(value, tradeAgreement, buyAmerican, freeTrade, endProduct) {
+    const text = (value || '').trim().toUpperCase();
+    const end = (endProduct || '').trim().toUpperCase();
+    if (!['NQ', 'O', 'ND', 'US'].includes(end)) {
+      return text ? 'Must be blank because field 70 is not NQ, O, ND, or US.' : '';
+    }
+    const rule = getField71Rule(tradeAgreement, buyAmerican, freeTrade, endProduct);
+    if (rule.codes.length === 0) return '';
+    if (!text) return 'Required for ' + rule.label + '.';
+    if (!rule.codes.includes(text)) {
+      return 'Must be a valid country code for ' + rule.label + '.';
+    }
+    return '';
+  }
+
+  const ROW_72_Q_CODES = splitCodes('AU AT BE CA CZ DK EG EE FI FR DE GR IL IT JP LV LT LU NL NO PL PT SI ES SE CH TR GB');
+  const ROW_72_QA_CODES = splitCodes('AT BE CZ DK EG EE FI FR DE GR IL IT JP LV LT LU NL NO PL PT SI ES SE CH TR GB');
+  const ROW_72_QD_CODES = ROW_72_Q_CODES;
+  const ROW_72_QE_CODES = splitCodes('AU AT BE CZ DK EG EE FI FR DE GR IL IT JP LV LT LU NL NO PL PT SI ES SE CH TR GB');
+  const ROW_72_C_CODES = ['CA'];
+  const ROW_72_N_CODES = splitCodes('AU CA CL CO CR DO SV GT HN KR MX NI SG');
+  const ROW_72_P_CODES = splitCodes('AU CA CL CO CR DO SV GT HN MX NI SG');
+  const ROW_72_DE_CODES = splitCodes('AF AO AG AM AW BS BH BD BB BZ BJ BT BQ BG BF BI KH CF TD CL CO KM CD CR HR CW CY DJ DM DO SV GQ ER ET GM GD GT GN GW GY HT HN HK HU IS IE JM KI KR LA LS LR LI MG MW ML MT MR MX MD ME MS MA MZ NP NZ NI NE MK PA PE RO RW KN LC VC WS ST SN SL SG SX SK SB SO SS TW TZ TL TG TT TV UG UA VU VG YE ZM');
+
+  function getField72Rule(endProduct) {
+    const end = (endProduct || '').trim().toUpperCase();
+    if (end === 'Q') return { codes: ROW_72_Q_CODES, label: 'BAA Qualifying Country End Products' };
+    if (end === 'QA') return { codes: ROW_72_QA_CODES, label: 'FTA Qualifying Country except Canada and Australia' };
+    if (end === 'QD') return { codes: ROW_72_QD_CODES, label: 'Trade Agreement Qualified Country' };
+    if (end === 'QE') return { codes: ROW_72_QE_CODES, label: 'FTA Qualifying Country except Canada' };
+    if (end === 'C') return { codes: ROW_72_C_CODES, label: 'FTA Canadian End Products' };
+    if (end === 'N') return { codes: ROW_72_N_CODES, label: 'FTA ALT I Country End Products' };
+    if (end === 'P') return { codes: ROW_72_P_CODES, label: 'FTA Country End Products' };
+    if (end === 'DE') return { codes: ROW_72_DE_CODES, label: 'Trade Agreement Designated Country' };
+    return { codes: [], label: '' };
+  }
+
+  function validateCountryCode72(value, endProduct) {
+    const text = (value || '').trim().toUpperCase();
+    const end = (endProduct || '').trim().toUpperCase();
+    if (['D', 'NQ', 'O', 'ND', 'US'].includes(end)) {
+      return text ? 'Must be blank because field 70 is D, NQ, O, ND, or US.' : '';
+    }
+    const rule = getField72Rule(endProduct);
+    if (rule.codes.length === 0) return '';
+    if (!text) return 'Required for ' + rule.label + '.';
+    if (!rule.codes.includes(text)) {
+      return 'Must be a valid country code for ' + rule.label + '.';
+    }
+    return '';
+  }
+
+  function validateDutyFreeEntry(value, buyAmerican) {
+    const text = (value || '').trim().toUpperCase();
+    const buy = (buyAmerican || '').trim().toUpperCase();
+    if (buy === 'I') {
+      return text ? 'Must be blank because field 68 is I.' : '';
+    }
+    if (text && !['Y', 'N'].includes(text)) return 'Must be Y or N.';
+    return '';
+  }
+
+  function validateForeignSupplies(value, buyAmerican, dutyFreeEntry) {
+    const text = (value || '').trim().toUpperCase();
+    const buy = (buyAmerican || '').trim().toUpperCase();
+    const dutyFree = (dutyFreeEntry || '').trim().toUpperCase();
+    if (buy === 'I') {
+      return text ? 'Must be blank because field 68 is I.' : '';
+    }
+    if (dutyFree !== 'Y') {
+      return text ? 'Must be blank because field 73 is not Y.' : '';
+    }
+    if (text && !['Y', 'N'].includes(text)) return 'Must be Y or N.';
+    return '';
+  }
+
+  function validateDutyPaid(value, buyAmerican, foreignSupplies) {
+    const text = (value || '').trim().toUpperCase();
+    const buy = (buyAmerican || '').trim().toUpperCase();
+    const foreign = (foreignSupplies || '').trim().toUpperCase();
+    if (buy === 'I') {
+      return text ? 'Must be blank because field 68 is I.' : '';
+    }
+    if (foreign !== 'Y') {
+      return text ? 'Must be blank because field 74 is not Y.' : '';
+    }
+    if (text && !['Y', 'N'].includes(text)) return 'Must be Y or N.';
+    return '';
+  }
+
+  function validateDutyPaidAmount(value, buyAmerican, dutyPaid) {
+    const text = (value || '').trim();
+    const buy = (buyAmerican || '').trim().toUpperCase();
+    const paid = (dutyPaid || '').trim().toUpperCase();
+    if (buy === 'I') {
+      return text ? 'Must be blank because field 68 is I.' : '';
+    }
+    if (paid !== 'N') {
+      return text ? 'Must be blank because field 75 is not N.' : '';
+    }
+    if (text && text.length > 15) return 'Cannot exceed 15 characters.';
+    return '';
+  }
+
+  const PRICE_BREAK_RANGES = [
+    [78, 79, 80],
+    [81, 82, 83],
+    [84, 85, 86],
+    [87, 88, 89],
+    [90, 91, 92],
+    [93, 94, 95]
+  ];
+
+  function validatePriceBreakQuantity(value) {
+    const text = (value || '').trim();
+    if (!text) return '';
+    if (!/^\d+$/.test(text)) return 'Must be a whole number.';
+    if (text.length > 10) return 'Cannot exceed 10 digits.';
+    const amount = Number(text);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 9999999999) {
+      return 'Must be between 0 and 9999999999.';
+    }
+    return '';
+  }
+
+  function validatePriceBreakUnitPrice(value) {
+    const text = (value || '').trim();
+    if (!text) return '';
+    if (text.length > 13) return 'Cannot exceed 13 characters.';
+    const message = validateUnitPrice(text);
+    return message ? message.replace('Unit Price', 'Price Break Unit Price') : '';
+  }
+
+  function validatePriceBreakField(position, values) {
+    const solicitationType = (values[2] || '').trim().toUpperCase();
+    const value = (values[position] || '').trim();
+
+    if (solicitationType === 'I') {
+      return value ? 'Must be blank because field 2 is I.' : '';
+    }
+
+    if (['F', 'P'].includes(solicitationType) && !value) {
+      return 'Required because field 2 is F or P.';
+    }
+
+    const offset = position - 78;
+    const isPrice = offset % 3 === 2;
+    if (isPrice) {
+      return validatePriceBreakUnitPrice(value);
+    }
+    return validatePriceBreakQuantity(value);
+  }
+
+  function applyPriceBreakRules() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const solicitationType = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const values = {};
+    for (let position = 78; position <= 95; position++) {
+      const input = document.querySelector('input[name="field_' + position + '"]');
+      values[position] = input ? input.value : '';
+    }
+    values[2] = solicitationType;
+
+    if (solicitationType === 'I') {
+      for (let position = 78; position <= 95; position++) {
+        const input = document.querySelector('input[name="field_' + position + '"]');
+        if (!input) continue;
+        input.value = '';
+        input.classList.remove('missing-mandatory-field');
+        const row = input.closest('tr');
+        if (row) row.classList.remove('missing-mandatory');
+        setInputRuleMessage(position, 'Must be blank because field 2 is I.');
+      }
+      return;
+    }
+
+    PRICE_BREAK_RANGES.forEach(function(range, index) {
+      const lowerPos = range[0];
+      const upperPos = range[1];
+      const pricePos = range[2];
+      const lowerInput = document.querySelector('input[name="field_' + lowerPos + '"]');
+      const upperInput = document.querySelector('input[name="field_' + upperPos + '"]');
+      const priceInput = document.querySelector('input[name="field_' + pricePos + '"]');
+      const fields = [
+        { position: lowerPos, input: lowerInput },
+        { position: upperPos, input: upperInput },
+        { position: pricePos, input: priceInput }
+      ];
+
+      fields.forEach(function(field) {
+        if (!field.input) return;
+        const message = validatePriceBreakField(field.position, values);
+        if (message) {
+          setInputRuleMessage(field.position, message);
+        } else {
+          field.input.classList.remove('missing-mandatory-field');
+          const row = field.input.closest('tr');
+          if (row) row.classList.remove('missing-mandatory');
+          clearInputRuleMessage(field.position);
+        }
+      });
+
+      const lower = parseQuantity(lowerInput ? lowerInput.value : '');
+      const upper = parseQuantity(upperInput ? upperInput.value : '');
+      if (lower !== null && upper !== null && lower > upper) {
+        setInputRuleMessage(upperPos, 'Must be greater than or equal to the lower quantity.');
+      }
+      if (index > 0) {
+        const prevUpperPos = PRICE_BREAK_RANGES[index - 1][1];
+        const prevUpperInput = document.querySelector('input[name="field_' + prevUpperPos + '"]');
+        const prevUpper = parseQuantity(prevUpperInput ? prevUpperInput.value : '');
+        if (prevUpper !== null && lower !== null && lower !== prevUpper + 1) {
+          setInputRuleMessage(lowerPos, 'Must equal the previous upper quantity plus 1.');
+        }
+      }
+    });
+  }
+
+  function validateQuantityVariancePlus(value) {
+    const text = (value || '').trim();
+    if (!text) return '';
+    if (!/^\d+$/.test(text)) return 'Must be a whole number.';
+    if (text.length > 2) return 'Cannot exceed 2 characters.';
+    const amount = Number(text);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 10) {
+      return 'Must be between 0 and 10.';
+    }
+    return '';
+  }
+
+  function applyField96Rule() {
+    const f96 = document.querySelector('input[name="field_96"]');
+    if (!f96) return;
+    const message = validateQuantityVariancePlus(f96.value);
+    if (message) {
+      setInputRuleMessage(96, message);
+    } else {
+      f96.classList.remove('missing-mandatory-field');
+      const row = f96.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+      clearInputRuleMessage(96);
+    }
+  }
+
+  function validateQuantityVarianceMinus(value) {
+    const text = (value || '').trim();
+    if (!text) return '';
+    if (!/^\d+$/.test(text)) return 'Must be a whole number.';
+    if (text.length > 2) return 'Cannot exceed 2 characters.';
+    const amount = Number(text);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 10) {
+      return 'Must be between 0 and 10.';
+    }
+    return '';
+  }
+
+  function applyField97Rule() {
+    const f97 = document.querySelector('input[name="field_97"]');
+    if (!f97) return;
+    const message = validateQuantityVarianceMinus(f97.value);
+    if (message) {
+      setInputRuleMessage(97, message);
+    } else {
+      f97.classList.remove('missing-mandatory-field');
+      const row = f97.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+      clearInputRuleMessage(97);
+    }
+  }
+
+  function validateMinimumOrderQuantityCode(value, solicitationType) {
+    const text = (value || '').trim().toUpperCase();
+    const type = (solicitationType || '').trim().toUpperCase();
+    if (['', 'F', 'P'].includes(type) && !text) {
+      return 'Required because field 2 is blank, F, or P.';
+    }
+    if (text && !['Y', 'N'].includes(text)) {
+      return 'Must be Y or N.';
+    }
+    return '';
+  }
+
+  function applyField98Rule() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const f98 = document.querySelector('input[name="field_98"]');
+    if (!f98) return;
+    const message = validateMinimumOrderQuantityCode(f98.value, f2 ? f2.value : '');
+    if (message) {
+      setInputRuleMessage(98, message);
+    } else {
+      f98.classList.remove('missing-mandatory-field');
+      const row = f98.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+      clearInputRuleMessage(98);
+    }
+  }
+
+  function validateMinimumOrderMaximumQuantity(value, minimumOrderQuantityCode) {
+    const text = (value || '').trim();
+    const code = (minimumOrderQuantityCode || '').trim().toUpperCase();
+    if (code === 'Y' && !text) {
+      return 'Required because field 98 is Y.';
+    }
+    if (!text) return '';
+    if (!/^\d+$/.test(text)) return 'Must be a whole number.';
+    if (text.length > 10) return 'Cannot exceed 10 digits.';
+    const amount = Number(text);
+    if (!Number.isFinite(amount) || amount < 1 || amount > 9999999999) {
+      return 'Must be between 1 and 9999999999.';
+    }
+    return '';
+  }
+
+  function applyField99Rule() {
+    const f98 = document.querySelector('input[name="field_98"]');
+    const f99 = document.querySelector('input[name="field_99"]');
+    if (!f99) return;
+    const message = validateMinimumOrderMaximumQuantity(f99.value, f98 ? f98.value : '');
+    if (message) {
+      setInputRuleMessage(99, message);
+    } else {
+      f99.classList.remove('missing-mandatory-field');
+      const row = f99.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+      clearInputRuleMessage(99);
+    }
+  }
+
+  function validateImmediateShipmentAvailable(value, solicitationType) {
+    const text = (value || '').trim().toUpperCase();
+    const type = (solicitationType || '').trim().toUpperCase();
+    if (type === 'I') {
+      return text === 'N' ? '' : 'Must be N because field 2 is I.';
+    }
+    if (['', 'F', 'P'].includes(type) && !text) {
+      return 'Required because field 2 is blank, F, or P.';
+    }
+    if (text && !['Y', 'N'].includes(text)) {
+      return 'Must be Y or N.';
+    }
+    return '';
+  }
+
+  function applyField100Rule() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const f100 = document.querySelector('input[name="field_100"]');
+    if (!f100) return;
+    const solicitationType = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    if (solicitationType === 'I' && (f100.value || '').trim().toUpperCase() !== 'N') {
+      f100.value = 'N';
+      setInputRuleMessage(100, 'Auto-set to N because field 2 is I.');
+      return;
+    }
+    const message = validateImmediateShipmentAvailable(f100.value, solicitationType);
+    if (message) {
+      setInputRuleMessage(100, message);
+    } else {
+      f100.classList.remove('missing-mandatory-field');
+      const row = f100.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+      clearInputRuleMessage(100);
+    }
+  }
+
+  function previewField(position) {
+    return document.querySelector('input[name="field_' + position + '"]');
+  }
+
+  function previewValue(position) {
+    const input = previewField(position);
+    return input ? (input.value || '').trim() : '';
+  }
+
+  function clearPreviewField(position, message) {
+    const input = previewField(position);
+    if (!input) return;
+    input.value = '';
+    input.dataset.ruleApplied = '1';
+    setInputRuleMessage(position, message);
+  }
+
+  function addPreviewRuleError(errors, position, message) {
+    errors.push({ position: position, message: message });
+  }
+
+  function collectRows101116Errors() {
+    const errors = [];
+    const immediateAvailable = previewValue(100).toUpperCase();
+    const immediateQty = previewValue(101);
+    if (immediateAvailable === 'Y') {
+      if (!immediateQty) addPreviewRuleError(errors, 101, 'Required because field 100 is Y.');
+    } else if (immediateQty) {
+      addPreviewRuleError(errors, 101, 'Must be blank because field 100 is not Y.');
+    }
+    if (immediateQty) {
+      if (!/^\d+$/.test(immediateQty)) addPreviewRuleError(errors, 101, 'Must be a whole number.');
+      else if (immediateQty.length > 10) addPreviewRuleError(errors, 101, 'Cannot exceed 10 digits.');
+      else {
+        const qty = Number(immediateQty);
+        if (!Number.isFinite(qty) || qty < 0 || qty > 9999999999) {
+          addPreviewRuleError(errors, 101, 'Must be between 0 and 9999999999.');
+        }
+      }
+    }
+
+    const manufacturerDealer = previewValue(102).toUpperCase();
+    const sourceCage = previewValue(103);
+    const sourceName = previewValue(104);
+    if (manufacturerDealer === 'MM' || manufacturerDealer === 'QM') {
+      if (sourceCage) addPreviewRuleError(errors, 103, 'Must be blank because field 102 is MM or QM.');
+      if (sourceName) addPreviewRuleError(errors, 104, 'Must be blank because field 102 is MM or QM.');
+    } else if ((manufacturerDealer === 'DD' || manufacturerDealer === 'QD') && !sourceCage && !sourceName) {
+      addPreviewRuleError(errors, 103, 'Required because field 102 is DD or QD and field 104 is blank.');
+      addPreviewRuleError(errors, 104, 'Required because field 102 is DD or QD and field 103 is blank.');
+    }
+    if (sourceCage && sourceCage.length > 5) addPreviewRuleError(errors, 103, 'Cannot exceed 5 characters.');
+    if (sourceName && sourceName.length > 255) addPreviewRuleError(errors, 104, 'Cannot exceed 255 characters.');
+
+    const itemDescription = previewValue(105).toUpperCase();
+    const partCode = previewValue(106).toUpperCase();
+    const partCage = previewValue(107);
+    const partNumber = previewValue(108);
+    const partRemarks = previewValue(109);
+    if (!['P', 'B', 'N'].includes(itemDescription)) {
+      [106, 107, 108, 109].forEach(function(position) {
+        if (previewValue(position)) addPreviewRuleError(errors, position, 'Must be blank because field 105 is not P, B, or N.');
+      });
+    } else {
+      if (!partCode) {
+        addPreviewRuleError(errors, 106, 'Required because field 105 is P, B, or N.');
+      } else {
+        const validPartCodes = itemDescription === 'B'
+          ? ['1', '2']
+          : ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A'];
+        if (!validPartCodes.includes(partCode)) {
+          addPreviewRuleError(errors, 106, 'Invalid code for the current field 105 value.');
+        }
+      }
+      if (!partCage) addPreviewRuleError(errors, 107, 'Required because field 105 is P, B, or N.');
+      if (!partNumber) addPreviewRuleError(errors, 108, 'Required because field 105 is P, B, or N.');
+      if (partCode === '1' && partRemarks) addPreviewRuleError(errors, 109, 'Must be blank because field 106 is 1.');
+      if (partCode === '2' && previewValue(24).toUpperCase() !== 'AB') {
+        addPreviewRuleError(errors, 24, 'Must be AB because field 106 is 2.');
+      }
+    }
+    if (partCage && partCage.length > 5) addPreviewRuleError(errors, 107, 'Cannot exceed 5 characters.');
+    if (partNumber && partNumber.length > 40) addPreviewRuleError(errors, 108, 'Cannot exceed 40 characters.');
+    if (partRemarks && partRemarks.length > 255) addPreviewRuleError(errors, 109, 'Cannot exceed 255 characters.');
+
+    const suppliesOffered = previewValue(110).toUpperCase();
+    const suppliesRemarks = previewValue(111);
+    if (!['D', 'B', 'Q'].includes(itemDescription)) {
+      if (suppliesOffered) addPreviewRuleError(errors, 110, 'Must be blank because field 105 is not D, B, or Q.');
+      if (suppliesRemarks) addPreviewRuleError(errors, 111, 'Must be blank because field 105 is not D, B, or Q.');
+    } else {
+      if (!suppliesOffered) addPreviewRuleError(errors, 110, 'Required because field 105 is D, B, or Q.');
+      else if (!['1', '2', '3', '4'].includes(suppliesOffered)) addPreviewRuleError(errors, 110, 'Must be 1, 2, 3, or 4.');
+      if (suppliesOffered === '1' && suppliesRemarks) addPreviewRuleError(errors, 111, 'Must be blank because field 110 is 1.');
+    }
+    if (suppliesRemarks && suppliesRemarks.length > 255) addPreviewRuleError(errors, 111, 'Cannot exceed 255 characters.');
+
+    const qualificationFields = [
+      [112, 5, true],
+      [113, 5, false],
+      [114, 50, false],
+      [115, 50, false],
+      [116, 50, false]
+    ];
+    qualificationFields.forEach(function(field) {
+      const position = field[0];
+      const maxLength = field[1];
+      const required = field[2];
+      const text = previewValue(position);
+      if (itemDescription !== 'Q') {
+        if (text) addPreviewRuleError(errors, position, 'Must be blank because field 105 is not Q.');
+      } else {
+        if (required && !text) addPreviewRuleError(errors, position, 'Required because field 105 is Q.');
+        if (text && text.length > maxLength) addPreviewRuleError(errors, position, 'Cannot exceed ' + maxLength + ' characters.');
+      }
+    });
+    return errors;
+  }
+
+  function applyRows101116Rules() {
+    [101, 103, 104, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116].forEach(function(position) {
+      const input = previewField(position);
+      if (input) delete input.dataset.ruleApplied;
+    });
+
+    const itemDescription = previewValue(105).toUpperCase();
+    const manufacturerDealer = previewValue(102).toUpperCase();
+    const immediateAvailable = previewValue(100).toUpperCase();
+    const partCode = previewValue(106).toUpperCase();
+    const suppliesOffered = previewValue(110).toUpperCase();
+
+    if (immediateAvailable !== 'Y') {
+      clearPreviewField(101, 'Must be blank because field 100 is not Y.');
+    }
+    if (manufacturerDealer === 'MM' || manufacturerDealer === 'QM') {
+      clearPreviewField(103, 'Must be blank because field 102 is MM or QM.');
+      clearPreviewField(104, 'Must be blank because field 102 is MM or QM.');
+    }
+    if (!['P', 'B', 'N'].includes(itemDescription)) {
+      [106, 107, 108, 109].forEach(function(position) {
+        clearPreviewField(position, 'Must be blank because field 105 is not P, B, or N.');
+      });
+    } else if (partCode === '2') {
+      const bidType = previewField(24);
+      if (bidType && bidType.value !== 'AB') {
+        bidType.value = 'AB';
+        setInputRuleMessage(24, 'Auto-set to AB because field 106 is 2.');
+      }
+    }
+    if (['P', 'B', 'N'].includes(itemDescription) && partCode === '1') {
+      clearPreviewField(109, 'Must be blank because field 106 is 1.');
+    }
+    if (!['D', 'B', 'Q'].includes(itemDescription)) {
+      [110, 111].forEach(function(position) {
+        clearPreviewField(position, 'Must be blank because field 105 is not D, B, or Q.');
+      });
+    } else if (suppliesOffered === '1') {
+      clearPreviewField(111, 'Must be blank because field 110 is 1.');
+    }
+    if (itemDescription !== 'Q') {
+      [112, 113, 114, 115, 116].forEach(function(position) {
+        clearPreviewField(position, 'Must be blank because field 105 is not Q.');
+      });
+    }
+
+    [101, 103, 104, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116].forEach(function(position) {
+      const input = previewField(position);
+      if (!input) return;
+      if (input.dataset.ruleApplied === '1') return;
+      const hasError = collectRows101116Errors().some(function(error) {
+        return error.position === position;
+      });
+      if (!hasError) {
+        input.classList.remove('missing-mandatory-field');
+        const row = input.closest('tr');
+        if (row) row.classList.remove('missing-mandatory');
+        clearInputRuleMessage(position);
+      }
+    });
+
+    collectRows101116Errors().forEach(function(error) {
+      setInputRuleMessage(error.position, error.message);
+    });
+  }
+
+  function collectRows118121Errors() {
+    const errors = [];
+    const bidType = previewValue(24).toUpperCase();
+    const solicitationType = previewValue(2).toUpperCase();
+    const qualityIndicator = previewValue(117).toUpperCase();
+    const qualityCode = previewValue(118).toUpperCase();
+    const qualityRemarks = previewValue(119);
+    const childLaborCode = previewValue(120).toUpperCase();
+    const quoteRemarks = previewValue(121);
+    const validQualityCodes = {
+      '8': ['8', '2', '1'],
+      '7': ['8', '7', '2', '1'],
+      '6': ['8', '7', '6', '2', '1']
+    };
+
+    if (qualityIndicator === 'N') {
+      if (qualityCode) addPreviewRuleError(errors, 118, 'Must be blank because field 117 is N.');
+      if (qualityRemarks) addPreviewRuleError(errors, 119, 'Must be blank because field 117 is N.');
+    } else if (validQualityCodes[qualityIndicator]) {
+      if (!qualityCode) {
+        addPreviewRuleError(errors, 118, 'Required because field 117 is not N.');
+      } else if (!validQualityCodes[qualityIndicator].includes(qualityCode)) {
+        addPreviewRuleError(errors, 118, 'Invalid code for the current field 117 value.');
+      }
+      if (qualityCode === '1' && !['BW', 'AB'].includes(bidType)) {
+        addPreviewRuleError(errors, 24, 'Must be BW or AB because field 118 is 1.');
+      }
+      if (qualityCode === '2') {
+        if (!qualityRemarks) addPreviewRuleError(errors, 119, 'Required because field 118 is 2.');
+      } else if (qualityRemarks) {
+        addPreviewRuleError(errors, 119, 'Must be blank unless field 118 is 2.');
+      }
+    } else if (qualityIndicator) {
+      addPreviewRuleError(errors, 117, 'Must be N, 6, 7, or 8.');
+    }
+    if (qualityRemarks && qualityRemarks.length > 255) addPreviewRuleError(errors, 119, 'Cannot exceed 255 characters.');
+
+    if (!childLaborCode) {
+      addPreviewRuleError(errors, 120, 'Required.');
+    } else if (!['N', 'U', 'Y'].includes(childLaborCode)) {
+      addPreviewRuleError(errors, 120, 'Must be N, U, or Y.');
+    } else if (childLaborCode === 'Y' && !['BW', 'AB'].includes(bidType)) {
+      addPreviewRuleError(errors, 24, 'Must be BW or AB because field 120 is Y.');
+    }
+
+    if (quoteRemarks && quoteRemarks.length > 255) {
+      addPreviewRuleError(errors, 121, 'Cannot exceed 255 characters.');
+    }
+    if (quoteRemarks && !['BW', 'AB'].includes(bidType)) {
+      addPreviewRuleError(errors, 24, 'Must be BW or AB when field 121 has remarks.');
+    }
+    if (['F', 'P'].includes(solicitationType) && bidType === 'BI' && quoteRemarks) {
+      addPreviewRuleError(errors, 121, 'Must be blank when field 2 is F or P and field 24 is BI.');
+    }
+    return errors;
+  }
+
+  function applyRows118121Rules() {
+    [118, 119, 120, 121].forEach(function(position) {
+      const input = previewField(position);
+      if (input) delete input.dataset.ruleApplied;
+    });
+
+    const qualityIndicator = previewValue(117).toUpperCase();
+    const qualityCode = previewValue(118).toUpperCase();
+    const childLaborCode = previewValue(120).toUpperCase();
+    const quoteRemarks = previewValue(121);
+    const bidType = previewField(24);
+    const bidTypeValue = bidType ? (bidType.value || '').trim().toUpperCase() : '';
+    const solicitationType = previewValue(2).toUpperCase();
+
+    if (qualityIndicator === 'N') {
+      clearPreviewField(118, 'Must be blank because field 117 is N.');
+      clearPreviewField(119, 'Must be blank because field 117 is N.');
+    } else if (qualityIndicator && qualityCode !== '2') {
+      clearPreviewField(119, 'Must be blank unless field 118 is 2.');
+    }
+
+    if (qualityIndicator && ['6', '7', '8'].includes(qualityIndicator) && qualityCode === '1' && bidType && !['BW', 'AB'].includes(bidTypeValue)) {
+      bidType.value = 'BW';
+      setInputRuleMessage(24, 'Auto-set to BW because field 118 is 1.');
+    }
+
+    if (childLaborCode === 'Y' && bidType && !['BW', 'AB'].includes((bidType.value || '').trim().toUpperCase())) {
+      bidType.value = 'BW';
+      setInputRuleMessage(24, 'Auto-set to BW because field 120 is Y.');
+    }
+
+    if (quoteRemarks && bidType && !['BW', 'AB'].includes((bidType.value || '').trim().toUpperCase())) {
+      if (['F', 'P'].includes(solicitationType) && (bidType.value || '').trim().toUpperCase() === 'BI') {
+        clearPreviewField(121, 'Must be blank when field 2 is F or P and field 24 is BI.');
+      } else {
+        bidType.value = 'BW';
+        setInputRuleMessage(24, 'Auto-set to BW because field 121 has remarks.');
+      }
+    }
+
+    [118, 119, 120, 121].forEach(function(position) {
+      const input = previewField(position);
+      if (!input) return;
+      if (input.dataset.ruleApplied === '1') return;
+      const hasError = collectRows118121Errors().some(function(error) {
+        return error.position === position;
+      });
+      if (!hasError) {
+        input.classList.remove('missing-mandatory-field');
+        const row = input.closest('tr');
+        if (row) row.classList.remove('missing-mandatory');
+        clearInputRuleMessage(position);
+      }
+    });
+
+    collectRows118121Errors().forEach(function(error) {
+      setInputRuleMessage(error.position, error.message);
+    });
+  }
+
+  function applyField72Rule() {
+    const f70 = document.querySelector('input[name="field_70"]');
+    const f72 = document.querySelector('input[name="field_72"]');
+    if (!f72) return;
+    const endProduct = f70 ? (f70.value || '').trim().toUpperCase() : '';
+    if (['D', 'NQ', 'O', 'ND', 'US'].includes(endProduct)) {
+      f72.value = '';
+      f72.classList.remove('missing-mandatory-field');
+      const row = f72.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+      setInputRuleMessage(72, endProduct ? 'Must be blank because field 70 is D, NQ, O, ND, or US.' : '');
+      return;
+    }
+
+    const message = validateCountryCode72(f72.value, endProduct);
+    if (message) {
+      setInputRuleMessage(72, message);
+      return;
+    }
+
+    f72.classList.remove('missing-mandatory-field');
+    const row = f72.closest('tr');
+    if (row) row.classList.remove('missing-mandatory');
+    clearInputRuleMessage(72);
+  }
+
+  function applyField73Rule() {
+    const f68 = document.querySelector('input[name="field_68"]');
+    const f73 = document.querySelector('input[name="field_73"]');
+    if (!f73) return;
+
+    const buyAmerican = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const row73 = f73.closest('tr');
+
+    if (buyAmerican === 'I') {
+      f73.value = '';
+      f73.classList.remove('missing-mandatory-field');
+      if (row73) row73.classList.remove('missing-mandatory');
+      setInputRuleMessage(73, 'Must be blank because field 68 is I.');
+      return;
+    }
+
+    const message = validateDutyFreeEntry(f73.value, buyAmerican);
+    if (message) {
+      setInputRuleMessage(73, message);
+      return;
+    }
+
+    f73.classList.remove('missing-mandatory-field');
+    if (row73) row73.classList.remove('missing-mandatory');
+    clearInputRuleMessage(73);
+  }
+
+  function applyField74Rule() {
+    const f68 = document.querySelector('input[name="field_68"]');
+    const f73 = document.querySelector('input[name="field_73"]');
+    const f74 = document.querySelector('input[name="field_74"]');
+    if (!f74) return;
+
+    const buyAmerican = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const dutyFreeEntry = f73 ? (f73.value || '').trim().toUpperCase() : '';
+    const row74 = f74.closest('tr');
+
+    if (buyAmerican === 'I' || dutyFreeEntry !== 'Y') {
+      f74.value = '';
+      f74.classList.remove('missing-mandatory-field');
+      if (row74) row74.classList.remove('missing-mandatory');
+      if (buyAmerican === 'I') {
+        setInputRuleMessage(74, 'Must be blank because field 68 is I.');
+      } else {
+        setInputRuleMessage(74, 'Must be blank unless field 73 is Y.');
+      }
+      return;
+    }
+
+    const message = validateForeignSupplies(f74.value, buyAmerican, dutyFreeEntry);
+    if (message) {
+      setInputRuleMessage(74, message);
+      return;
+    }
+
+    f74.classList.remove('missing-mandatory-field');
+    if (row74) row74.classList.remove('missing-mandatory');
+    clearInputRuleMessage(74);
+  }
+
+  function applyField75Rule() {
+    const f68 = document.querySelector('input[name="field_68"]');
+    const f74 = document.querySelector('input[name="field_74"]');
+    const f75 = document.querySelector('input[name="field_75"]');
+    if (!f75) return;
+
+    const buyAmerican = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const foreignSupplies = f74 ? (f74.value || '').trim().toUpperCase() : '';
+    const row75 = f75.closest('tr');
+
+    if (buyAmerican === 'I' || foreignSupplies !== 'Y') {
+      f75.value = '';
+      f75.classList.remove('missing-mandatory-field');
+      if (row75) row75.classList.remove('missing-mandatory');
+      if (buyAmerican === 'I') {
+        setInputRuleMessage(75, 'Must be blank because field 68 is I.');
+      } else {
+        setInputRuleMessage(75, 'Must be blank unless field 74 is Y.');
+      }
+      return;
+    }
+
+    const message = validateDutyPaid(f75.value, buyAmerican, foreignSupplies);
+    if (message) {
+      setInputRuleMessage(75, message);
+      return;
+    }
+
+    f75.classList.remove('missing-mandatory-field');
+    if (row75) row75.classList.remove('missing-mandatory');
+    clearInputRuleMessage(75);
+  }
+
+  function applyField76Rule() {
+    const f68 = document.querySelector('input[name="field_68"]');
+    const f75 = document.querySelector('input[name="field_75"]');
+    const f76 = document.querySelector('input[name="field_76"]');
+    if (!f76) return;
+
+    const buyAmerican = f68 ? (f68.value || '').trim().toUpperCase() : '';
+    const dutyPaid = f75 ? (f75.value || '').trim().toUpperCase() : '';
+    const row76 = f76.closest('tr');
+
+    if (buyAmerican === 'I' || dutyPaid !== 'N') {
+      f76.value = '';
+      f76.classList.remove('missing-mandatory-field');
+      if (row76) row76.classList.remove('missing-mandatory');
+      if (buyAmerican === 'I') {
+        setInputRuleMessage(76, 'Must be blank because field 68 is I.');
+      } else {
+        setInputRuleMessage(76, 'Must be blank unless field 75 is N.');
+      }
+      return;
+    }
+
+    const message = validateDutyPaidAmount(f76.value, buyAmerican, dutyPaid);
+    if (message) {
+      setInputRuleMessage(76, message);
+      return;
+    }
+
+    f76.classList.remove('missing-mandatory-field');
+    if (row76) row76.classList.remove('missing-mandatory');
+    clearInputRuleMessage(76);
+  }
+
+  function applyField27Rule() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const f24 = document.querySelector('input[name="field_24"]');
+    const f27 = document.querySelector('input[name="field_27"]');
+    if (!f2 || !f24 || !f27) return;
+
+    const solicitationType = (f2.value || '').trim().toUpperCase();
+    const daysQuoteValidRaw = (f27.value || '').trim();
+    const daysQuoteValid = parseInt(daysQuoteValidRaw, 10);
+    const bidType = (f24.value || '').trim().toUpperCase();
+
+    if (solicitationType === 'I' && daysQuoteValidRaw && isFinite(daysQuoteValid) && daysQuoteValid < 90) {
+      if (!['BW', 'AB'].includes(bidType)) {
+        f24.value = 'BW';
+      }
+      setInputRuleMessage(24, 'Set to BW because field 2 is I and field 27 is less than 90.');
+    } else {
+      clearInputRuleMessage(24);
+    }
+  }
+
+  function applyField28Rule() {
+    const f24 = document.querySelector('input[name="field_24"]');
+    const f28 = document.querySelector('input[name="field_28"]');
+    if (!f24 || !f28) return;
+
+    const packagingRequirement = (f28.value || '').trim().toUpperCase();
+    const bidType = (f24.value || '').trim().toUpperCase();
+
+    if (packagingRequirement === 'N') {
+      if (!['BW', 'AB'].includes(bidType)) {
+        f24.value = 'BW';
+      }
+      setInputRuleMessage(24, 'Set to BW because field 28 is N.');
+    }
+  }
+
+  function applyField29Rule() {
+    const f29 = document.querySelector('input[name="field_29"]');
+    const f30 = document.querySelector('input[name="field_30"]');
+    const f31 = document.querySelector('input[name="field_31"]');
+    if (!f29) return;
+
+    function clearMissingState(input) {
+      if (!input || !(input.value || '').trim()) return;
+      input.classList.remove('missing-mandatory-field');
+      const row = input.closest('tr');
+      if (row) row.classList.remove('missing-mandatory');
+    }
+
+    const boaCode = (f29.value || '').trim().toUpperCase();
+    if (boaCode === 'NAP') {
+      [f30, f31].forEach(function(input) {
+        if (!input) return;
+        input.value = '';
+        input.classList.remove('missing-mandatory-field');
+        const row = input.closest('tr');
+        if (row) row.classList.remove('missing-mandatory');
+      });
+      setInputRuleMessage(30, 'Must be blank because field 29 is NAP.');
+      setInputRuleMessage(31, 'Must be blank because field 29 is NAP.');
+      return;
+    }
+
+    if (['BOA', 'FSS', 'BPA'].includes(boaCode)) {
+      if (f30 && !(f30.value || '').trim()) {
+        setInputRuleMessage(30, 'Required because field 29 is BOA, FSS, or BPA.');
+      } else if (f30 && (f30.value || '').trim().length > 17) {
+        setInputRuleMessage(30, 'Cannot exceed 17 characters.');
+      } else {
+        clearMissingState(f30);
+        clearInputRuleMessage(30);
+      }
+      if (f31 && !(f31.value || '').trim()) {
+        setInputRuleMessage(31, 'Required because field 29 is BOA, FSS, or BPA.');
+      } else if (f31 && !isValidMmDdYyyy(f31.value)) {
+        setInputRuleMessage(31, 'Must be a valid date in MM/DD/YYYY format.');
+      } else {
+        clearMissingState(f31);
+        clearInputRuleMessage(31);
+      }
+      return;
+    }
+
+    clearInputRuleMessage(30);
+    clearInputRuleMessage(31);
+  }
+
+  function applyField33Rule() {
+    const f32 = document.querySelector('input[name="field_32"]');
+    const f33 = document.querySelector('input[name="field_33"]');
+    if (!f32 || !f33) return;
+
+    const fobPoint = (f32.value || '').trim().toUpperCase();
+    const fobCity = (f33.value || '').trim();
+    const row33 = f33.closest('tr');
+
+    if (fobPoint === 'D') {
+      f33.value = '';
+      f33.classList.remove('missing-mandatory-field');
+      if (row33) row33.classList.remove('missing-mandatory');
+      setInputRuleMessage(33, 'Must be blank because field 32 is D.');
+      return;
+    }
+
+    if (fobPoint === 'O') {
+      if (!fobCity) {
+        setInputRuleMessage(33, 'Required because field 32 is O.');
+      } else if (fobCity.length > 30) {
+        setInputRuleMessage(33, 'Cannot exceed 30 characters.');
+      } else {
+        f33.classList.remove('missing-mandatory-field');
+        if (row33) row33.classList.remove('missing-mandatory');
+        clearInputRuleMessage(33);
+      }
+      return;
+    }
+
+    clearInputRuleMessage(33);
+  }
+
+  function applyField35Rule() {
+    const f32 = document.querySelector('input[name="field_32"]');
+    const f35 = document.querySelector('input[name="field_35"]');
+    if (!f32 || !f35) return;
+
+    const fobPoint = (f32.value || '').trim().toUpperCase();
+    const fobCountry = (f35.value || '').trim().toUpperCase();
+    const validCountries = [
+      'AF', 'AL', 'DZ', 'AS', 'AD', 'AO', 'AI', 'AQ', 'AG', 'AR', 'AM', 'AW', 'AU', 'AT', 'AZ',
+      'BS', 'BH', 'BD', 'BB', 'BY', 'BE', 'BZ', 'BJ', 'BM', 'BT', 'BO', 'BQ', 'BA', 'BW', 'BV',
+      'BR', 'IO', 'BN', 'BG', 'BF', 'CV', 'KH', 'CM', 'BI', 'CA', 'KY', 'CF', 'TD', 'CL', 'CN',
+      'CX', 'CC', 'CO', 'KM', 'CG', 'CD', 'CK', 'CR', 'CI', 'HR', 'CU', 'CW', 'CY', 'CZ', 'DK',
+      'DJ', 'DM', 'DO', 'EC', 'EG', 'SV', 'GQ', 'ER', 'EE', 'SZ', 'ET', 'FK', 'FO', 'FJ', 'FI',
+      'FR', 'GF', 'PF', 'TF', 'GA', 'GM', 'GE', 'DE', 'GH', 'GI', 'GR', 'GL', 'GD', 'GP', 'GU',
+      'GT', 'GN', 'GW', 'GY', 'HT', 'HM', 'VA', 'HN', 'HK', 'HU', 'IS', 'IN', 'ID', 'IR', 'IQ',
+      'IE', 'IM', 'IL', 'IT', 'JM', 'JP', 'JO', 'KZ', 'KE', 'KI', 'KP', 'KR', 'XK', 'KW', 'KG',
+      'LA', 'LV', 'LB', 'LS', 'LR', 'LY', 'LI', 'LT', 'LU', 'NF', 'MO', 'MG', 'MW', 'MY', 'MV',
+      'ML', 'MT', 'MH', 'MQ', 'MR', 'MU', 'YT', 'MX', 'FM', 'MD', 'MC', 'MN', 'ME', 'MS', 'MA',
+      'MZ', 'MM', 'NA', 'NR', 'NP', 'NL', 'NC', 'NZ', 'NI', 'NE', 'NG', 'NU', 'MK', 'MP', 'NO',
+      'OM', 'PK', 'PW', 'PS', 'PA', 'PG', 'PY', 'PE', 'PH', 'PN', 'PL', 'PT', 'PR', 'QA', 'RE',
+      'RO', 'RU', 'RW', 'SH', 'LC', 'KN', 'MF', 'PM', 'VC', 'WS', 'SM', 'ST', 'SA', 'SN', 'RS',
+      'SC', 'SL', 'SG', 'SX', 'SK', 'SI', 'SB', 'SO', 'ZA', 'GS', 'SS', 'ES', 'LK', 'SD', 'SR',
+      'SJ', 'SE', 'CH', 'SY', 'TW', 'TJ', 'TZ', 'TH', 'TL', 'TG', 'TK', 'TT', 'TN', 'TO', 'TR',
+      'TM', 'TC', 'TV', 'UG', 'UA', 'AE', 'GB', 'US', 'UM', 'UY', 'UZ', 'VU', 'VE', 'VN', 'VI',
+      'VG', 'WF', 'EH', 'YE', 'ZM', 'ZW'
+    ];
+    const row35 = f35.closest('tr');
+
+    if (fobPoint === 'D') {
+      f35.value = '';
+      f35.classList.remove('missing-mandatory-field');
+      if (row35) row35.classList.remove('missing-mandatory');
+      setInputRuleMessage(35, 'Must be blank because field 32 is D.');
+      return;
+    }
+
+    if (fobPoint === 'O') {
+      if (!fobCountry) {
+        setInputRuleMessage(35, 'Required because field 32 is O.');
+      } else if (fobCountry.length > 2) {
+        setInputRuleMessage(35, 'Cannot exceed 2 characters.');
+      } else if (!validCountries.includes(fobCountry)) {
+        setInputRuleMessage(35, 'Must be a valid country code.');
+      } else {
+        f35.classList.remove('missing-mandatory-field');
+        if (row35) row35.classList.remove('missing-mandatory');
+        clearInputRuleMessage(35);
+      }
+      return;
+    }
+
+    clearInputRuleMessage(35);
+  }
+
+  function applyField36Rule() {
+    const f24 = document.querySelector('input[name="field_24"]');
+    const f36 = document.querySelector('input[name="field_36"]');
+    if (!f36) return;
+
+    const inspectionPoint = (f36.value || '').trim().toUpperCase();
+    const requirement = (f36.dataset.requirement || '').trim().toUpperCase();
+    const row36 = f36.closest('tr');
+
+    if (!inspectionPoint) {
+      clearInputRuleMessage(36);
+      return;
+    }
+
+    if (!['D', 'O'].includes(inspectionPoint)) {
+      setInputRuleMessage(36, 'Must be D or O.');
+      return;
+    }
+
+    if (row36) row36.classList.remove('missing-mandatory');
+    f36.classList.remove('missing-mandatory-field');
+    clearInputRuleMessage(36);
+
+    if (requirement && inspectionPoint !== requirement && f24) {
+      const bidType = (f24.value || '').trim().toUpperCase();
+      if (!['BW', 'AB'].includes(bidType)) {
+        f24.value = 'BW';
+      }
+      setInputRuleMessage(24, 'Set to BW because field 36 changed from the RFQ requirement.');
+    }
+  }
+
+  function applyField37Rule() {
+    const f36 = document.querySelector('input[name="field_36"]');
+    const f37 = document.querySelector('input[name="field_37"]');
+    if (!f36 || !f37) return;
+
+    const inspectionPoint = (f36.value || '').trim().toUpperCase();
+    const packagingCage = (f37.value || '').trim();
+    const row37 = f37.closest('tr');
+
+    if (inspectionPoint === 'D') {
+      f37.value = '';
+      f37.classList.remove('missing-mandatory-field');
+      if (row37) row37.classList.remove('missing-mandatory');
+      setInputRuleMessage(37, 'Must be blank because field 36 is D.');
+      return;
+    }
+
+    if (inspectionPoint === 'O') {
+      if (!packagingCage) {
+        setInputRuleMessage(37, 'Required because field 36 is O.');
+      } else if (packagingCage.length > 5) {
+        setInputRuleMessage(37, 'Cannot exceed 5 characters.');
+      } else {
+        f37.classList.remove('missing-mandatory-field');
+        if (row37) row37.classList.remove('missing-mandatory');
+        clearInputRuleMessage(37);
+      }
+      return;
+    }
+
+    clearInputRuleMessage(37);
+  }
+
+  function applyField38Rule() {
+    const f36 = document.querySelector('input[name="field_36"]');
+    const f38 = document.querySelector('input[name="field_38"]');
+    if (!f36 || !f38) return;
+
+    const inspectionPoint = (f36.value || '').trim().toUpperCase();
+    const suppliesCage = (f38.value || '').trim();
+    const row38 = f38.closest('tr');
+
+    if (inspectionPoint === 'D') {
+      f38.value = '';
+      f38.classList.remove('missing-mandatory-field');
+      if (row38) row38.classList.remove('missing-mandatory');
+      setInputRuleMessage(38, 'Must be blank because field 36 is D.');
+      return;
+    }
+
+    if (inspectionPoint === 'O') {
+      if (!suppliesCage) {
+        setInputRuleMessage(38, 'Required because field 36 is O.');
+      } else if (suppliesCage.length > 5) {
+        setInputRuleMessage(38, 'Cannot exceed 5 characters.');
+      } else {
+        f38.classList.remove('missing-mandatory-field');
+        if (row38) row38.classList.remove('missing-mandatory');
+        clearInputRuleMessage(38);
+      }
+      return;
+    }
+
+    clearInputRuleMessage(38);
+  }
+
+  function applyField49Rule() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const f24 = document.querySelector('input[name="field_24"]');
+    const f47 = document.querySelector('input[name="field_47"]');
+    const f49 = document.querySelector('input[name="field_49"]');
+    if (!f49) return;
+
+    const solicitationType = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const bidType = f24 ? (f24.value || '').trim().toUpperCase() : '';
+    const nsnPart = f47 ? (f47.value || '').trim().toUpperCase() : '';
+    const quotedQuantity = (f49.value || '').trim();
+    const requirementQuantity = (f49.dataset.requirement || '').trim();
+    const quantityNumber = parseQuantity(quotedQuantity);
+    const prohibitedParts = ['0001S00000052', '0001S00000053'];
+
+    if (!quotedQuantity) {
+      clearInputRuleMessage(49);
+      return;
+    }
+
+    if (quotedQuantity.length > 10) {
+      setInputRuleMessage(49, 'Cannot exceed 10 characters.');
+      return;
+    }
+
+    if (quantityNumber === 0) {
+      if (f24) {
+        f24.value = 'DQ';
+        setInputRuleMessage(24, 'Set to DQ because field 49 is zero.');
+      }
+      setInputRuleMessage(49, 'Zero quantity requires field 24 to be DQ (No Bid).');
+      return;
+    }
+
+    if (requirementQuantity && !quantitiesMatch(quotedQuantity, requirementQuantity)) {
+      if (solicitationType === 'I') {
+        setInputRuleMessage(49, 'Must match the estimated RFQ quantity because field 2 is I.');
+        return;
+      }
+      if (prohibitedParts.includes(nsnPart)) {
+        setInputRuleMessage(49, 'Quantity cannot differ from the RFQ requirement for this NSN/Part Number.');
+        return;
+      }
+      if (f24 && !['BW', 'AB'].includes(bidType)) {
+        f24.value = 'BW';
+      }
+      setInputRuleMessage(24, 'Set to BW because field 49 differs from the RFQ requirement.');
+      setInputRuleMessage(49, 'Quantity differs from the RFQ requirement, so field 24 must be BW or AB.');
+      return;
+    }
+
+    clearInputRuleMessage(49);
+  }
+
+  function applyField50Rule() {
+    const f50 = document.querySelector('input[name="field_50"]');
+    if (!f50) return;
+    const message = validateUnitPrice(f50.value);
+    if (message) {
+      setInputRuleMessage(50, message);
+    } else {
+      f50.classList.remove('missing-mandatory-field');
+      const row50 = f50.closest('tr');
+      if (row50) row50.classList.remove('missing-mandatory');
+      clearInputRuleMessage(50);
+    }
+  }
+
+  function applyField51Rule() {
+    const f1 = document.querySelector('input[name="field_1"]');
+    const f24 = document.querySelector('input[name="field_24"]');
+    const f47 = document.querySelector('input[name="field_47"]');
+    const f50 = document.querySelector('input[name="field_50"]');
+    const f51 = document.querySelector('input[name="field_51"]');
+    const f64 = document.querySelector('input[name="field_64"]');
+    if (!f51) return;
+
+    const deliveryDays = (f51.value || '').trim();
+    const deliveryMessage = validateDeliveryDays(deliveryDays, f1 ? f1.value : '');
+    const row51 = f51.closest('tr');
+    if (deliveryMessage) {
+      setInputRuleMessage(51, deliveryMessage);
+      return;
+    }
+
+    const unitPrice = parseQuantity(f50 ? f50.value : '');
+    const days = parseInt(deliveryDays, 10);
+    const nsnPart = f47 ? (f47.value || '').trim().toUpperCase() : '';
+    const bidType = f24 ? (f24.value || '').trim().toUpperCase() : '';
+    const waiverCode = f64 ? (f64.value || '').trim().toUpperCase() : '';
+    const specialParts = ['0001S00000052', '0001S00000053'];
+
+    if (waiverCode === 'N' && days === 0) {
+      setInputRuleMessage(51, 'Cannot be zero when field 64 is N.');
+      return;
+    }
+
+    if (unitPrice === 0 && days === 0 && specialParts.includes(nsnPart)) {
+      if (f24 && !['BW', 'AB'].includes(bidType)) {
+        f24.value = 'BW';
+      }
+      setInputRuleMessage(24, 'Set to BW because fields 50 and 51 are zero for this NSN/Part Number.');
+      setInputRuleMessage(51, 'Zero Unit Price and zero Delivery Days require field 24 to be BW or AB for this NSN/Part Number.');
+      return;
+    }
+
+    if (unitPrice === 0 && days === 0) {
+      setInputRuleMessage(51, 'Government assumes no bid when fields 50 and 51 are both zero.');
+      return;
+    }
+
+    if (unitPrice === 0 && days !== 0) {
+      setInputRuleMessage(51, 'Government assumes no charge when field 50 is zero and field 51 is not zero.');
+      return;
+    }
+
+    f51.classList.remove('missing-mandatory-field');
+    if (row51) row51.classList.remove('missing-mandatory');
+    clearInputRuleMessage(51);
+  }
+
+  function applyField56Rule() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const f56 = document.querySelector('input[name="field_56"]');
+    if (!f56) return;
+
+    const solicitationType = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const noDoMinimum = (f56.value || '').trim().toUpperCase();
+    const row56 = f56.closest('tr');
+
+    if (solicitationType !== 'I') {
+      f56.value = '';
+      f56.classList.remove('missing-mandatory-field');
+      if (row56) row56.classList.remove('missing-mandatory');
+      setInputRuleMessage(56, 'Must be blank because field 2 is not I.');
+      return;
+    }
+
+    const message = validateNoDoMinimum(noDoMinimum, solicitationType);
+    if (message) {
+      setInputRuleMessage(56, message);
+      return;
+    }
+
+    f56.classList.remove('missing-mandatory-field');
+    if (row56) row56.classList.remove('missing-mandatory');
+    clearInputRuleMessage(56);
+  }
+
+  function applyField58Rule() {
+    const f13 = document.querySelector('input[name="field_13"]');
+    const f57 = document.querySelector('input[name="field_57"]');
+    const f58 = document.querySelector('input[name="field_58"]');
+    if (!f57 || !f58) return;
+
+    const smallBusinessCode = f13 ? (f13.value || '').trim().toUpperCase() : '';
+    const hubzone = (f57.value || '').trim().toUpperCase();
+    const waiver = (f58.value || '').trim().toUpperCase();
+    const row58 = f58.closest('tr');
+
+    if (hubzone === 'N' || (hubzone === 'Y' && !['B', 'M'].includes(smallBusinessCode))) {
+      f58.value = '';
+      f58.classList.remove('missing-mandatory-field');
+      if (row58) row58.classList.remove('missing-mandatory');
+      setInputRuleMessage(58, hubzone === 'N' ? 'Must be blank because field 57 is N.' : 'Must be blank because field 13 is not B or M.');
+      return;
+    }
+
+    const message = validateHubzoneWaiver(waiver, hubzone, smallBusinessCode);
+    if (message) {
+      setInputRuleMessage(58, message);
+      return;
+    }
+
+    f58.classList.remove('missing-mandatory-field');
+    if (row58) row58.classList.remove('missing-mandatory');
+    clearInputRuleMessage(58);
+  }
+
+  function applyField59Rule() {
+    const f59 = document.querySelector('input[name="field_59"]');
+    const f100 = document.querySelector('input[name="field_100"]');
+    if (!f59) return;
+
+    const immediateAvailable = f100 ? (f100.value || '').trim().toUpperCase() : '';
+    const row59 = f59.closest('tr');
+
+    if (immediateAvailable !== 'Y') {
+      f59.value = '';
+      f59.classList.remove('missing-mandatory-field');
+      if (row59) row59.classList.remove('missing-mandatory');
+      setInputRuleMessage(59, immediateAvailable === 'N' ? 'Must be blank because field 100 is N.' : 'Must be blank unless field 100 is Y.');
+      return;
+    }
+
+    const message = validateImmediateShipmentPrice(f59.value, immediateAvailable);
+    if (message) {
+      setInputRuleMessage(59, message);
+      return;
+    }
+
+    f59.classList.remove('missing-mandatory-field');
+    if (row59) row59.classList.remove('missing-mandatory');
+    clearInputRuleMessage(59);
+  }
+
+  function applyField60Rule() {
+    const f60 = document.querySelector('input[name="field_60"]');
+    const f100 = document.querySelector('input[name="field_100"]');
+    if (!f60) return;
+
+    const immediateAvailable = f100 ? (f100.value || '').trim().toUpperCase() : '';
+    const row60 = f60.closest('tr');
+
+    if (immediateAvailable !== 'Y') {
+      f60.value = '';
+      f60.classList.remove('missing-mandatory-field');
+      if (row60) row60.classList.remove('missing-mandatory');
+      setInputRuleMessage(60, immediateAvailable === 'N' ? 'Must be blank because field 100 is N.' : 'Must be blank unless field 100 is Y.');
+      return;
+    }
+
+    const message = validateImmediateShipmentDelivery(f60.value, immediateAvailable);
+    if (message) {
+      setInputRuleMessage(60, message);
+      return;
+    }
+
+    f60.classList.remove('missing-mandatory-field');
+    if (row60) row60.classList.remove('missing-mandatory');
+    clearInputRuleMessage(60);
+  }
+
+  function applyField63Rule() {
+    const f63 = document.querySelector('input[name="field_63"]');
+    const f102 = document.querySelector('input[name="field_102"]');
+    if (!f63) return;
+
+    const manufacturerDealer = f102 ? (f102.value || '').trim().toUpperCase() : '';
+    const row63 = f63.closest('tr');
+
+    if (manufacturerDealer !== 'QD') {
+      f63.value = '';
+      f63.classList.remove('missing-mandatory-field');
+      if (row63) row63.classList.remove('missing-mandatory');
+      setInputRuleMessage(63, 'Must be blank because field 102 is not QD.');
+      return;
+    }
+
+    const message = validateSourceSupplyCage(f63.value, manufacturerDealer);
+    if (message) {
+      setInputRuleMessage(63, message);
+      return;
+    }
+
+    f63.classList.remove('missing-mandatory-field');
+    if (row63) row63.classList.remove('missing-mandatory');
+    clearInputRuleMessage(63);
+  }
+
+  function applyField64Rule() {
+    const f47 = document.querySelector('input[name="field_47"]');
+    const f64 = document.querySelector('input[name="field_64"]');
+    if (!f64) return;
+
+    const nsnPart = f47 ? (f47.value || '').trim().toUpperCase() : '';
+    const row64 = f64.closest('tr');
+
+    if (isField64BlankExempt()) {
+      f64.value = '';
+      f64.classList.remove('missing-mandatory-field');
+      if (row64) row64.classList.remove('missing-mandatory');
+      setInputRuleMessage(64, 'Must be blank because field 47 is not 0001S00000052 or 0001S00000053.');
+      return;
+    }
+
+    const message = validateFirstArticleWaiver(f64.value, nsnPart);
+    if (message) {
+      setInputRuleMessage(64, message);
+      return;
+    }
+
+    f64.classList.remove('missing-mandatory-field');
+    if (row64) row64.classList.remove('missing-mandatory');
+    clearInputRuleMessage(64);
+  }
+
+  function applyField67Rule() {
+    const f2 = document.querySelector('input[name="field_2"]');
+    const f24 = document.querySelector('input[name="field_24"]');
+    const f67 = document.querySelector('input[name="field_67"]');
+    if (!f67) return;
+
+    const solicitationType = f2 ? (f2.value || '').trim().toUpperCase() : '';
+    const materialRequirement = (f67.value || '').trim();
+    const bidType = f24 ? (f24.value || '').trim().toUpperCase() : '';
+    const row67 = f67.closest('tr');
+
+    if (solicitationType === 'I' && materialRequirement === '4') {
+      if (f24 && !['BW', 'AB'].includes(bidType)) {
+        f24.value = 'BW';
+      }
+      setInputRuleMessage(24, 'Set to BW because field 2 is I and field 67 is 4.');
+      setInputRuleMessage(67, 'Field 24 must be BW or AB because field 2 is I and field 67 is 4.');
+      f67.classList.remove('missing-mandatory-field');
+      if (row67) row67.classList.remove('missing-mandatory');
+      return;
+    }
+
+    const message = validateMaterialRequirements(materialRequirement, solicitationType, bidType);
+    if (message) {
+      setInputRuleMessage(67, message);
+      return;
+    }
+
+    f67.classList.remove('missing-mandatory-field');
+    if (row67) row67.classList.remove('missing-mandatory');
+    clearInputRuleMessage(67);
+  }
+
+  function applyField70Rule() {
+    const f62 = document.querySelector('input[name="field_62"]');
+    const f68 = document.querySelector('input[name="field_68"]');
+    const f69 = document.querySelector('input[name="field_69"]');
+    const f70 = document.querySelector('input[name="field_70"]');
+    if (!f70) return;
+
+    const message = validateEndProduct(
+      f70.value,
+      f62 ? f62.value : '',
+      f68 ? f68.value : '',
+      f69 ? f69.value : ''
+    );
+    if (message) {
+      setInputRuleMessage(70, message);
+      return;
+    }
+
+    f70.classList.remove('missing-mandatory-field');
+    const row70 = f70.closest('tr');
+    if (row70) row70.classList.remove('missing-mandatory');
+    clearInputRuleMessage(70);
+  }
+
+  function applyField71Rule() {
+    const f62 = document.querySelector('input[name="field_62"]');
+    const f68 = document.querySelector('input[name="field_68"]');
+    const f69 = document.querySelector('input[name="field_69"]');
+    const f70 = document.querySelector('input[name="field_70"]');
+    const f71 = document.querySelector('input[name="field_71"]');
+    if (!f71) return;
+
+    const endProduct = f70 ? (f70.value || '').trim().toUpperCase() : '';
+    const row71 = f71.closest('tr');
+
+    if (!['NQ', 'O', 'ND', 'US'].includes(endProduct)) {
+      f71.value = '';
+      f71.classList.remove('missing-mandatory-field');
+      if (row71) row71.classList.remove('missing-mandatory');
+      setInputRuleMessage(71, endProduct ? 'Must be blank because field 70 is not NQ, O, ND, or US.' : '');
+      return;
+    }
+
+    const message = validateCountryOrigin(
+      f71.value,
+      f62 ? f62.value : '',
+      f68 ? f68.value : '',
+      f69 ? f69.value : '',
+      f70 ? f70.value : ''
+    );
+    if (message) {
+      setInputRuleMessage(71, message);
+      return;
+    }
+
+    f71.classList.remove('missing-mandatory-field');
+    if (row71) row71.classList.remove('missing-mandatory');
+    clearInputRuleMessage(71);
+  }
+
+  function applyField34Rule() {
+    const f32 = document.querySelector('input[name="field_32"]');
+    const f34 = document.querySelector('input[name="field_34"]');
+    const f35 = document.querySelector('input[name="field_35"]');
+    if (!f32 || !f34 || !f35) return;
+
+    const fobPoint = (f32.value || '').trim().toUpperCase();
+    const fobState = (f34.value || '').trim().toUpperCase();
+    const fobCountry = (f35.value || '').trim().toUpperCase();
+    const usCodes = [
+      'AK', 'AL', 'AR', 'AS', 'AZ', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'FM',
+      'GA', 'GU', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD',
+      'ME', 'MH', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ',
+      'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'PR', 'PW', 'RI', 'SC', 'SD',
+      'TN', 'TX', 'UT', 'VA', 'VI', 'VT', 'WA', 'WV', 'WI', 'WY'
+    ];
+    const caCodes = ['AB', 'BC', 'MB', 'NB', 'NF', 'NS', 'NT', 'ON', 'PE', 'QC', 'SK', 'YT'];
+    const row34 = f34.closest('tr');
+
+    if (fobPoint === 'D') {
+      f34.value = '';
+      f34.classList.remove('missing-mandatory-field');
+      if (row34) row34.classList.remove('missing-mandatory');
+      setInputRuleMessage(34, 'Must be blank because field 32 is D.');
+      return;
+    }
+
+    if (!['US', 'CA'].includes(fobCountry)) {
+      f34.value = '';
+      f34.classList.remove('missing-mandatory-field');
+      if (row34) row34.classList.remove('missing-mandatory');
+      setInputRuleMessage(34, 'Must be blank because field 35 is not US or CA.');
+      return;
+    }
+
+    if (fobPoint === 'O') {
+      if (!fobState) {
+        setInputRuleMessage(34, 'Required because field 32 is O and field 35 is US or CA.');
+      } else if (fobState.length > 2) {
+        setInputRuleMessage(34, 'Cannot exceed 2 characters.');
+      } else if (fobCountry === 'US' && !usCodes.includes(fobState)) {
+        setInputRuleMessage(34, 'Must be a valid US state or territory code.');
+      } else if (fobCountry === 'CA' && !caCodes.includes(fobState)) {
+        setInputRuleMessage(34, 'Must be a valid Canadian province code.');
+      } else {
+        f34.classList.remove('missing-mandatory-field');
+        if (row34) row34.classList.remove('missing-mandatory');
+        clearInputRuleMessage(34);
+      }
+      return;
+    }
+
+    clearInputRuleMessage(34);
+  }
+
+  function applyAllDlaRules() {
+    applyField23Rule();
+    applyField18Rule();
+    applyField27Rule();
+    applyField28Rule();
+    applyField29Rule();
+    applyField33Rule();
+    applyField35Rule();
+    applyField34Rule();
+    applyField36Rule();
+    applyField37Rule();
+    applyField38Rule();
+    applyField49Rule();
+    applyField50Rule();
+    applyField64Rule();
+    applyField67Rule();
+    applyField51Rule();
+    applyField56Rule();
+    applyField58Rule();
+    applyField100Rule();
+    applyField59Rule();
+    applyField60Rule();
+    applyField63Rule();
+    applyField70Rule();
+    applyField71Rule();
+    applyField72Rule();
+    applyField73Rule();
+    applyField74Rule();
+    applyField75Rule();
+    applyField76Rule();
+    applyPriceBreakRules();
+    applyField96Rule();
+    applyField97Rule();
+    applyField98Rule();
+    applyField99Rule();
+    applyRows101116Rules();
+    applyRows118121Rules();
+    applyField104Rule();
+  }
+
+  // Run rules on load and after any preview field changes.
+  applyAllDlaRules();
+  enforceDlaRulesAjax();
+  document.querySelectorAll('.field-input').forEach(function(el) {
+    el.addEventListener('input', applyAllDlaRules);
+    el.addEventListener('change', function() {
+      applyAllDlaRules();
+      enforceDlaRulesAjax();
+    });
+    el.addEventListener('blur', function() {
+      applyAllDlaRules();
+      enforceDlaRulesAjax();
+    });
+  });
+  
+  // Function to validate mandatory fields and highlight missing ones
+  function validateMandatoryFields() {
+    applyAllDlaRules();
+
+    // Clear previous validation states
+    document.querySelectorAll('.missing-mandatory-field').forEach(function(input) {
+      input.classList.remove('missing-mandatory-field');
+    });
+    document.querySelectorAll('.missing-mandatory').forEach(function(row) {
+      row.classList.remove('missing-mandatory');
+    });
+    
+    // Find missing mandatory fields
+    const missingFields = [];
+    mandatoryPositions.forEach(function(position) {
+      const input = document.querySelector('input[name="field_' + position + '"]');
+      if (position === 72 && isField72BlankExempt()) return;
+      if ((position === 30 || position === 31) && isField29Nap()) return;
+      if (position === 33 && isField32Destination()) return;
+      if (position === 34 && isField34BlankExempt()) return;
+      if (position === 35 && isField35BlankExempt()) return;
+      if (position === 37 && isField36Destination()) return;
+      if (position === 38 && isField36Destination()) return;
+      if (position === 56 && isField56BlankExempt()) return;
+      if (position === 58 && isField58BlankExempt()) return;
+      if (position === 59 && isField59BlankExempt()) return;
+      if (position === 60 && isField60BlankExempt()) return;
+      if (position === 63 && isField63BlankExempt()) return;
+      if (position === 64 && isField64BlankExempt()) return;
+      if (input && (!input.value || !input.value.trim())) {
+        missingFields.push({
+          position: position,
+          input: input,
+          row: input.closest('tr')
+        });
+      }
+    });
+
+    const f29 = document.querySelector('input[name="field_29"]');
+    const f30 = document.querySelector('input[name="field_30"]');
+    const f31 = document.querySelector('input[name="field_31"]');
+    const boaCode = f29 ? (f29.value || '').trim().toUpperCase() : '';
+    if (['BOA', 'FSS', 'BPA'].includes(boaCode)) {
+      [
+        { position: 30, input: f30 },
+        { position: 31, input: f31 },
+      ].forEach(function(field) {
+        if (!field.input || (field.input.value || '').trim()) return;
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === field.position;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(field.position, 'Required because field 29 is BOA, FSS, or BPA.');
+          missingFields.push({
+            position: field.position,
+            input: field.input,
+            row: field.input.closest('tr')
+          });
+        }
+      });
+    }
+
+    if (f30 && (f30.value || '').trim().length > 17) {
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === 30;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(30, 'Cannot exceed 17 characters.');
+        missingFields.push({
+          position: 30,
+          input: f30,
+          row: f30.closest('tr')
+        });
+      }
+    }
+
+    if (f31 && (f31.value || '').trim() && !isValidMmDdYyyy(f31.value)) {
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === 31;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(31, 'Must be a valid date in MM/DD/YYYY format.');
+        missingFields.push({
+          position: 31,
+          input: f31,
+          row: f31.closest('tr')
+        });
+      }
+    }
+
+    const f32 = document.querySelector('input[name="field_32"]');
+    const f33 = document.querySelector('input[name="field_33"]');
+    const fobPoint = f32 ? (f32.value || '').trim().toUpperCase() : '';
+    const fobCity = f33 ? (f33.value || '').trim() : '';
+    if (fobPoint === 'O' && f33 && !fobCity) {
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === 33;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(33, 'Required because field 32 is O.');
+        missingFields.push({
+          position: 33,
+          input: f33,
+          row: f33.closest('tr')
+        });
+      }
+    }
+    if (f33 && fobCity.length > 30) {
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === 33;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(33, 'Cannot exceed 30 characters.');
+        missingFields.push({
+          position: 33,
+          input: f33,
+          row: f33.closest('tr')
+        });
+      }
+    }
+
+    const f35ForCountry = document.querySelector('input[name="field_35"]');
+    const fobCountryValue = f35ForCountry ? (f35ForCountry.value || '').trim().toUpperCase() : '';
+    const validCountryCodes = [
+      'AF', 'AL', 'DZ', 'AS', 'AD', 'AO', 'AI', 'AQ', 'AG', 'AR', 'AM', 'AW', 'AU', 'AT', 'AZ',
+      'BS', 'BH', 'BD', 'BB', 'BY', 'BE', 'BZ', 'BJ', 'BM', 'BT', 'BO', 'BQ', 'BA', 'BW', 'BV',
+      'BR', 'IO', 'BN', 'BG', 'BF', 'CV', 'KH', 'CM', 'BI', 'CA', 'KY', 'CF', 'TD', 'CL', 'CN',
+      'CX', 'CC', 'CO', 'KM', 'CG', 'CD', 'CK', 'CR', 'CI', 'HR', 'CU', 'CW', 'CY', 'CZ', 'DK',
+      'DJ', 'DM', 'DO', 'EC', 'EG', 'SV', 'GQ', 'ER', 'EE', 'SZ', 'ET', 'FK', 'FO', 'FJ', 'FI',
+      'FR', 'GF', 'PF', 'TF', 'GA', 'GM', 'GE', 'DE', 'GH', 'GI', 'GR', 'GL', 'GD', 'GP', 'GU',
+      'GT', 'GN', 'GW', 'GY', 'HT', 'HM', 'VA', 'HN', 'HK', 'HU', 'IS', 'IN', 'ID', 'IR', 'IQ',
+      'IE', 'IM', 'IL', 'IT', 'JM', 'JP', 'JO', 'KZ', 'KE', 'KI', 'KP', 'KR', 'XK', 'KW', 'KG',
+      'LA', 'LV', 'LB', 'LS', 'LR', 'LY', 'LI', 'LT', 'LU', 'NF', 'MO', 'MG', 'MW', 'MY', 'MV',
+      'ML', 'MT', 'MH', 'MQ', 'MR', 'MU', 'YT', 'MX', 'FM', 'MD', 'MC', 'MN', 'ME', 'MS', 'MA',
+      'MZ', 'MM', 'NA', 'NR', 'NP', 'NL', 'NC', 'NZ', 'NI', 'NE', 'NG', 'NU', 'MK', 'MP', 'NO',
+      'OM', 'PK', 'PW', 'PS', 'PA', 'PG', 'PY', 'PE', 'PH', 'PN', 'PL', 'PT', 'PR', 'QA', 'RE',
+      'RO', 'RU', 'RW', 'SH', 'LC', 'KN', 'MF', 'PM', 'VC', 'WS', 'SM', 'ST', 'SA', 'SN', 'RS',
+      'SC', 'SL', 'SG', 'SX', 'SK', 'SI', 'SB', 'SO', 'ZA', 'GS', 'SS', 'ES', 'LK', 'SD', 'SR',
+      'SJ', 'SE', 'CH', 'SY', 'TW', 'TJ', 'TZ', 'TH', 'TL', 'TG', 'TK', 'TT', 'TN', 'TO', 'TR',
+      'TM', 'TC', 'TV', 'UG', 'UA', 'AE', 'GB', 'US', 'UM', 'UY', 'UZ', 'VU', 'VE', 'VN', 'VI',
+      'VG', 'WF', 'EH', 'YE', 'ZM', 'ZW'
+    ];
+    if (fobPoint === 'O' && f35ForCountry) {
+      let message = '';
+      if (!fobCountryValue) {
+        message = 'Required because field 32 is O.';
+      } else if (fobCountryValue.length > 2) {
+        message = 'Cannot exceed 2 characters.';
+      } else if (!validCountryCodes.includes(fobCountryValue)) {
+        message = 'Must be a valid country code.';
+      }
+      if (message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 35;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(35, message);
+          missingFields.push({
+            position: 35,
+            input: f35ForCountry,
+            row: f35ForCountry.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f36 = document.querySelector('input[name="field_36"]');
+    const inspectionPoint = f36 ? (f36.value || '').trim().toUpperCase() : '';
+    if (f36 && inspectionPoint && !['D', 'O'].includes(inspectionPoint)) {
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === 36;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(36, 'Must be D or O.');
+        missingFields.push({
+          position: 36,
+          input: f36,
+          row: f36.closest('tr')
+        });
+      }
+    }
+
+    const f37 = document.querySelector('input[name="field_37"]');
+    const packagingCage = f37 ? (f37.value || '').trim() : '';
+    if (inspectionPoint === 'O' && f37) {
+      let message = '';
+      if (!packagingCage) {
+        message = 'Required because field 36 is O.';
+      } else if (packagingCage.length > 5) {
+        message = 'Cannot exceed 5 characters.';
+      }
+      if (message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 37;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(37, message);
+          missingFields.push({
+            position: 37,
+            input: f37,
+            row: f37.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f38 = document.querySelector('input[name="field_38"]');
+    const suppliesCage = f38 ? (f38.value || '').trim() : '';
+    if (inspectionPoint === 'O' && f38) {
+      let message = '';
+      if (!suppliesCage) {
+        message = 'Required because field 36 is O.';
+      } else if (suppliesCage.length > 5) {
+        message = 'Cannot exceed 5 characters.';
+      }
+      if (message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 38;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(38, message);
+          missingFields.push({
+            position: 38,
+            input: f38,
+            row: f38.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f2ForQuantity = document.querySelector('input[name="field_2"]');
+    const f24ForQuantity = document.querySelector('input[name="field_24"]');
+    const f47ForQuantity = document.querySelector('input[name="field_47"]');
+    const f49 = document.querySelector('input[name="field_49"]');
+    if (f49) {
+      const solicitationTypeForQuantity = f2ForQuantity ? (f2ForQuantity.value || '').trim().toUpperCase() : '';
+      const bidTypeForQuantity = f24ForQuantity ? (f24ForQuantity.value || '').trim().toUpperCase() : '';
+      const nsnPartForQuantity = f47ForQuantity ? (f47ForQuantity.value || '').trim().toUpperCase() : '';
+      const quotedQuantity = (f49.value || '').trim();
+      const requirementQuantity = (f49.dataset.requirement || '').trim();
+      const quantityNumber = parseQuantity(quotedQuantity);
+      const prohibitedQuantityParts = ['0001S00000052', '0001S00000053'];
+      let message = '';
+
+      if (quotedQuantity && quotedQuantity.length > 10) {
+        message = 'Cannot exceed 10 characters.';
+      } else if (quotedQuantity && quantityNumber === 0 && bidTypeForQuantity !== 'DQ') {
+        message = 'Field 24 must be DQ when field 49 is zero.';
+      } else if (quotedQuantity && requirementQuantity && !quantitiesMatch(quotedQuantity, requirementQuantity)) {
+        if (solicitationTypeForQuantity === 'I') {
+          message = 'Must match the estimated RFQ quantity because field 2 is I.';
+        } else if (prohibitedQuantityParts.includes(nsnPartForQuantity)) {
+          message = 'Quantity cannot differ from the RFQ requirement for this NSN/Part Number.';
+        } else if (!['BW', 'AB'].includes(bidTypeForQuantity)) {
+          message = 'Field 24 must be BW or AB when field 49 differs from the RFQ requirement.';
+        }
+      }
+
+      if (message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 49;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(49, message);
+          missingFields.push({
+            position: 49,
+            input: f49,
+            row: f49.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f50 = document.querySelector('input[name="field_50"]');
+    if (f50) {
+      const unitPriceMessage = validateUnitPrice(f50.value);
+      if (unitPriceMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 50;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(50, unitPriceMessage);
+          missingFields.push({
+            position: 50,
+            input: f50,
+            row: f50.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f1ForDelivery = document.querySelector('input[name="field_1"]');
+    const f24ForDelivery = document.querySelector('input[name="field_24"]');
+    const f47ForDelivery = document.querySelector('input[name="field_47"]');
+    const f51 = document.querySelector('input[name="field_51"]');
+    const f64ForDelivery = document.querySelector('input[name="field_64"]');
+    if (f51) {
+      const deliveryDays = (f51.value || '').trim();
+      const unitPriceValue = parseQuantity(f50 ? f50.value : '');
+      const daysValue = /^\d+$/.test(deliveryDays) ? parseInt(deliveryDays, 10) : null;
+      const nsnPartForDelivery = f47ForDelivery ? (f47ForDelivery.value || '').trim().toUpperCase() : '';
+      const bidTypeForDelivery = f24ForDelivery ? (f24ForDelivery.value || '').trim().toUpperCase() : '';
+      const waiverCodeForDelivery = f64ForDelivery ? (f64ForDelivery.value || '').trim().toUpperCase() : '';
+      const specialDeliveryParts = ['0001S00000052', '0001S00000053'];
+      let deliveryMessage = validateDeliveryDays(deliveryDays, f1ForDelivery ? f1ForDelivery.value : '');
+
+      if (!deliveryMessage && waiverCodeForDelivery === 'N' && daysValue === 0) {
+        deliveryMessage = 'Cannot be zero when field 64 is N.';
+      } else if (
+        !deliveryMessage &&
+        unitPriceValue === 0 &&
+        daysValue === 0 &&
+        specialDeliveryParts.includes(nsnPartForDelivery) &&
+        !['BW', 'AB'].includes(bidTypeForDelivery)
+      ) {
+        deliveryMessage = 'Field 24 must be BW or AB when fields 50 and 51 are zero for this NSN/Part Number.';
+      }
+
+      if (deliveryMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 51;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(51, deliveryMessage);
+          missingFields.push({
+            position: 51,
+            input: f51,
+            row: f51.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f2ForNoDoMinimum = document.querySelector('input[name="field_2"]');
+    const f56 = document.querySelector('input[name="field_56"]');
+    if (f56) {
+      const noDoMinimumMessage = validateNoDoMinimum(
+        f56.value,
+        f2ForNoDoMinimum ? f2ForNoDoMinimum.value : ''
+      );
+      if (noDoMinimumMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 56;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(56, noDoMinimumMessage);
+          missingFields.push({
+            position: 56,
+            input: f56,
+            row: f56.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f13ForHubzone = document.querySelector('input[name="field_13"]');
+    const f57 = document.querySelector('input[name="field_57"]');
+    const f58 = document.querySelector('input[name="field_58"]');
+    if (f58) {
+      const hubzoneWaiverMessage = validateHubzoneWaiver(
+        f58.value,
+        f57 ? f57.value : '',
+        f13ForHubzone ? f13ForHubzone.value : ''
+      );
+      if (hubzoneWaiverMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 58;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(58, hubzoneWaiverMessage);
+          missingFields.push({
+            position: 58,
+            input: f58,
+            row: f58.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f59 = document.querySelector('input[name="field_59"]');
+    const f100 = document.querySelector('input[name="field_100"]');
+    const f2ForImmediateShipment = document.querySelector('input[name="field_2"]');
+    if (f100) {
+      const immediateShipmentAvailableMessage = validateImmediateShipmentAvailable(
+        f100.value,
+        f2ForImmediateShipment ? f2ForImmediateShipment.value : ''
+      );
+      if (immediateShipmentAvailableMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 100;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(100, immediateShipmentAvailableMessage);
+          missingFields.push({
+            position: 100,
+            input: f100,
+            row: f100.closest('tr')
+          });
+        }
+      }
+    }
+    if (f59) {
+      const immediatePriceMessage = validateImmediateShipmentPrice(
+        f59.value,
+        f100 ? f100.value : ''
+      );
+      if (immediatePriceMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 59;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(59, immediatePriceMessage);
+          missingFields.push({
+            position: 59,
+            input: f59,
+            row: f59.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f60 = document.querySelector('input[name="field_60"]');
+    if (f60) {
+      const immediateDeliveryMessage = validateImmediateShipmentDelivery(
+        f60.value,
+        f100 ? f100.value : ''
+      );
+      if (immediateDeliveryMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 60;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(60, immediateDeliveryMessage);
+          missingFields.push({
+            position: 60,
+            input: f60,
+            row: f60.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f23 = document.querySelector('input[name="field_23"]');
+    if (f23) {
+      const row23Message = validateAlternateDisputesResolution(f23.value);
+      if (row23Message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 23;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(23, row23Message);
+          missingFields.push({
+            position: 23,
+            input: f23,
+            row: f23.closest('tr')
+          });
+        }
+      }
+    }
+
+    collectRows101116Errors().forEach(function(error) {
+      const input = document.querySelector('input[name="field_' + error.position + '"]');
+      if (!input) return;
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === error.position;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(error.position, error.message);
+        missingFields.push({
+          position: error.position,
+          input: input,
+          row: input.closest('tr')
+        });
+      }
+    });
+
+    collectRows118121Errors().forEach(function(error) {
+      const input = document.querySelector('input[name="field_' + error.position + '"]');
+      if (!input) return;
+      const alreadyMissing = missingFields.some(function(item) {
+        return item.position === error.position;
+      });
+      if (!alreadyMissing) {
+        setInputRuleMessage(error.position, error.message);
+        missingFields.push({
+          position: error.position,
+          input: input,
+          row: input.closest('tr')
+        });
+      }
+    });
+
+    const f63 = document.querySelector('input[name="field_63"]');
+    const f102ForSourceSupply = document.querySelector('input[name="field_102"]');
+    if (f63) {
+      const sourceSupplyCageMessage = validateSourceSupplyCage(
+        f63.value,
+        f102ForSourceSupply ? f102ForSourceSupply.value : ''
+      );
+      if (sourceSupplyCageMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 63;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(63, sourceSupplyCageMessage);
+          missingFields.push({
+            position: 63,
+            input: f63,
+            row: f63.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f64 = document.querySelector('input[name="field_64"]');
+    const f47ForFirstArticle = document.querySelector('input[name="field_47"]');
+    if (f64) {
+      const firstArticleWaiverMessage = validateFirstArticleWaiver(
+        f64.value,
+        f47ForFirstArticle ? f47ForFirstArticle.value : ''
+      );
+      if (firstArticleWaiverMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 64;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(64, firstArticleWaiverMessage);
+          missingFields.push({
+            position: 64,
+            input: f64,
+            row: f64.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f67 = document.querySelector('input[name="field_67"]');
+    const f2ForMaterial = document.querySelector('input[name="field_2"]');
+    const f24ForMaterial = document.querySelector('input[name="field_24"]');
+    if (f67) {
+      const materialRequirementMessage = validateMaterialRequirements(
+        f67.value,
+        f2ForMaterial ? f2ForMaterial.value : '',
+        f24ForMaterial ? f24ForMaterial.value : ''
+      );
+      if (materialRequirementMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 67;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(67, materialRequirementMessage);
+          missingFields.push({
+            position: 67,
+            input: f67,
+            row: f67.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f70ForEndProduct = document.querySelector('input[name="field_70"]');
+    const f62ForEndProduct = document.querySelector('input[name="field_62"]');
+    const f68ForEndProduct = document.querySelector('input[name="field_68"]');
+    const f69ForEndProduct = document.querySelector('input[name="field_69"]');
+    if (f70ForEndProduct) {
+      const endProductMessage = validateEndProduct(
+        f70ForEndProduct.value,
+        f62ForEndProduct ? f62ForEndProduct.value : '',
+        f68ForEndProduct ? f68ForEndProduct.value : '',
+        f69ForEndProduct ? f69ForEndProduct.value : ''
+      );
+      if (endProductMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 70;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(70, endProductMessage);
+          missingFields.push({
+            position: 70,
+            input: f70ForEndProduct,
+            row: f70ForEndProduct.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f71ForCountryOrigin = document.querySelector('input[name="field_71"]');
+    if (f71ForCountryOrigin) {
+      const countryOriginMessage = validateCountryOrigin(
+        f71ForCountryOrigin.value,
+        f62ForEndProduct ? f62ForEndProduct.value : '',
+        f68ForEndProduct ? f68ForEndProduct.value : '',
+        f69ForEndProduct ? f69ForEndProduct.value : '',
+        f70ForEndProduct ? f70ForEndProduct.value : ''
+      );
+      if (countryOriginMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 71;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(71, countryOriginMessage);
+          missingFields.push({
+            position: 71,
+            input: f71ForCountryOrigin,
+            row: f71ForCountryOrigin.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f72ForCountryCode = document.querySelector('input[name="field_72"]');
+    if (f72ForCountryCode) {
+      const countryCode72Message = validateCountryCode72(
+        f72ForCountryCode.value,
+        f70ForEndProduct ? f70ForEndProduct.value : ''
+      );
+      if (countryCode72Message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 72;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(72, countryCode72Message);
+          missingFields.push({
+            position: 72,
+            input: f72ForCountryCode,
+            row: f72ForCountryCode.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f73ForDutyFree = document.querySelector('input[name="field_73"]');
+    if (f73ForDutyFree) {
+      const dutyFreeEntryMessage = validateDutyFreeEntry(
+        f73ForDutyFree.value,
+        f68ForEndProduct ? f68ForEndProduct.value : ''
+      );
+      if (dutyFreeEntryMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 73;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(73, dutyFreeEntryMessage);
+          missingFields.push({
+            position: 73,
+            input: f73ForDutyFree,
+            row: f73ForDutyFree.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f74ForForeignSupplies = document.querySelector('input[name="field_74"]');
+    if (f74ForForeignSupplies) {
+      const foreignSuppliesMessage = validateForeignSupplies(
+        f74ForForeignSupplies.value,
+        f68ForEndProduct ? f68ForEndProduct.value : '',
+        f73ForDutyFree ? f73ForDutyFree.value : ''
+      );
+      if (foreignSuppliesMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 74;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(74, foreignSuppliesMessage);
+          missingFields.push({
+            position: 74,
+            input: f74ForForeignSupplies,
+            row: f74ForForeignSupplies.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f75ForDutyPaid = document.querySelector('input[name="field_75"]');
+    if (f75ForDutyPaid) {
+      const dutyPaidMessage = validateDutyPaid(
+        f75ForDutyPaid.value,
+        f68ForEndProduct ? f68ForEndProduct.value : '',
+        f74ForForeignSupplies ? f74ForForeignSupplies.value : ''
+      );
+      if (dutyPaidMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 75;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(75, dutyPaidMessage);
+          missingFields.push({
+            position: 75,
+            input: f75ForDutyPaid,
+            row: f75ForDutyPaid.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f76ForDutyAmount = document.querySelector('input[name="field_76"]');
+    if (f76ForDutyAmount) {
+      const dutyAmountMessage = validateDutyPaidAmount(
+        f76ForDutyAmount.value,
+        f68ForEndProduct ? f68ForEndProduct.value : '',
+        f75ForDutyPaid ? f75ForDutyPaid.value : ''
+      );
+      if (dutyAmountMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 76;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(76, dutyAmountMessage);
+          missingFields.push({
+            position: 76,
+            input: f76ForDutyAmount,
+            row: f76ForDutyAmount.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f2ForPriceBreaks = document.querySelector('input[name="field_2"]');
+    const priceBreakValues = {};
+    priceBreakValues[2] = f2ForPriceBreaks ? f2ForPriceBreaks.value : '';
+    for (let position = 78; position <= 95; position++) {
+      const input = document.querySelector('input[name="field_' + position + '"]');
+      priceBreakValues[position] = input ? input.value : '';
+    }
+    for (let position = 78; position <= 95; position++) {
+      const input = document.querySelector('input[name="field_' + position + '"]');
+      if (!input) continue;
+      let message = validatePriceBreakField(position, priceBreakValues);
+      const offset = position - 78;
+      const rangeIndex = Math.floor(offset / 3);
+      const slot = offset % 3;
+      if (!message && slot === 1) {
+        const lower = parseQuantity(priceBreakValues[position - 1]);
+        const upper = parseQuantity(priceBreakValues[position]);
+        if (lower !== null && upper !== null && lower > upper) {
+          message = 'Must be greater than or equal to the lower quantity.';
+        }
+      }
+      if (!message && slot === 0 && rangeIndex > 0) {
+        const prevUpper = parseQuantity(priceBreakValues[position - 2]);
+        const lower = parseQuantity(priceBreakValues[position]);
+        if (prevUpper !== null && lower !== null && lower !== prevUpper + 1) {
+          message = 'Must equal the previous upper quantity plus 1.';
+        }
+      }
+      if (message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === position;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(position, message);
+          missingFields.push({
+            position: position,
+            input: input,
+            row: input.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f96ForQuantityVariancePlus = document.querySelector('input[name="field_96"]');
+    if (f96ForQuantityVariancePlus) {
+      const quantityVariancePlusMessage = validateQuantityVariancePlus(f96ForQuantityVariancePlus.value);
+      if (quantityVariancePlusMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 96;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(96, quantityVariancePlusMessage);
+          missingFields.push({
+            position: 96,
+            input: f96ForQuantityVariancePlus,
+            row: f96ForQuantityVariancePlus.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f97ForQuantityVarianceMinus = document.querySelector('input[name="field_97"]');
+    if (f97ForQuantityVarianceMinus) {
+      const quantityVarianceMinusMessage = validateQuantityVarianceMinus(f97ForQuantityVarianceMinus.value);
+      if (quantityVarianceMinusMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 97;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(97, quantityVarianceMinusMessage);
+          missingFields.push({
+            position: 97,
+            input: f97ForQuantityVarianceMinus,
+            row: f97ForQuantityVarianceMinus.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f98ForMinimumOrderQuantityCode = document.querySelector('input[name="field_98"]');
+    if (f98ForMinimumOrderQuantityCode) {
+      const minimumOrderQuantityCodeMessage = validateMinimumOrderQuantityCode(
+        f98ForMinimumOrderQuantityCode.value,
+        f2ForPriceBreaks ? f2ForPriceBreaks.value : ''
+      );
+      if (minimumOrderQuantityCodeMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 98;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(98, minimumOrderQuantityCodeMessage);
+          missingFields.push({
+            position: 98,
+            input: f98ForMinimumOrderQuantityCode,
+            row: f98ForMinimumOrderQuantityCode.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f99ForMinimumOrderMaximumQuantity = document.querySelector('input[name="field_99"]');
+    if (f99ForMinimumOrderMaximumQuantity) {
+      const minimumOrderMaximumQuantityMessage = validateMinimumOrderMaximumQuantity(
+        f99ForMinimumOrderMaximumQuantity.value,
+        f98ForMinimumOrderQuantityCode ? f98ForMinimumOrderQuantityCode.value : ''
+      );
+      if (minimumOrderMaximumQuantityMessage) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 99;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(99, minimumOrderMaximumQuantityMessage);
+          missingFields.push({
+            position: 99,
+            input: f99ForMinimumOrderMaximumQuantity,
+            row: f99ForMinimumOrderMaximumQuantity.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f34 = document.querySelector('input[name="field_34"]');
+    const f35 = document.querySelector('input[name="field_35"]');
+    const fobState = f34 ? (f34.value || '').trim().toUpperCase() : '';
+    const fobCountryForState = f35 ? (f35.value || '').trim().toUpperCase() : '';
+    const usStateCodes = [
+      'AK', 'AL', 'AR', 'AS', 'AZ', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'FM',
+      'GA', 'GU', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD',
+      'ME', 'MH', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ',
+      'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'PR', 'PW', 'RI', 'SC', 'SD',
+      'TN', 'TX', 'UT', 'VA', 'VI', 'VT', 'WA', 'WV', 'WI', 'WY'
+    ];
+    const caProvinceCodes = ['AB', 'BC', 'MB', 'NB', 'NF', 'NS', 'NT', 'ON', 'PE', 'QC', 'SK', 'YT'];
+    if (fobPoint === 'O' && ['US', 'CA'].includes(fobCountryForState) && f34) {
+      let message = '';
+      if (!fobState) {
+        message = 'Required because field 32 is O and field 35 is US or CA.';
+      } else if (fobState.length > 2) {
+        message = 'Cannot exceed 2 characters.';
+      } else if (fobCountryForState === 'US' && !usStateCodes.includes(fobState)) {
+        message = 'Must be a valid US state or territory code.';
+      } else if (fobCountryForState === 'CA' && !caProvinceCodes.includes(fobState)) {
+        message = 'Must be a valid Canadian province code.';
+      }
+      if (message) {
+        const alreadyMissing = missingFields.some(function(item) {
+          return item.position === 34;
+        });
+        if (!alreadyMissing) {
+          setInputRuleMessage(34, message);
+          missingFields.push({
+            position: 34,
+            input: f34,
+            row: f34.closest('tr')
+          });
+        }
+      }
+    }
+
+    const f102 = document.querySelector('input[name="field_102"]');
+    const f103 = document.querySelector('input[name="field_103"]');
+    const f104 = document.querySelector('input[name="field_104"]');
+    const manufacturerDealer = f102 ? (f102.value || '').trim().toUpperCase() : '';
+    const sourceCage = f103 ? (f103.value || '').trim() : '';
+    const sourceNameAddress = f104 ? (f104.value || '').trim() : '';
+    if ((manufacturerDealer === 'DD' || manufacturerDealer === 'QD') && !sourceCage && !sourceNameAddress && f104) {
+      missingFields.push({
+        position: 104,
+        input: f104,
+        row: f104.closest('tr')
+      });
+    }
+
+    const f18 = document.querySelector('input[name="field_18"]');
+    const f19 = document.querySelector('input[name="field_19"]');
+    const jointVenture = f18 ? (f18.value || '').trim().toUpperCase() : '';
+    const jointVentureRemarks = f19 ? (f19.value || '').trim() : '';
+    if (jointVenture === 'JV' && !jointVentureRemarks && f19) {
+      clearInputRuleMessage(19);
+      missingFields.push({
+        position: 19,
+        input: f19,
+        row: f19.closest('tr')
+      });
+    }
+    
+    // If there are missing mandatory fields, highlight them and scroll to first one
+    if (missingFields.length > 0) {
+      // Add red border class to all missing mandatory fields
+      missingFields.forEach(function(field) {
+        field.input.classList.add('missing-mandatory-field');
+        if (field.row) {
+          field.row.classList.add('missing-mandatory');
+        }
+      });
+      
+      // Scroll to first missing mandatory field
+      const firstMissingField = missingFields[0];
+      if (firstMissingField.input) {
+        // Scroll the container to show the field
+        const scrollContainer = firstMissingField.input.closest('div[style*="overflow-y"]');
+        if (scrollContainer) {
+          // Calculate position relative to container
+          const containerTop = scrollContainer.getBoundingClientRect().top;
+          const fieldTop = firstMissingField.input.getBoundingClientRect().top;
+          const scrollPosition = scrollContainer.scrollTop + (fieldTop - containerTop) - 100; // 100px offset from top
+          
+          scrollContainer.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth'
+          });
+        } else {
+          // Fallback: scroll the field into view
+          firstMissingField.input.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          });
+        }
+        
+        // Focus the input after a short delay to ensure scroll completes
+        setTimeout(function() {
+          firstMissingField.input.focus();
+        }, 500);
+      }
+      
+      return false; // Validation failed
+    }
+    
+    return true; // Validation passed
+  }
+  
+  // Flag to track if validation was already performed (to avoid double validation)
+  let validationAlreadyPerformed = false;
+  
+  // Validate on form submit (for Save & Export and Save & Continue buttons)
+  form.addEventListener('submit', function(e) {
+    // Skip validation if it was already performed (e.g., via Next button)
+    if (validationAlreadyPerformed) {
+      validationAlreadyPerformed = false; // Reset flag
+      return true; // Allow form submission
+    }
+    
+    // Check if it's a save and export or save and continue button
+    const submitButton = document.activeElement;
+    const isSaveAndExport = submitButton && (
+      submitButton.name === 'save_and_export' || 
+      submitButton.name === 'save_and_continue'
+    );
+    
+    // Highlight missing mandatory fields for user awareness, but do not block submission.
+    // DIBBS may reject batches with empty mandatory fields; that is the user's call.
+    if (isSaveAndExport) {
+      validateMandatoryFields();
+    }
+  });
+  
+  // Handle Next button click with validation
+  const nextButton = document.getElementById('nextButton');
+  if (nextButton) {
+    nextButton.addEventListener('click', function(e) {
+      e.preventDefault();
+      
+      // Highlight missing fields for awareness, but do not block navigation.
+      validateMandatoryFields();
+
+      // Trigger the save_and_continue button to save and navigate
+      const saveAndContinueBtn = document.querySelector('button[name="save_and_continue"]');
+      if (saveAndContinueBtn) {
+        // Set flag to skip validation on form submit since we already validated
+        validationAlreadyPerformed = true;
+        
+        // Click the save_and_continue button which will save and navigate
+        saveAndContinueBtn.click();
+      } else {
+        // Fallback: if save_and_continue button doesn't exist, just navigate
+        // (This shouldn't happen in batch mode, but just in case)
+        window.location.href = nextButton.getAttribute('data-next-url');
+      }
+    });
+  }
+  
+  // Remove red border when user starts typing in a mandatory field
+  document.querySelectorAll('input.field-input[data-mandatory="true"]').forEach(function(input) {
+    input.addEventListener('input', function() {
+      if (this.value && this.value.trim()) {
+        this.classList.remove('missing-mandatory-field');
+        const row = this.closest('tr');
+        if (row) {
+          row.classList.remove('missing-mandatory');
+        }
+      }
+    });
+  });
+
+  applyField104Rule();
+  ['field_102', 'field_103', 'field_104'].forEach(function(name) {
+    const el = document.querySelector('input[name="' + name + '"]');
+    if (el) el.addEventListener('input', function() {
+      applyField104Rule();
+      if (this.value && this.value.trim()) {
+        this.classList.remove('missing-mandatory-field');
+        const row = this.closest('tr');
+        if (row) row.classList.remove('missing-mandatory');
+      }
+    });
+    if (el) el.addEventListener('blur', applyField104Rule);
+  });
+});
+</script>
+
+{% endblock %}
+
+

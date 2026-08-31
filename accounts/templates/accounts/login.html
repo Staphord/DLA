@@ -1,0 +1,67 @@
+{% extends 'accounts/baseaccount.html' %}
+{% load static %}
+
+{% block content %}
+<div class="auth-wrapper">
+
+  <div class="text-center mb-4">
+    <div class="auth-logo mb-1">RFQSYS</div>
+    <div class="auth-subtitle">Sign in to your account</div>
+  </div>
+
+  <div class="card auth-card">
+    <div class="card-body p-4">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="mb-3">
+          <label for="username" class="form-label fw-semibold small">Username</label>
+          <input type="text" class="form-control{% if login_error %} is-invalid{% endif %}"
+                 name="username" id="username" value="{{ username|default:'' }}" autocomplete="username">
+        </div>
+
+        <div class="mb-3">
+          <label for="password" class="form-label fw-semibold small">Password</label>
+          <div class="input-group">
+            <input type="password" class="form-control{% if login_error %} is-invalid{% endif %}"
+                   name="password" id="password" autocomplete="current-password">
+            <button class="btn btn-outline-secondary password-toggle-btn" type="button">
+              <i class="bi bi-eye"></i>
+            </button>
+          </div>
+          {% if login_error %}
+          <div class="text-danger small mt-1">Incorrect username or password.</div>
+          {% endif %}
+        </div>
+
+        <div class="d-flex justify-content-end mb-3">
+          <a href="{% url 'password_reset' %}" class="small text-muted">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn mybg hoverbg text-white w-100">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const btn = document.querySelector('.password-toggle-btn');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      const input = document.getElementById('password');
+      const icon = this.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('bi-eye', 'bi-eye-slash');
+      } else {
+        input.type = 'password';
+        icon.classList.replace('bi-eye-slash', 'bi-eye');
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

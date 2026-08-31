@@ -1,0 +1,953 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="py-4">
+    <div class="container-fluid">
+        <!-- Pre-built Templates Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-gradient"
+                        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h5 class="mb-0 text-white"><i class="bi bi-palette-fill me-2"></i>Choose a Pre-built Template
+                        </h5>
+                        <p class="mb-0 text-white-50 small">Select a template to get started, then customize it to your
+                            needs</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2" id="templatePresets">
+                            {% for preset_key, preset in template_presets.items %}
+                            <div class="col-md-4 col-lg-2-4">
+                                <div class="template-card card h-100 border-2 template-preset-card"
+                                    data-preset="{{ preset_key }}" style="cursor: pointer; transition: all 0.3s ease;">
+                                    <div class="card-body text-center p-2">
+                                        <div class="template-icon mb-1" style="font-size: 1.8rem; padding-top: 1rem;">
+                                            <i class="{{ preset.icon }}"></i>
+                                        </div>
+                                        <h6 class="card-title mb-1" style="font-size: 0.9rem;">{{ preset.name }}</h6>
+                                        <p class="card-text small text-muted mb-2"
+                                            style="font-size: 0.7rem; line-height: 1.2;">{{ preset.description }}</p>
+                                        <button class="btn btn-sm btn-outline-primary apply-template-btn"
+                                            data-preset="{{ preset_key }}"
+                                            style="width: 100%; font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                                            <i class="bi bi-check-circle me-1"></i>Apply
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Configuration Panel -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="bi bi-palette"></i></h5>
+                    </div>
+                    <div class="card-body" style="max-height: calc(100vh); overflow-y: auto;">
+                        <form method="post" id="templateConfigForm">
+                            {% csrf_token %}
+
+                            <!-- Messages -->
+                            {% if messages %}
+                            {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show mt-1" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+
+                            <!-- Layout Selection Section -->
+                            <div class="mb-4">
+                                <label class="form-label small fw-bold">Choose Layout Style</label>
+                                {{ form.layout_style }}
+                            </div>
+
+                            <!-- Styling Section -->
+                            <div class="mb-4">
+                                <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-palette me-2"></i>Styling</h6>
+
+                                <!-- Colors -->
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label small">Primary Text</label>
+                                        <div class="input-group">
+                                            {{ form.primary_text_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="primary_text_color_hex" value="{{ form.primary_text_color.value }}"
+                                                readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Secondary Text</label>
+                                        <div class="input-group">
+                                            {{ form.secondary_text_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="secondary_text_color_hex"
+                                                value="{{ form.secondary_text_color.value }}" readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Background</label>
+                                        <div class="input-group">
+                                            {{ form.background_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="background_color_hex" value="{{ form.background_color.value }}"
+                                                readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Border</label>
+                                        <div class="input-group">
+                                            {{ form.border_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="border_color_hex" value="{{ form.border_color.value }}" readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Link Color</label>
+                                        <div class="input-group">
+                                            {{ form.link_color }}
+                                            <input type="text" class="form-control form-control-sm" id="link_color_hex"
+                                                value="{{ form.link_color.value }}" readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Header BG</label>
+                                        <div class="input-group">
+                                            {{ form.header_bg_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="header_bg_color_hex" value="{{ form.header_bg_color.value }}"
+                                                readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Header Text</label>
+                                        <div class="input-group">
+                                            {{ form.header_text_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="header_text_color_hex" value="{{ form.header_text_color.value }}"
+                                                readonly>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Banner BG</label>
+                                        <div class="input-group">
+                                            {{ form.banner_bg_color }}
+                                            <input type="text" class="form-control form-control-sm"
+                                                id="banner_bg_color_hex" value="{{ form.banner_bg_color.value }}"
+                                                readonly>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Fonts -->
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label small">Font Family</label>
+                                        {{ form.font_family }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Font Size</label>
+                                        {{ form.font_size }}
+                                    </div>
+                                </div>
+
+                                <!-- Spacing -->
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label small">Padding</label>
+                                        {{ form.padding }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Margin</label>
+                                        {{ form.margin }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Cell Padding</label>
+                                        {{ form.table_cell_padding }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Cell Spacing</label>
+                                        {{ form.table_cell_spacing }}
+                                    </div>
+                                </div>
+
+                                <!-- Table Styling -->
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label small">Border Width</label>
+                                        {{ form.table_border_width }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Border Style</label>
+                                        {{ form.table_border_style }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Table Width</label>
+                                        {{ form.table_width }}
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small">Logo width (px)</label>
+                                        {{ form.logo_width }}
+                                        <small class="text-muted">Default: 120.</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Field Visibility Section -->
+                            <div class="mb-4">
+                                <h6 class="border-bottom pb-2 mb-3"><i class="bi bi-eye me-2"></i>Field Visibility</h6>
+
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_resale_notice }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_resale_notice.id_for_label }}">
+                                                Resale Notice
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_date }}
+                                            <label class="form-check-label" for="{{ form.show_date.id_for_label }}">
+                                                Date (Field 1)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_our_ref }}
+                                            <label class="form-check-label" for="{{ form.show_our_ref.id_for_label }}">
+                                                Our Reference (Field 2)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_to_company }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_to_company.id_for_label }}">
+                                                To/Company (Field 3)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_cage_code }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_cage_code.id_for_label }}">
+                                                CAGE Code (Field 4)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_phone }}
+                                            <label class="form-check-label" for="{{ form.show_phone.id_for_label }}">
+                                                Phone (Field 5)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_fax }}
+                                            <label class="form-check-label" for="{{ form.show_fax.id_for_label }}">
+                                                Fax (Field 6)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_oem_email }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_oem_email.id_for_label }}">
+                                                OEM Email (Field 7)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_items_table }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_items_table.id_for_label }}">
+                                                Items Table
+                                            </label>
+                                        </div>
+                                    </div>
+                    
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_index }}<label class="form-check-label small" for="{{ form.show_items_col_index.id_for_label }}">#</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_nsn }}<label class="form-check-label small" for="{{ form.show_items_col_nsn.id_for_label }}">NSN</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_nomen }}<label class="form-check-label small" for="{{ form.show_items_col_nomen.id_for_label }}">Nomen</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_part_no }}<label class="form-check-label small" for="{{ form.show_items_col_part_no.id_for_label }}">Part#</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_solicitation_no }}<label class="form-check-label small" for="{{ form.show_items_col_solicitation_no.id_for_label }}">Solicitation#</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_qty_unit }}<label class="form-check-label small" for="{{ form.show_items_col_qty_unit.id_for_label }}">Qty/Unit</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_unit_price }}<label class="form-check-label small" for="{{ form.show_items_col_unit_price.id_for_label }}">Unit Price</label></div></div>
+                                    <div class="col-12"><div class="form-check form-switch">{{ form.show_items_col_total_price }}<label class="form-check-label small" for="{{ form.show_items_col_total_price.id_for_label }}">Total Price</label></div></div>
+                                        
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_technical_drawing }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_technical_drawing.id_for_label }}">
+                                                Technical Drawing (Field 8)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_moq }}
+                                            <label class="form-check-label" for="{{ form.show_moq.id_for_label }}">
+                                                MOQ (Field 9)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_quote_valid_days }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_quote_valid_days.id_for_label }}">
+                                                Quote Valid Days (Field 10)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_inspection_point }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_inspection_point.id_for_label }}">
+                                                Inspection Point (Field 11)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_shipping_cost }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_shipping_cost.id_for_label }}">
+                                                Shipping Cost (Field 12)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_terms }}
+                                            <label class="form-check-label" for="{{ form.show_terms.id_for_label }}">
+                                                Terms (Field 13)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_shipping_dimensions }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_shipping_dimensions.id_for_label }}">
+                                                Shipping Dimensions (Field 14)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_delivery_days }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_delivery_days.id_for_label }}">
+                                                Delivery Days (Field 15)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_country_of_origin }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_country_of_origin.id_for_label }}">
+                                                Country of Origin (Field 16)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_iso_certification }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_iso_certification.id_for_label }}">
+                                                ISO Certification (Field 17)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_quoted_by }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_quoted_by.id_for_label }}">
+                                                Quoted By (Field 18)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_quote_date }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_quote_date.id_for_label }}">
+                                                Quote Date (Field 19)
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_return_by_date_note }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_return_by_date_note.id_for_label }}">
+                                                Return By Date Note
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_signature_section }}
+                                            <label class="form-check-label"
+                                                for="{{ form.show_signature_section.id_for_label }}">
+                                                Signature/Footer Section
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            {{ form.show_logo }}
+                                            <label class="form-check-label" for="{{ form.show_logo.id_for_label }}">
+                                                Company Logo
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Email Content (salutation/body/resale) -->
+                            <div class="mb-4">
+                                <h6 class="border-bottom pb-2 mb-3">
+                                    <i class="bi bi-pencil-square me-2"></i>Email Content
+                                </h6>
+
+                                <div class="mb-3">
+                                    <label class="form-label small mb-1">Salutation</label>
+                                    <input type="text"
+                                           name="salutation"
+                                           class="form-control form-control-sm"
+                                           value="{{ mail_template.salutation|default:'Dear Mr/Ms' }}">
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small mb-1">Email Body</label>
+                                    <textarea name="body"
+                                              class="form-control form-control-sm"
+                                              rows="3">{{ mail_template.body|default:"I hope this message finds you well. We are currently looking for the following item. Kindly provide your lowest possible price." }}</textarea>
+                                </div>
+
+                                <div class="mb-0">
+                                    <label class="form-label small mb-1">Resale Notice</label>
+                                    <input type="text"
+                                           name="resale_notice"
+                                           class="form-control form-control-sm"
+                                           value="{{ mail_template.heading|default:'ITEMS ARE FOR RESALE TO THE US GOVERNMENT' }}">
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save me-2"></i>Save Configuration
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="resetToDefaultBtn">
+                                    <i class="bi bi-arrow-counterclockwise me-2"></i>Reset to Default
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Panel -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-eye me-2"></i>Live Preview</h5>
+                        <button type="button" class="btn btn-sm btn-light" id="refreshPreviewBtn">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh Preview
+                        </button>
+                    </div>
+                    <div class="card-body p-4">
+                        <div id="emailPreview"
+                            style="border: 1px solid #ddd; padding: 20px; background: #f9f9f9; min-height: 600px; overflow-y: auto;">
+                            <p class="text-muted text-center">Preview will appear here. Make changes to see live
+                                updates.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Text Style Override Modal -->
+<div class="modal fade" id="textStyleOverrideModal" tabindex="-1" aria-labelledby="textStyleOverrideModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 560px;">
+        <div class="modal-content shadow-lg" style="border-radius: 14px;">
+            <div class="modal-header border-bottom bg-light">
+                <h5 class="modal-title d-flex align-items-center gap-2" id="textStyleOverrideModalLabel">
+                    <i class="bi bi-type-bold"></i>
+                    Highlight & Style
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label for="overrideFontFamily" class="form-label small">Font family</label>
+                            <select id="overrideFontFamily" class="form-control form-select"></select>
+                        </div>
+                        <div class="col-6">
+                            <label for="overrideFontSize" class="form-label small">Font size</label>
+                            <input id="overrideFontSize" type="text" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2 align-items-start">
+                    <div class="col-4">
+                        <label for="overrideColor" class="form-label small">Text color</label>
+                        <input id="overrideColor" type="color" class="form-control form-control-color" />
+                    </div>
+                    <div class="col-8">
+                        <div class="form-label small text-muted mb-2">Live preview</div>
+                        <div id="overridePreviewSample"
+                             class="border rounded p-3 bg-white"
+                             style="min-height: 56px; display: flex; align-items: center; justify-content: flex-start; word-break: break-word;">
+                            <span class="text-muted">Select text to preview styling.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="saveTextStyleOverrideBtn">
+                    <i class="bi bi-check2-circle me-2"></i>
+                    Save override
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('templateConfigForm');
+        const previewDiv = document.getElementById('emailPreview');
+        const refreshBtn = document.getElementById('refreshPreviewBtn');
+        const resetBtn = document.getElementById('resetToDefaultBtn');
+
+        // Text style override (highlight selection) - persisted per user
+        const overrideModalEl = document.getElementById('textStyleOverrideModal');
+        const overrideSelectedTextBox = document.getElementById('overrideSelectedTextBox');
+        const overrideFontFamilySelect = document.getElementById('overrideFontFamily');
+        const overrideFontSizeInput = document.getElementById('overrideFontSize');
+        const overrideColorInput = document.getElementById('overrideColor');
+        const overridePreviewSample = document.getElementById('overridePreviewSample');
+        const saveTextStyleOverrideBtn = document.getElementById('saveTextStyleOverrideBtn');
+        const saveTextStyleOverrideUrl = "{% url 'solicitations:save-text-style-override' %}";
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        let pendingOverrideSelectedText = '';
+        let overrideModal = null;
+        let previewRequestCounter = 0;
+        let activePreviewController = null;
+        if (overrideModalEl && typeof bootstrap !== 'undefined') {
+            overrideModal = new bootstrap.Modal(overrideModalEl);
+        }
+
+        function getCurrentFontSettingsFromForm() {
+            const fontFamily = form.querySelector('select[name="font_family"]')?.value || 'Arial, sans-serif';
+            const fontSize = form.querySelector('input[name="font_size"]')?.value || '13px';
+            const color = form.querySelector('input[name="primary_text_color"]')?.value || '#000000';
+            return { fontFamily, fontSize, color };
+        }
+
+        function openOverrideModalForSelectedText(selectedText) {
+            pendingOverrideSelectedText = selectedText;
+            if (overrideSelectedTextBox) overrideSelectedTextBox.textContent = selectedText;
+
+            const { fontFamily, fontSize, color } = getCurrentFontSettingsFromForm();
+            if (overrideFontFamilySelect) overrideFontFamilySelect.value = fontFamily;
+            if (overrideFontSizeInput) overrideFontSizeInput.value = fontSize;
+            if (overrideColorInput) overrideColorInput.value = color;
+
+            // Update the live preview box
+            updateOverridePreview();
+
+            if (overrideModal) overrideModal.show();
+        }
+
+        function updateOverridePreview() {
+            if (!overridePreviewSample) return;
+            const text = pendingOverrideSelectedText || '';
+            if (!text) {
+                overridePreviewSample.innerHTML = '<span class="text-muted">Select text to preview styling.</span>';
+                return;
+            }
+
+            const fontFamily = overrideFontFamilySelect?.value || 'Arial, sans-serif';
+            const fontSize = overrideFontSizeInput?.value || '13px';
+            const color = overrideColorInput?.value || '#000000';
+
+            // Only use textContent to avoid injecting HTML into the modal.
+            overridePreviewSample.textContent = text;
+            overridePreviewSample.style.fontFamily = fontFamily;
+            overridePreviewSample.style.fontSize = fontSize;
+            overridePreviewSample.style.color = color;
+        }
+
+        // Populate override font options from the main font-family select
+        const baseFontSelect = form.querySelector('select[name="font_family"]');
+        if (baseFontSelect && overrideFontFamilySelect) {
+            overrideFontFamilySelect.innerHTML = baseFontSelect.innerHTML;
+        }
+
+        if (previewDiv) {
+            previewDiv.addEventListener('mouseup', function () {
+                const selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0) return;
+
+                // Only accept selection within the preview area
+                const anchorNode = selection.anchorNode;
+                if (!anchorNode || !previewDiv.contains(anchorNode)) return;
+
+                const selectedText = (selection.toString() || '').replace(/\u00A0/g, ' ').trim();
+                if (!selectedText) return;
+
+                // Open modal
+                openOverrideModalForSelectedText(selectedText);
+
+                // Clear browser selection to reduce accidental re-triggers
+                setTimeout(() => selection.removeAllRanges(), 0);
+            });
+        }
+
+        if (overrideFontFamilySelect) overrideFontFamilySelect.addEventListener('change', updateOverridePreview);
+        if (overrideFontSizeInput) overrideFontSizeInput.addEventListener('input', updateOverridePreview);
+        if (overrideColorInput) overrideColorInput.addEventListener('input', updateOverridePreview);
+
+        if (saveTextStyleOverrideBtn) {
+            saveTextStyleOverrideBtn.addEventListener('click', async function () {
+                if (!pendingOverrideSelectedText) return;
+
+                const originalBtnHtml = saveTextStyleOverrideBtn.innerHTML;
+                saveTextStyleOverrideBtn.disabled = true;
+                saveTextStyleOverrideBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Applying...';
+                const payload = {
+                    selected_text: pendingOverrideSelectedText,
+                    font_family: overrideFontFamilySelect?.value || 'Arial, sans-serif',
+                    font_size: overrideFontSizeInput?.value || '13px',
+                    color: overrideColorInput?.value || '#000000'
+                };
+
+                try {
+                    const resp = await fetch(saveTextStyleOverrideUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await resp.json();
+                    if (data && data.success) {
+                        pendingOverrideSelectedText = '';
+                        if (overrideModal) overrideModal.hide();
+                        updatePreview();
+                    } else {
+                        alert(data?.error || 'Failed to save override');
+                    }
+                } catch (e) {
+                    alert('Error saving override: ' + e.message);
+                } finally {
+                    saveTextStyleOverrideBtn.disabled = false;
+                    saveTextStyleOverrideBtn.innerHTML = originalBtnHtml;
+                }
+            });
+        }
+
+        // Template preset selection
+        const applyTemplateBtns = document.querySelectorAll('.apply-template-btn');
+        const templateCards = document.querySelectorAll('.template-preset-card');
+
+        applyTemplateBtns.forEach(btn => {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const presetName = this.getAttribute('data-preset');
+                applyTemplatePreset(presetName);
+            });
+        });
+
+        // Add hover effect to template cards
+        templateCards.forEach(card => {
+            card.addEventListener('mouseenter', function () {
+                this.style.transform = 'translateY(-5px)';
+                this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+            });
+            card.addEventListener('mouseleave', function () {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '';
+            });
+        });
+
+        function applyTemplatePreset(presetName) {
+            // Show loading state
+            const btn = document.querySelector(`.apply-template-btn[data-preset="${presetName}"]`);
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Applying...';
+            btn.disabled = true;
+
+            // Send AJAX request
+            fetch('{% url "solicitations:apply-template-preset" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ preset_name: presetName })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Update form fields with preset values
+                        const config = data.config;
+                        for (const [key, value] of Object.entries(config)) {
+                            const field = form.querySelector(`[name="${key}"]`);
+                            if (field) {
+                                if (field.type === 'checkbox') {
+                                    field.checked = value;
+                                } else {
+                                    field.value = value;
+                                    // Update color hex inputs
+                                    if (field.type === 'color') {
+                                        const hexInput = document.getElementById(`${key}_hex`);
+                                        if (hexInput) {
+                                            hexInput.value = value.toUpperCase();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Show success message
+                        showToast(data.message || 'Template applied successfully!', 'success');
+
+                        // Update preview
+                        updatePreview();
+
+                        // Reload page after a short delay to show updated form
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        showToast(data.error || 'Failed to apply template', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error applying template:', error);
+                    showToast('Error applying template: ' + error.message, 'error');
+                })
+                .finally(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                });
+        }
+
+        function showToast(message, type) {
+            // Create toast notification
+            const toast = document.createElement('div');
+            toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+            document.body.appendChild(toast);
+
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // Update hex inputs when color pickers change
+        const colorInputs = ['primary_text_color', 'secondary_text_color', 'background_color',
+            'border_color', 'link_color', 'header_bg_color', 'header_text_color', 'banner_bg_color'];
+        colorInputs.forEach(colorName => {
+            const colorPicker = document.getElementById(`id_${colorName}`);
+            const hexInput = document.getElementById(`${colorName}_hex`);
+            if (colorPicker && hexInput) {
+                colorPicker.addEventListener('input', function () {
+                    hexInput.value = this.value.toUpperCase();
+                    updatePreview();
+                });
+            }
+        });
+
+        // Update preview on any form change
+        const formInputs = form.querySelectorAll('input, select');
+        formInputs.forEach(input => {
+            input.addEventListener('change', updatePreview);
+            input.addEventListener('input', updatePreview);
+        });
+
+        // Refresh preview button
+        refreshBtn.addEventListener('click', updatePreview);
+
+        // Reset to default
+        resetBtn.addEventListener('click', function () {
+            if (confirm('Reset all settings to default values? This cannot be undone.')) {
+                // Reload page to get default form values
+                window.location.reload();
+            }
+        });
+
+        // Initial preview load
+        updatePreview();
+
+        function updatePreview() {
+            // Collect form data
+            const configData = {};
+            const formInputs = form.querySelectorAll('input, select');
+
+            formInputs.forEach(input => {
+                if (input.name && input.name !== 'csrfmiddlewaretoken') {
+                    if (input.type === 'checkbox') {
+                        configData[input.name] = input.checked;
+                    } else if (input.type === 'color') {
+                        configData[input.name] = input.value;
+                    } else {
+                        configData[input.name] = input.value;
+                    }
+                }
+            });
+            // Add sample data
+            try {
+                const sampleData = JSON.parse('{{ sample_data|escapejs }}');
+                // Use current form values so preview matches unsaved edits (same as salutation/body)
+                const salutationInput = form.querySelector('[name="salutation"]');
+                const bodyInput = form.querySelector('[name="body"]');
+                const resaleInput = form.querySelector('[name="resale_notice"]');
+                if (salutationInput) sampleData.salutation = salutationInput.value;
+                if (bodyInput) sampleData.body = bodyInput.value;
+                if (resaleInput) sampleData.heading = resaleInput.value;
+                const requestData = {
+                    config: configData,
+                    sample_data: sampleData
+                };
+                const currentRequestId = ++previewRequestCounter;
+                if (activePreviewController) {
+                    activePreviewController.abort();
+                }
+                activePreviewController = new AbortController();
+
+                // Show loading
+                previewDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+                // Send AJAX request to preview endpoint
+                fetch('{% url "solicitations:preview-email-template" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(requestData),
+                    signal: activePreviewController.signal
+                })
+                    .then(response => {
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Ignore stale responses so only the latest update is rendered.
+                        if (currentRequestId !== previewRequestCounter) return;
+                        if (data.html) {
+                            previewDiv.innerHTML = data.html;
+                        } else if (data.error) {
+                            previewDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        }
+                    })
+                    .catch(error => {
+                        if (error && error.name === 'AbortError') return;
+                        previewDiv.innerHTML = `<div class="alert alert-danger">Error loading preview: ${error.message}</div>`;
+                    });
+            } catch (e) {
+                previewDiv.innerHTML = `<div class="alert alert-danger">Error preparing preview data: ${e.message}</div>`;
+            }
+        }
+    });
+</script>
+
+<style>
+    .form-control-color {
+        width: 60px;
+        height: 38px;
+        padding: 2px;
+    }
+
+    .form-check-switch {
+        padding-left: 2.5em;
+    }
+
+    /* Template Preset Cards */
+    .template-preset-card {
+        border: 2px solid #e9ecef !important;
+        transition: all 0.3s ease;
+    }
+
+    .template-preset-card:hover {
+        border-color: #667eea !important;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2) !important;
+    }
+
+    .template-preset-card.active {
+        border-color: #667eea !important;
+        background-color: #f0f4ff;
+    }
+
+    .template-icon {
+        font-size: 1.8rem;
+        line-height: 1;
+    }
+
+    @media (min-width: 992px) {
+        .col-lg-2-4 {
+            flex: 0 0 20%;
+            max-width: 20%;
+        }
+    }
+
+    @media (max-width: 991px) {
+        .col-lg-2-4 {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+    }
+
+    @media (max-width: 767px) {
+        .col-lg-2-4 {
+            flex: 0 0 100%;
+            max-width: 100%;
+        }
+    }
+</style>
+{% endblock %}

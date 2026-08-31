@@ -1,0 +1,580 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block title %}Configure Bid Reference Format{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Step 1: Native checkboxes (borderless layout) */
+    .component-check-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 2px 0;
+        border: none;
+        background: transparent;
+    }
+
+    .component-check-row .form-check-input {
+        margin-top: 0.22rem;
+    }
+
+    .component-check-row .component-meta strong {
+        display: block;
+        font-size: 0.93rem;
+        line-height: 1.2;
+    }
+
+    .step1-card {
+        background-color: #f3f4f6;
+    }
+
+    /* Component Item Styles */
+    .component-item {
+        padding: 7px 10px;
+        margin-bottom: 6px;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        cursor: move;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s ease;
+    }
+
+    .component-item:hover {
+        background: #ffe69c;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .component-item.dragging {
+        opacity: 0.5;
+        background: #e9ecef;
+    }
+
+    /* Drop Zone Styles */
+    #drop-zone {
+        border: 2px dashed #ccc;
+        border-radius: 6px;
+        padding: 12px;
+        min-height: 100px;
+        background: #f8f9fa;
+        transition: all 0.2s ease;
+    }
+
+    #drop-zone.drag-over {
+        border-color: #007bff;
+        background: #e7f3ff;
+        box-shadow: 0 0 10px rgba(0,123,255,0.2);
+    }
+
+    #drop-zone.empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+        min-height: 100px;
+    }
+
+    #drop-zone.empty::before {
+        content: "Drag components here to reorder";
+        font-size: 0.95rem;
+    }
+
+    #selected-components {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+    }
+
+    /* Preview Area */
+    .preview-area {
+        background: white;
+        border: 2px solid #dee2e6;
+        border-radius: 4px;
+        padding: 20px;
+        text-align: center;
+        min-height: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #preview {
+        font-size: 1.5rem;
+        font-weight: 600;
+        font-family: 'Courier New', monospace;
+        color: #007bff;
+        word-break: break-all;
+    }
+
+    /* Info Card */
+    .info-card {
+        background: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 12px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+    }
+
+    .info-card strong {
+        color: #004085;
+    }
+
+    /* Conditional Section */
+    .conditional-section {
+        background: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-top: 15px;
+        border-radius: 4px;
+        display: none;
+    }
+
+    .conditional-section.show {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row">
+        <!-- Main Content -->
+        <div class="col-lg-7">
+            <h2>Configure Bid Reference Format</h2>
+
+            <!-- Info Alert -->
+            <div class="info-card">
+                <strong>Current Format:</strong> Your BID REF. values currently look like:
+                <code style="font-size: 1.1rem; color: #004085;">{{ template.preview }}</code>
+            </div>
+
+            <!-- Preview -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Live Preview</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-2">Example BID REF. with your settings:</p>
+                    <div class="preview-area">
+                        <code id="preview">{{ template.preview }}</code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Component Configuration Form -->
+            <form method="post" id="bid-reference-form" class="needs-validation">
+                {% csrf_token %}
+
+                <!-- Step 3: Configure Settings -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Step 3: Configure Settings</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Separator -->
+                        <div class="mb-4">
+                            <label class="form-label"><strong>Component Separator</strong></label>
+                            {{ form.separator }}
+                            <small class="form-text text-muted d-block mt-2">
+                                Character to use between components (e.g., COM-BID-00001 uses hyphen)
+                            </small>
+                        </div>
+
+                        <!-- Date Format -->
+                        <div class="mb-4 conditional-section" id="date-format-card">
+                            <label class="form-label"><strong>Date Format</strong></label>
+                            {{ form.date_format }}
+                            <small class="form-text text-muted d-block mt-2">
+                                Only applies if you included the "Date" component
+                            </small>
+                        </div>
+
+                        <!-- Custom Text -->
+                        <div class="mb-4 conditional-section" id="custom-text-card">
+                            <label class="form-label"><strong>Custom Text</strong></label>
+                            {{ form.custom_text }}
+                            <small class="form-text text-muted d-block mt-2">
+                                Only applies if you included the "Custom Text" component
+                            </small>
+                        </div>
+
+                        <!-- Sequence Settings -->
+                        <div class="mb-4">
+                            <label class="form-label"><strong>Sequence Number Padding</strong></label>
+                            {{ form.sequence_padding }}
+                            <small class="form-text text-muted d-block mt-2">
+                                Number of digits (3-10): 3 = 001, 5 = 00001, 10 = 0000000001
+                            </small>
+                        </div>
+
+                        <!-- Reset Period -->
+                        <div class="mb-0">
+                            <label class="form-label"><strong>Reset Sequence Counter</strong></label>
+                            {{ form.sequence_reset_period }}
+                            <small class="form-text text-muted d-block mt-2">
+                                When to reset the sequence counter back to 1
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Validation Errors -->
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <strong>Errors:</strong>
+                    {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-end gap-2 mb-4">
+                    <a href="{% url 'solicitations:settings' %}" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Save Configuration
+                    </button>
+                </div>
+
+                <!-- Hidden JSON field for components -->
+                <input type="hidden" id="components_json" name="components_json">
+            </form>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-5">
+            <!-- Step 1: Select Components -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Step 1: Select Components</h5>
+                </div>
+                <div class="card-body step1-card">
+                    <p class="text-muted small mb-4">Click buttons to select which components to include in your BID REF.:</p>
+                    
+                    <div class="row g-3" id="component-toggles">
+                        <!-- Dynamically populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Arrange Components -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Step 2: Arrange Components</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">Drag and drop to reorder the selected components:</p>
+                    
+                    <div id="drop-zone" class="empty">
+                        <div id="selected-components"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Components Guide -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="mb-0">Component Guide</h5>
+                </div>
+                <div class="card-body small">
+                    <dl class="mb-0">
+                        <dt class="fw-bold">Company Initial</dt>
+                        <dd class="mb-2">Your company initials (e.g., COM, ACE)</dd>
+
+                        <dt class="fw-bold">DLA</dt>
+                        <dd class="mb-2">Fixed text "DLA" for Defense Logistics Agency</dd>
+
+                        <dt class="fw-bold">Date</dt>
+                        <dd class="mb-2">Current date (format: configure in Step 3)</dd>
+
+                        <dt class="fw-bold">Sol #</dt>
+                        <dd class="mb-2">Solicitation linked to the RFQ reply</dd>
+
+                        <dt class="fw-bold">Sequence Number</dt>
+                        <dd class="mb-2">Auto-incrementing number (e.g., 00001, 00002, ...)</dd>
+
+                        <dt class="fw-bold">Custom Text</dt>
+                        <dd class="mb-0">Your custom text (e.g., BID, REF, QUOTE)</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    {% if messages %}
+    const toastMessages = [
+        {% for message in messages %}
+        {
+            text: "{{ message|escapejs }}",
+            type: "{% if message.tags == 'error' %}error{% elif message.tags == 'danger' %}error{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %}"
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    function showToastMessages(attempts) {
+        if (typeof window.showGlobalToast === 'function') {
+            toastMessages.forEach(function (item) {
+                window.showGlobalToast(item.text, item.type);
+            });
+        } else if (attempts > 0) {
+            setTimeout(function () { showToastMessages(attempts - 1); }, 100);
+        }
+    }
+
+    showToastMessages(20);
+    {% endif %}
+});
+
+const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+let selectedComponents = [];
+let draggedIndex = null;
+let previewRequestController = null;
+let latestPreviewRequestId = 0;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    let initialComponents = {{ current_components|safe }};
+    
+    if (!initialComponents || initialComponents.length === 0) {
+        initialComponents = [
+            {component: 'company_initial'},
+            {component: 'custom_text'},
+            {component: 'sequence'}
+        ];
+    }
+    
+    selectedComponents = initialComponents.map(c => c.component);
+    
+    renderToggleButtons();
+    renderSelectedComponents();
+    updateConditionalSections();
+    updatePreview();
+    setupEventListeners();
+});
+
+// Render toggle buttons
+function renderToggleButtons() {
+    const container = document.getElementById('component-toggles');
+    container.innerHTML = '';
+    
+    const allComponents = [
+        { id: 'company_initial', label: 'Company Initial' },
+        { id: 'dla', label: 'DLA' },
+        { id: 'date', label: 'Date' },
+        { id: 'solicitation_number', label: 'Sol #' },
+        { id: 'sequence', label: 'Sequence' },
+        { id: 'custom_text', label: 'Custom Text' }
+    ];
+    
+    allComponents.forEach(comp => {
+        const isSelected = selectedComponents.includes(comp.id);
+        const col = document.createElement('div');
+        col.className = 'col-md-6 col-lg-4';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'component-check-row form-check';
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.className = 'form-check-input';
+        input.id = `comp-${comp.id}`;
+        input.dataset.component = comp.id;
+        input.checked = isSelected;
+
+        const label = document.createElement('label');
+        label.className = 'form-check-label component-meta';
+        label.htmlFor = input.id;
+        label.innerHTML = `<strong>${comp.label}</strong>`;
+
+        input.addEventListener('change', function() {
+            const compId = this.dataset.component;
+            if (this.checked) {
+                if (!selectedComponents.includes(compId)) selectedComponents.push(compId);
+            } else {
+                selectedComponents = selectedComponents.filter(c => c !== compId);
+            }
+            renderToggleButtons();
+            renderSelectedComponents();
+            updateConditionalSections();
+            updatePreview();
+        });
+
+        wrapper.appendChild(input);
+        wrapper.appendChild(label);
+        col.appendChild(wrapper);
+        container.appendChild(col);
+    });
+}
+
+// Render selected components
+function renderSelectedComponents() {
+    const container = document.getElementById('selected-components');
+    const dropZone = document.getElementById('drop-zone');
+    
+    container.innerHTML = '';
+    
+    if (selectedComponents.length === 0) {
+        dropZone.classList.add('empty');
+    } else {
+        dropZone.classList.remove('empty');
+    }
+    
+    selectedComponents.forEach((component, index) => {
+        const item = document.createElement('div');
+        item.className = 'component-item';
+        item.draggable = true;
+        item.dataset.component = component;
+        item.dataset.index = index;
+        
+        const label = getComponentLabel(component);
+        
+        item.innerHTML = `
+            <strong>${label}</strong>
+        `;
+        
+        item.addEventListener('dragstart', dragStart);
+        item.addEventListener('dragend', dragEnd);
+        item.addEventListener('dragover', dragOver);
+        item.addEventListener('drop', dropOnComponent);
+        
+        container.appendChild(item);
+    });
+}
+
+function dragStart(e) {
+    draggedIndex = parseInt(e.currentTarget.dataset.index);
+    e.currentTarget.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function dragEnd(e) {
+    e.currentTarget.classList.remove('dragging');
+    document.getElementById('drop-zone').classList.remove('drag-over');
+}
+
+function dragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function dropOnComponent(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetIndex = parseInt(e.currentTarget.dataset.index);
+    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+        const [movedComponent] = selectedComponents.splice(draggedIndex, 1);
+        selectedComponents.splice(targetIndex, 0, movedComponent);
+        renderSelectedComponents();
+        updatePreview();
+    }
+}
+
+const dropZone = document.getElementById('drop-zone');
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    if (e.target === dropZone) {
+        dropZone.classList.remove('drag-over');
+    }
+});
+
+function getComponentLabel(component) {
+    const labels = {
+        'company_initial': 'Company Initial',
+        'dla': 'DLA',
+        'date': 'Date',
+        'solicitation_number': 'Sol #',
+        'sequence': 'Sequence Number',
+        'custom_text': 'Custom Text'
+    };
+    return labels[component] || component;
+}
+
+function setupEventListeners() {
+    document.getElementById('id_separator').addEventListener('change', updatePreview);
+    document.getElementById('id_date_format').addEventListener('change', updatePreview);
+    document.getElementById('id_custom_text').addEventListener('input', updatePreview);
+    document.getElementById('id_sequence_padding').addEventListener('change', updatePreview);
+    
+    document.getElementById('bid-reference-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const componentsJson = JSON.stringify(
+            selectedComponents.map(id => ({ component: id }))
+        );
+        document.getElementById('components_json').value = componentsJson;
+        
+        this.submit();
+    });
+}
+
+function updateConditionalSections() {
+    const hasDate = selectedComponents.includes('date');
+    const hasCustom = selectedComponents.includes('custom_text');
+    
+    document.getElementById('date-format-card').classList.toggle('show', hasDate);
+    document.getElementById('custom-text-card').classList.toggle('show', hasCustom);
+}
+
+function updatePreview() {
+    const requestId = ++latestPreviewRequestId;
+
+    if (previewRequestController) {
+        previewRequestController.abort();
+    }
+    previewRequestController = new AbortController();
+    const timeoutId = setTimeout(() => {
+        if (previewRequestController) previewRequestController.abort();
+    }, 10000);
+    
+    const data = {
+        components: selectedComponents.map(c => ({ component: c })),
+        separator: document.getElementById('id_separator').value,
+        date_format: document.getElementById('id_date_format').value,
+        custom_text: document.getElementById('id_custom_text').value,
+        sequence_padding: parseInt(document.getElementById('id_sequence_padding').value)
+    };
+    
+    fetch('{% url "solicitations:preview-bid-reference" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify(data),
+        signal: previewRequestController.signal
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (requestId !== latestPreviewRequestId) return;
+        if (data.success) {
+            document.getElementById('preview').textContent = data.preview;
+        } else {
+            document.getElementById('preview').textContent = 'Error: ' + data.error;
+        }
+    })
+    .catch(err => {
+        if (err.name === 'AbortError') return;
+        console.error('Error:', err);
+        document.getElementById('preview').textContent = 'Error generating preview';
+    })
+    .finally(() => {
+        clearTimeout(timeoutId);
+    });
+}
+</script>
+{% endblock %}

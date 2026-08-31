@@ -1,0 +1,111 @@
+<div style="max-height: 600px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px;">
+  <table class="config-table">
+    <thead>
+      <tr>
+        <th style="width: 80px; text-align: center;">Pos</th>
+        <th style="width: 350px;">Field Name</th>
+        <th style="width: 350px;">Value</th>
+        <th>Definition & Properties</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for config in configs %}
+      <tr>
+        <!-- Hidden field to always enable all fields -->
+        <input type="hidden" name="is_enabled_{{ config.id }}" value="on">
+
+        <td class="pos-cell">{{ config.field_definition.position|stringformat:"03d" }}</td>
+        <td>
+          <div class="field-name">{{ config.field_definition.column_name }}</div>
+        </td>
+        <td>
+          {% with pos=config.field_definition.position field_type=config.field_definition.field_type %}
+            {# Locked fields (dynamic or reserved) are not editable #}
+            {% if field_type == 'reserved' or pos in locked_positions %}
+              <input
+                type="text"
+                class="input-field"
+                value="{% if pos == 117 %}Locked - auto-extracted from solicitation{% else %}Locked - system controlled value{% endif %}"
+                readonly
+                disabled
+              >
+              {# Ensure backend receives an empty custom_value for locked fields #}
+              <input
+                type="hidden"
+                name="custom_value_{{ config.id }}"
+                value=""
+                {% if pos == 117 %}data-position="117"{% endif %}
+              >
+            {% else %}
+              {% if pos == 34 %}
+              <select
+                class="select-field"
+                name="custom_value_{{ config.id }}"
+                data-position="{{ config.field_definition.position }}"
+              >
+                <option value="" {% if not config.custom_value %}selected{% endif %}>-- Select --</option>
+                <optgroup label="US state and territory codes">
+                  {% for code in us_state_codes %}
+                    <option value="{{ code }}" {% if config.custom_value == code %}selected{% endif %}>{{ code }}</option>
+                  {% endfor %}
+                </optgroup>
+                <optgroup label="Canadian province codes">
+                  {% for code in ca_province_codes %}
+                    <option value="{{ code }}" {% if config.custom_value == code %}selected{% endif %}>{{ code }}</option>
+                  {% endfor %}
+                </optgroup>
+              </select>
+              {% elif pos == 35 or pos == 71 %}
+              <select
+                class="select-field"
+                name="custom_value_{{ config.id }}"
+                data-position="{{ config.field_definition.position }}"
+              >
+                <option value="" {% if not config.custom_value %}selected{% endif %}>-- Select --</option>
+                {% for code in country_codes %}
+                  <option value="{{ code }}" {% if config.custom_value == code %}selected{% endif %}>{{ code }}</option>
+                {% endfor %}
+              </select>
+              {% elif config.field_definition.has_predefined_choices %}
+              <select
+                class="select-field"
+                name="custom_value_{{ config.id }}"
+                data-position="{{ config.field_definition.position }}"
+              >
+                {% for choice in config.field_definition.get_choices %}
+                <option value="{{ choice.value }}" {% if config.custom_value == choice.value %}selected{% endif %}>
+                  {{ choice.label }}
+                </option>
+                {% endfor %}
+              </select>
+              {% else %}
+              <input
+                type="text"
+                class="input-field"
+                name="custom_value_{{ config.id }}"
+                data-position="{{ config.field_definition.position }}"
+                value="{{ config.custom_value }}"
+                placeholder="{% if config.source_field %}Leave empty to use: {{ config.source_field }}{% else %}Enter value{% endif %}"
+                title="{% if config.source_field %}Leave empty to use field mapping: {{ config.source_field }}{% else %}Enter a custom value{% endif %}"
+              >
+              {% endif %}
+            {% endif %}
+          {% endwith %}
+        </td>
+        <td>
+          <div style="font-size: 13px; color: #6c757d;">
+            {{ config.field_definition.definition|truncatewords:15 }}
+          </div>
+          <div id="dla-rule-msg-{{ config.field_definition.position }}"></div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" style="text-align: center; padding: 60px 20px; color: #6c757d;">
+          <div style="font-size: 16px;">No fields in this category</div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

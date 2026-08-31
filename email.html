@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Request for Quote</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 13px; background-color: #ffffff; padding: 20px; margin: 0;">
+<table align="center" cellpadding="0" cellspacing="0" border="0" width="760" width: 100%; max-width: 700px;">
+    <tr>
+      <td style="padding: 10px;">
+        <!-- Message Box -->
+        <div style="background-color: #ffffff; border-radius: 5px; font-size: 13px;">
+          <p style="margin: 0;padding:0;">{salutation},<br>{body}</p>
+        </div>
+        <br>
+        <div style="text-align:center;font-size: 16px;font-weight:bold;margin-bottom:2px;">ITEMS ARE FOR RESALE TO THE US GOVERNMENT</div>
+        <!-- Info Table -->
+        <table width="100%" cellpadding="3" cellspacing="0" border="1" style="margin-top: 5px; border-collapse: collapse;">
+          <tr>
+            <td style="font-size: 13px;"><strong>1. Date:</strong> {sent_at}</td> 
+            <td style="font-size: 13px;"><strong>2. Our Ref:</strong> {rfq_unique_id}</td> 
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>3. To:</strong> {organization_name}</td>
+            <td style="font-size: 13px;"><strong>4. Approved OEM's Cage:</strong> {cage}</td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>5. Phone:</strong> {oem_phone}</td>
+            <td style="font-size: 13px;"><strong>6. Fax:</strong> {fax}</td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;" colspan="2"><strong>7. Your Email:</strong> <span style="color: #333; text-decoration: none;">{oem_email}</span></td>
+          </tr>
+        </table>
+
+        <!-- Items Table -->
+        <table width="100%" cellpadding="3" cellspacing="0" border="1" style="margin-top: 2px; border-collapse: collapse;font-size: 13px;">
+          <tr>
+            <th style="font-size: 13px;">#</th>
+            <th style="font-size: 13px;">NSN</th>
+            <th style="font-size: 13px;">Nomen</th>
+            <th style="font-size: 13px;">Part#</th>
+            <th style="font-size: 13px;">Solicitation#</th>
+            <th style="font-size: 13px;">Qty/Unit</th>
+            <th style="font-size: 13px;">Unit Price (USD)</th>
+            <th style="font-size: 13px;">Total Price (USD)</th>
+          </tr>
+          {ITEMS_ROWS}
+        </table>
+
+        <!-- Additional Info Section -->
+        <table width="100%" cellpadding="5" cellspacing="0" border="1" style="margin-top: 2px; border-collapse: collapse;">
+          <tr>
+            <td style="font-size: 13px;" colspan="2"><strong>8. Technical drawing requirements:</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;" colspan="2">
+              <strong>Important:</strong><br>
+              If IRPOD is indicated in block 8 above, or if you require any technical drawing(s) to submit a quote or if this part number is regarded as classified,
+              please email <span style="color: #333; text-decoration: none;">{personal_email}</span> directly for more information.
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>9. Minimum Order Quantity (MOQ):</strong></td>
+            <td style="font-size: 13px;"><strong>10. Quote valid for (days):</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>11. Inspection Point: </strong>{inspection_point}</td>
+            <td style="font-size: 13px;"><strong>Indicate inspection cage <br> and address:</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>12. Est. shipping cost:</strong></td>
+            <td style="font-size: 13px;"><strong>13. Terms:</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;" colspan="2"><strong>14. Est. Shipping Dimensions & Weight (if shipping cost unknown):</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>15. Delivery days:</strong></td>
+            <td style="font-size: 13px;"><strong>16. Country of origin:</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;" colspan="2"><strong>17. Do you have an ISO certification or equivalent? Please state:</strong></td>
+          </tr>
+          <tr>
+            <td style="font-size: 13px;"><strong>18. Quoted By:</strong></td>
+            <td style="font-size: 13px;"><strong>19. Date:</strong></td>
+          </tr>
+        </table>
+
+        <p style="margin-top: 1px;font-size:13px;"><strong>Note:</strong> Please reply before <span style="color:red;">{due_date}</span></p>
+
+        <div style="font-size: 13px; margin-top: 1px;">
+          <p style="margin: 0;">Best regards,</p>
+          <br>
+          {user_first_name} {user_last_name} - {user_title} <br>
+          <p style="margin: 1px 0;">
+            {companyName}<br>
+            {address}<br>
+            Phone: {phone}<br>
+            Fax: {user_fax}<br>
+            Email: <span style="color: #333; text-decoration: none;">{email}</span><br>
+            Website: <span style="color: #333; text-decoration: none;">{company_website}</span><br>
+            <p><img src="{logo_url}" alt="Company Logo" width="80" style="display: block; max-width: 80px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></p>
+          </p>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

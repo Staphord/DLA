@@ -1,0 +1,889 @@
+{% load humanize %}
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+  <title>RFQ || Automated Program</title>
+  <meta content="" name="description">
+  <meta content="" name="keywords">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+<link href="{% static 'gil/vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/bootstrap-icons/bootstrap-icons.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/boxicons/css/boxicons.min.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/quill/quill.snow.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/quill/quill.bubble.css' %}" rel="stylesheet">
+<link href="{% static 'gil/vendor/remixicon/remixicon.css' %}" rel="stylesheet">
+
+  <!-- Template Main CSS File -->
+<link href="{% static 'gil/css/style.css' %}" rel="stylesheet">
+
+<meta name="csrf-token" content="{% csrf_token %}">
+
+<style>
+  /* Simple spinning animation for processing icon */
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  /* Processing badge styles */
+  .processing-badge {
+    animation: pulse 2s ease-in-out infinite;
+    position: relative;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { 
+      opacity: 1; 
+      transform: scale(1);
+    }
+    50% { 
+      opacity: 0.8; 
+      transform: scale(1.05);
+    }
+  }
+  
+  /* Stop button styles */
+  .stop-processing-btn {
+    background: none;
+    border: none;
+    color: #dc3545;
+    font-size: 1.1em;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+  
+  .stop-processing-btn:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #c82333;
+    transform: scale(1.1);
+  }
+  
+  .stop-processing-btn:active {
+    transform: scale(0.95);
+  }
+  
+  /* Processing container */
+  .processing-container {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+</style>
+</head>
+
+<body>
+  {% if user.is_authenticated %}
+
+  <!-- ======= Header ======= -->
+  <header id="header" class="header fixed-top d-flex align-items-center">
+
+    <div class="d-flex align-items-center justify-content-between">
+      <a href="#" class="logo d-flex align-items-center">
+        <span class="d-none d-lg-block my-text">RFQSYS</span>
+      </a>
+      <i class="bi bi-list toggle-sidebar-btn my-text"></i>
+    </div><!-- End Logo -->
+
+    <nav class="header-nav ms-auto">
+      <ul class="d-flex align-items-center">
+
+        <li class="nav-item d-block d-lg-none">
+          <a class="nav-link nav-icon search-bar-toggle " href="#">
+            <i class="bi bi-search"></i>
+          </a>
+        </li><!-- End Search Icon-->
+
+        <!-- RFQ Processing Status Badge with Stop Button -->
+        <li class="nav-item" id="rfqStatusBadgeContainer" {% if not rfq_is_processing %}style="display:none"{% endif %}>
+          <div class="processing-container me-3">
+            <span class="badge bg-warning text-dark d-flex align-items-center px-3 py-2 me-2 processing-badge"
+                  id="rfqStatusBadge"
+                  title="{{ rfq_processing_status|default:'Processing RFQs...' }}">
+              <i class="bi bi-arrow-clockwise me-2" style="animation: spin 1s linear infinite;"></i>
+              <span class="fw-bold" id="rfqStatusText">{{ rfq_processing_count }} Processing</span>
+            </span>
+
+            <!-- Stop Button with X Icon - Always show when processing -->
+            <button type="button"
+                    class="stop-processing-btn"
+                    id="globalStopProcessingButton"
+                    title="Stop RFQ Processing"
+                    aria-label="Stop Processing">
+              <i class="bi bi-x-circle-fill"></i>
+            </button>
+          </div>
+        </li>
+        <!-- End RFQ Processing Badge -->
+
+        <!-- Scraping Progress Status Badge -->
+        {% if scrape_is_running %}
+        <li class="nav-item" id="scrapingStatusBadgeContainer">
+          <div class="processing-container me-3">
+            <span class="badge bg-info text-white d-flex align-items-center px-3 py-2 me-2 scraping-badge" 
+                  id="scrapingStatusBadge"
+                  title="{{ scrape_status_message|default:'Scraping in progress...' }}">
+              <i class="bi bi-arrow-clockwise me-2" style="animation: spin 1s linear infinite;"></i>
+              <span class="fw-bold" id="scrapingStatusText">
+                {% if scrape_total > 0 %}
+                  Scraping: {{ scrape_percentage }}% ({{ scrape_current }}/{{ scrape_total }})
+                {% else %}
+                  Scraping: {{ scrape_percentage }}%
+                {% endif %}
+              </span>
+            </span>
+            
+            <!-- Stop Button with X Icon - Only show for admins -->
+            {% if user.user_type == "admin" %}
+            <button type="button" 
+                    class="stop-processing-btn" 
+                    id="globalStopScrapingButton"
+                    title="Stop Scraping"
+                    aria-label="Stop Scraping">
+              <i class="bi bi-x-circle-fill"></i>
+            </button>
+            {% endif %}
+          </div>
+        </li>
+        {% endif %}
+        <!-- End Scraping Progress Badge -->
+
+        <li class="nav-item dropdown pe-3">
+
+          <a class="nav-link nav-profile d-flex align-items-center pe-0" href="#" data-bs-toggle="dropdown">
+            <img src="{% static 'gil/img/profile-img.webp' %}" alt="Profile" class="rounded-circle">
+            <span class="d-none d-md-block dropdown-toggle ps-2">{{user.username}}</span>
+          </a><!-- End Profile Image Icon -->
+
+          <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
+            <li class="dropdown-header">
+              <h6>{{user.username}}</h6>
+            </li>
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="{% url 'solicitations:user-profile' client=request.user.id %}">
+                <i class="bi bi-person"></i>
+                <span>My Profile</span>
+              </a>
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="{% url 'solicitations:settings' %}">
+                <i class="bi bi-gear"></i>
+                <span>Settings</span>
+              </a>
+            </li>
+
+            <li>
+              <hr class="dropdown-divider">
+            </li>
+
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="{% url 'logout-user' %}"> 
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Sign Out</span>
+              </a>
+            </li>
+
+          </ul><!-- End Profile Dropdown Items -->
+        </li><!-- End Profile Nav -->
+
+      </ul>
+    </nav><!-- End Icons Navigation -->
+
+  </header><!-- End Header -->
+  
+ 
+
+  <!-- ======= Sidebar ======= -->
+  <aside id="sidebar" class="sidebar">
+    <ul class="sidebar-nav" id="sidebar-nav">
+
+      <!-- MAIN -->
+      <li class="nav-heading">Main</li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'home' %}collapsed{% endif %}"
+           href="{% url 'solicitations:home' %}">
+          <i class="bi bi-grid-fill"></i>
+          <span>Dashboard</span>
+        </a>
+      </li>
+
+      <!-- PROCUREMENT -->
+      <li class="nav-heading">Procurement</li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'solicitations' %}collapsed{% endif %}"
+           href="{% url 'solicitations:solicitations' %}">
+          <i class="bi bi-file-earmark-ruled"></i>
+          <span>Unsent Solicitations</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'sent-rfq' %}collapsed{% endif %}"
+           href="{% url 'solicitations:sent-rfq' %}">
+          <i class="bi bi-send-fill"></i>
+          <span>Sent RFQs</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'replied-rfq' %}collapsed{% endif %}"
+           href="{% url 'solicitations:replied-rfq' %}">
+          <i class="bi bi-inbox-fill"></i>
+          <span>Replied RFQs</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'archived-replied-rfqs' %}collapsed{% endif %}"
+           href="{% url 'solicitations:archived-replied-rfqs' %}">
+          <i class="bi bi-archive-fill"></i>
+          <span>Exported RFQs</span>
+        </a>
+      </li>
+
+      <!-- MANAGEMENT -->
+      <li class="nav-heading">Management</li>
+
+      {% if user.user_type == "admin" %}
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'clients' %}collapsed{% endif %}"
+           href="{% url 'solicitations:clients' %}">
+          <i class="bi bi-people-fill"></i>
+          <span>Users</span>
+        </a>
+      </li>
+      {% endif %}
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'active-oems' %}collapsed{% endif %}"
+           href="{% url 'solicitations:active-oems' %}">
+          <i class="bi bi-building-fill"></i>
+          <span>OEMs</span>
+        </a>
+      </li>
+
+      <!-- REPORTS -->
+      <li class="nav-heading">Reports</li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'rfq-reports' %}collapsed{% endif %}"
+           href="{% url 'solicitations:rfq-reports' %}">
+          <i class="bi bi-bar-chart-fill"></i>
+          <span>RFQ Reports</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'user-tasks-list' %}collapsed{% endif %}"
+           href="{% url 'solicitations:user-tasks-list' %}">
+          <i class="bi bi-clock-history"></i>
+          <span>My Logs</span>
+        </a>
+      </li>
+
+    </ul>
+  </aside><!-- End Sidebar-->
+  
+  <!-- Global Stop Scraping Confirmation Modal -->
+  <div class="modal fade" id="globalStopScrapingModal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="globalStopScrapingModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="globalStopScrapingModalLabel">Stop Scraping</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Are you sure you want to stop the scraping process?</strong>
+          </div>
+          <p class="text-muted small">This will:</p>
+          <ul class="text-muted small">
+            <li>Immediately terminate the scraping process</li>
+            <li>Stop all related browser processes</li>
+            <li>Any incomplete scraping will be lost</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="globalConfirmStopScrapingButton">
+            <i class="bi bi-stop-circle me-1"></i>Yes, Stop Scraping
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Stop Processing Confirmation Modal -->
+  <div class="modal fade" id="globalStopProcessingModal" tabindex="-1" data-bs-backdrop="static" aria-labelledby="globalStopProcessingModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="globalStopProcessingModalLabel">Stop RFQ Processing</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Are you sure you want to stop RFQ processing?</strong>
+          </div>
+          <p class="text-muted small">This will:</p>
+          <ul class="text-muted small">
+            <li>Stop all currently running RFQ tasks</li>
+            <li>Cancel queued tasks</li>
+            <li>Clear all your current selections</li>
+            <li>Reset your selection state completely</li>
+            <li>Disable select-all mode if active</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="globalConfirmStopProcessingButton">
+            <i class="bi bi-stop-circle me-1"></i>Yes, Stop Processing
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main id="main" class="main bg-white">
+   <!-- <div class='bg-danger py-5 px-3 text-center fw-bold text-white'>THE SYSTEM IS UNDER MAINTENANCE , PLEASE COMEBACK LATER!</div> -->
+
+    
+    {% block content %}
+        
+    {% endblock %}
+  </main>
+
+<!-- Offcanvas -->
+<div class="offcanvas offcanvas-end" data-bs-scroll="true" tabindex="-1" id="offcanvasWithBothOptions" aria-labelledby="offcanvasWithBothOptionsLabel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title text-center" id="offcanvasWithBothOptionsLabel">We Have Simplified, You Can Filter With What You Want.</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <hr class="">
+  <div class="offcanvas-body">
+    <div class="py-1">
+      <form action="{% url 'solicitations:filtered-solicitations' %}" method="POST">
+        {% csrf_token %}
+        <div class="my-2 p-3 rounded-3">
+          <fieldset class="bg-light p-2 rounded-3 mb-3">
+            <legend class="text-dark mb-1">Issued</legend>
+            <div class="text-start mt-5">
+              <!-- Issued Date Input -->
+              <div class="my-3">
+                <label for="issued_date">From:</label>
+                <input type="date" name="issued_date_from" class="form-control" id="issued_date_from">
+              </div>
+              <div class="my-3">
+                <label for="issued_date">To:</label>
+                <input type="date" name="issued_date_to" class="form-control" id="issued_date_to">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="bg-light p-2 rounded-3">
+            <legend class="text-dark mb-1">Return Date</legend>
+            <div class="text-start mt-5">
+              <!-- Return by Date Input -->
+            <div class="my-3">
+              <label for="return_by_date">From:</label>
+              <input type="date" name="return_by_date_from" class="form-control" id="return_by_date_from">
+            </div>
+              <!-- Return by Date Input -->
+            <div class="my-3">
+              <label for="return_by_date">To:</label>
+              <input type="date" name="return_by_date_to" class="form-control" id="return_by_date_to">
+            </div>
+            </div>
+          </fieldset>
+          <!-- Submit Button -->
+          <div class="my-2">
+            <button type="submit" class="btn btn-info w-100 text-white">Filter</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+  <!-- ======= Footer ======= -->
+  <footer id="footer" class="footer">
+    <div class="copyright">
+      &copy; Copyright <strong><span>Gil Tech</span></strong>. All Rights Reserved
+    </div>
+    <div class="credits">
+      Designed by <a href="#">Gil Tech</a>
+    </div>
+  </footer><!-- End Footer -->
+
+  <a href="#" class="back-to-top d-flex align-items-center mybg justify-content-center"><i class="bi bi-arrow-up-short text-white"></i></a>
+
+  {% else %}
+  <div class="d-flex justify-content-center align-items-center vh-100">
+    <div class="text-center">
+        <div class="mb-3">YOU ARE NOT AUTHENTICATED. PLEASE LOGIN.</div>
+        <a href="{% url 'login-user' %}" class="btn btn-primary">Login Now</a>
+    </div>
+  </div>
+
+  {% endif %}
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Vendor JS Files -->
+  <script src="{% static 'gil/vendor/apexcharts/apexcharts.min.js' %}"></script>
+  <script src="{% static 'gil/vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'gil/vendor/chart.js/chart.umd.js' %}"></script>
+  <script src="{% static 'gil/vendor/echarts/echarts.min.js' %}"></script>
+  <script src="{% static 'gil/vendor/quill/quill.js' %}"></script>
+  <script src="{% static 'gil/vendor/tinymce/tinymce.js' %}"></script>
+
+  <!-- Template Main JS File -->
+  <script src="{% static 'gil/js/main.js' %}"></script>
+
+  <style>
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #main {
+      min-height: calc(100vh - 60px);
+    }
+
+    /* ── Sidebar section headings ── */
+    .sidebar-nav .nav-heading {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #adb5bd;
+      padding: 0.85rem 1rem 0.3rem;
+      list-style: none;
+    }
+
+    /* ── Nav link base ── */
+    .sidebar-nav .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.52rem 1rem;
+      border-radius: 6px;
+      margin: 1px 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #444;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sidebar-nav .nav-link i {
+      font-size: 1rem;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0;
+      color: #6c757d;
+      transition: color 0.15s;
+    }
+
+    /* ── Hover ── */
+    .sidebar-nav .nav-link:hover {
+      background: #f0f4ff;
+      color: #1a56db;
+    }
+    .sidebar-nav .nav-link:hover i {
+      color: #1a56db;
+    }
+
+    /* ── Active (not collapsed) ── */
+    .sidebar-nav .nav-link:not(.collapsed) {
+      background: #e8effd;
+      color: #1a56db;
+      font-weight: 600;
+    }
+    .sidebar-nav .nav-link:not(.collapsed) i {
+      color: #1a56db;
+    }
+  </style>
+
+  <!-- Auto-refresh processing status -->
+  <script>
+  $(document).ready(function() {
+    const csrftoken = "{{ csrf_token }}";
+    
+    // AJAX polling for RFQ processing badge (no page reload)
+    function pollRfqProcessingStatus() {
+      if (document.visibilityState !== 'visible') return;
+
+      fetch("{% url 'solicitations:rfq_processing_status_api' %}", {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": csrftoken,
+        },
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        var container = document.getElementById('rfqStatusBadgeContainer');
+        var badge = document.getElementById('rfqStatusBadge');
+        var statusText = document.getElementById('rfqStatusText');
+        if (!container) return;
+
+        if (data.is_processing) {
+          container.style.display = '';
+          if (statusText) statusText.textContent = data.processing_count + ' Processing';
+          if (badge) badge.setAttribute('title', data.status_text || 'Processing RFQs...');
+        } else {
+          container.style.display = 'none';
+        }
+      })
+      .catch(function(error) {
+        console.error('Error polling RFQ processing status:', error);
+      });
+    }
+
+    // Poll immediately then every 5 seconds
+    pollRfqProcessingStatus();
+    setInterval(pollRfqProcessingStatus, 5000);
+    
+    // AJAX polling for scraping status (updates without page refresh)
+    var scrapingPollInterval = null;
+    
+    function pollScrapingStatus() {
+      // Only poll if badge is visible and tab is visible
+      var badgeContainer = document.getElementById('scrapingStatusBadgeContainer');
+      if (!badgeContainer || document.visibilityState !== 'visible') {
+        return;
+      }
+      
+      fetch("{% url 'solicitations:scrape-progress' %}", {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRFToken": csrftoken,
+        },
+      })
+      .then(response => response.json())
+      .then(progressData => {
+        var badgeContainer = document.getElementById('scrapingStatusBadgeContainer');
+        var badge = document.getElementById('scrapingStatusBadge');
+        var statusText = document.getElementById('scrapingStatusText');
+        
+        if (!badgeContainer || !badge || !statusText) {
+          // Badge was removed, stop polling
+          if (scrapingPollInterval) {
+            clearInterval(scrapingPollInterval);
+            scrapingPollInterval = null;
+          }
+          return;
+        }
+        
+        var status = progressData.status || 'not_started';
+        var percentage = progressData.percentage || 0;
+        var current = progressData.current || 0;
+        var total = progressData.total || 0;
+        var message = progressData.message || 'Scraping in progress...';
+        
+        // Update badge content
+        // Check if message contains page information
+        var pageInfo = '';
+        if (message && message.toLowerCase().includes('processing page')) {
+          // Extract page number from message like "Processing page 2"
+          var pageMatch = message.match(/page\s+(\d+)/i);
+          if (pageMatch) {
+            pageInfo = ' - Page ' + pageMatch[1];
+          }
+        }
+        
+        if (total > 0) {
+          statusText.textContent = 'Scraping: ' + percentage + '% (' + current + '/' + total + ')' + pageInfo;
+        } else {
+          statusText.textContent = 'Scraping: ' + percentage + '%' + pageInfo;
+        }
+        badge.setAttribute('title', message);
+        
+        // Trigger count update event when badge updates (for synchronization)
+        // Pass the entire progressData so count can use the same data source
+        if (status === 'running') {
+          var updateEvent = new CustomEvent('scrapingProgressUpdate', { 
+            detail: { 
+              current: current, 
+              total: total, 
+              percentage: percentage,
+              progressData: progressData  // Include full progress data with count
+            } 
+          });
+          document.dispatchEvent(updateEvent);
+        }
+        
+        // If scraping is completed or failed, hide the badge and stop polling
+        if (status === 'completed' || status === 'failed' || status === 'not_started' || status === 'error') {
+          badgeContainer.style.display = 'none';
+          if (scrapingPollInterval) {
+            clearInterval(scrapingPollInterval);
+            scrapingPollInterval = null;
+          }
+          // Trigger event to notify other components that scraping stopped (vanilla JS)
+          var event = new CustomEvent('scrapingStatusChanged', { detail: { isRunning: false } });
+          document.dispatchEvent(event);
+          // Also trigger jQuery event if jQuery is available
+          if (typeof $ !== 'undefined') {
+            $(document).trigger('scrapingStatusChanged', [false]);
+          }
+        } else if (status === 'running') {
+          // Trigger event to notify other components that scraping is running (vanilla JS)
+          var event = new CustomEvent('scrapingStatusChanged', { detail: { isRunning: true } });
+          document.dispatchEvent(event);
+          // Also trigger jQuery event if jQuery is available
+          if (typeof $ !== 'undefined') {
+            $(document).trigger('scrapingStatusChanged', [true]);
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error polling scraping status:', error);
+        // Continue polling even on error (might be temporary network issue)
+      });
+    }
+    
+    // Start polling if scraping badge is visible
+    {% if scrape_is_running %}
+    if (document.getElementById('scrapingStatusBadgeContainer')) {
+      // Poll immediately, then every 5 seconds
+      pollScrapingStatus();
+      scrapingPollInterval = setInterval(pollScrapingStatus, 5000);
+    }
+    {% endif %}
+    
+    // Global stop scraping button handler
+    $(document).on('click', '#globalStopScrapingButton', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Show confirmation modal
+      var modalEl = document.getElementById('globalStopScrapingModal');
+      if (modalEl) {
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+      }
+    });
+    
+    // Confirm stop scraping
+    $(document).on('click', '#globalConfirmStopScrapingButton', function() {
+      const $button = $(this);
+      const originalText = $button.html();
+      
+      // Disable button and show processing state
+      $button.prop('disabled', true).html('<i class="bi bi-hourglass-split" style="animation: spin 1s linear infinite;"></i> Stopping...');
+      
+      $.ajax({
+        url: "{% url 'solicitations:stop_scraping' %}",
+        type: "POST",
+        headers: { 
+          "X-CSRFToken": csrftoken,
+          "Content-Type": "application/json"
+        },
+        success: function(response) {
+          if (response.success) {
+            // Hide modal
+            $('#globalStopScrapingModal').modal('hide');
+            
+            // Show success message
+            showGlobalToast(response.message || "Scraping stopped successfully", "success");
+            
+            // Reload page after short delay to reflect changes
+            setTimeout(function() {
+              location.reload();
+            }, 1500);
+          } else {
+            $button.prop('disabled', false).html(originalText);
+            showGlobalToast('Failed to stop scraping: ' + (response.error || 'Unknown error'), "error");
+          }
+        },
+        error: function(xhr, status, error) {
+          $button.prop('disabled', false).html(originalText);
+          
+          let errorMessage = "Failed to stop scraping. Please try again.";
+          try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.error) {
+              errorMessage = response.error;
+            }
+          } catch (e) {
+            // Use default message
+          }
+          
+          showGlobalToast(errorMessage, "error");
+        }
+      });
+    });
+    
+    // Global stop processing button handler
+    $(document).on('click', '#globalStopProcessingButton', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log("Global stop button clicked");
+      
+      // Show confirmation modal
+      var modalEl = document.getElementById('globalStopProcessingModal');
+      if (modalEl) {
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        console.log("Modal shown");
+      } else {
+        console.error("Modal element not found");
+      }
+    });
+    
+    // Confirm stop processing
+    $(document).on('click', '#globalConfirmStopProcessingButton', function() {
+      const $button = $(this);
+      const originalText = $button.html();
+      
+      console.log("Confirm stop processing clicked");
+      
+      // Disable button and show processing state
+      $button.prop('disabled', true).html('<i class="bi bi-hourglass-split" style="animation: spin 1s linear infinite;"></i> Stopping...');
+      
+      $.ajax({
+        url: "{% url 'solicitations:stop_rfq_processing' %}",
+        type: "POST",
+        headers: { 
+          "X-CSRFToken": csrftoken,
+          "Content-Type": "application/json"
+        },
+        data: JSON.stringify({
+          reason: "User clicked global stop button from " + window.location.pathname
+        }),
+        success: function(response) {
+          console.log("Stop processing response:", response);
+          
+          if (response.success) {
+            // Hide modal
+            $('#globalStopProcessingModal').modal('hide');
+            
+            // Build detailed success message
+            let message = response.message || "RFQ processing stopped successfully";
+            
+            // Add details if available
+            let details = [];
+            if (response.selections_cleared > 0) {
+              details.push(`${response.selections_cleared} selections cleared`);
+            }
+            if (response.items_cleared > 0) {
+              details.push(`${response.items_cleared} processing items cleared`);
+            }
+            if (response.stopped_tasks > 0) {
+              details.push(`${response.stopped_tasks} tasks stopped`);
+            }
+            
+            if (details.length > 0) {
+              message += ` (${details.join(', ')})`;
+            }
+            
+            // Show success message
+            showGlobalToast(message, "success");
+            
+            // If we're on the solicitations page, clear any visible selections
+            if (typeof window.clearRFQState === 'function') {
+              window.clearRFQState();
+            }
+            
+            // Reload page after short delay to reflect changes
+            setTimeout(function() {
+              location.reload();
+            }, 2000); // Slightly longer delay to show the message
+          } else {
+            showGlobalToast('Failed to stop processing: ' + (response.error || 'Unknown error'), "error");
+          }
+        },
+        error: function(xhr, status, error) {
+          console.error('Stop processing failed:', {
+            status: status,
+            error: error,
+            response: xhr.responseText
+          });
+          
+          let errorMessage = "Failed to stop processing. Please try again.";
+          try {
+            const errorData = JSON.parse(xhr.responseText);
+            errorMessage = errorData.error || errorMessage;
+          } catch (e) {
+            // Use default message
+          }
+          
+          showGlobalToast(errorMessage, "error");
+        },
+        complete: function() {
+          // Re-enable button
+          $button.prop('disabled', false).html(originalText);
+        }
+      });
+    });
+    
+    // Global toast function
+    function showGlobalToast(message, type = "info") {
+      console.log("Showing toast:", message, type);
+      
+      // Create toast container if it doesn't exist
+      if (!$('#globalToastContainer').length) {
+        $('body').append(`
+          <div class="toast-container position-fixed top-0 end-0 p-3" id="globalToastContainer" style="z-index: 1055;">
+          </div>
+        `);
+      }
+      
+      // Create toast
+      const toastId = 'toast-' + Date.now();
+      const toastClass = type === 'success' ? 'text-bg-success' : 
+                         type === 'error' ? 'text-bg-danger' : 
+                         type === 'warning' ? 'text-bg-warning' : 'text-bg-info';
+      
+      const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center ${toastClass} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body">
+              ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      `;
+      
+      $('#globalToastContainer').append(toastHtml);
+      
+      // Show toast
+      const toast = new bootstrap.Toast(document.getElementById(toastId), {
+        delay: Math.min(8000, Math.max(3000, message.length * 100))
+      });
+      toast.show();
+      
+      // Remove toast element after hiding
+      document.getElementById(toastId).addEventListener('hidden.bs.toast', function() {
+        this.remove();
+      });
+    }
+    
+    // Make showGlobalToast available globally for other scripts
+    window.showGlobalToast = showGlobalToast;
+  });
+  </script>
+{% block extra_js %}{% endblock %}
+
+</body>
+
+</html>

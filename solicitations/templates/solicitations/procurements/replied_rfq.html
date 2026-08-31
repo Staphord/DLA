@@ -1,0 +1,1292 @@
+{% extends 'solicitations/base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block content %}
+
+<section>
+    {# Export error message passed via context variable (not Django messages) #}
+    {% if export_error_message %}
+        <div id="exportErrorData" data-error-message="{{ export_error_message|escapejs }}" style="display: none;"></div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-start">
+        <div></div>
+        <div class="d-flex gap-3">
+            <form action="{% url 'solicitations:search-replied' %}" method="post">
+                {% csrf_token %}
+                <div class="d-flex gap-2">
+                    <input type="text" name="search-replied" class="form-control" placeholder="Search by Id">
+                    <button type="submit" class="btn bg-warning"><i class="bi bi-search text-white"></i></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                Total Replied RFQs <span class="badge bg-dark text-white">{{total_replied_rfq}}</span>
+                {% if active_reply_filter != 'all' %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-2">
+                        {% if active_reply_filter == 'ready' %}
+                            Ready for assessment
+                        {% elif active_reply_filter == 'no_solicitation' %}
+                            No solicitation found
+                        {% elif active_reply_filter == 'no_match' %}
+                            No matching solicitation
+                        {% endif %}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div id="rfqAutoFetchStatus" class="badge bg-info text-dark" style="display: none;">
+                    <span class="spinner-border spinner-border-sm text-warning me-1" role="status" aria-hidden="true"></span>
+                    <span class="text-warning" id="rfqAutoFetchStatusText">Fetching...</span>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-gear me-1"></i> Actions
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'solicitations:archived-replied-rfqs' %}">
+                                <i class="bi bi-box me-2"></i> View Exported RFQs
+                            </a>
+                        </li>
+                        <li>
+                            <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#filterRepliesModal">
+                                <i class="bi bi-funnel me-2"></i> Filter Replies
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#fetchRfqByDateModal">
+                                <i class="bi bi-envelope-open me-2"></i> Fetch RFQ Replies by Date
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            {% if user.user_type == "admin" %}
+                            <a class="dropdown-item" href="{% url 'solicitations:rfq-auto-fetch-settings' %}">
+                                <i class="bi bi-sliders me-2"></i> Configure Auto Fetching
+                            </a>
+                            {% endif %}
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'solicitations:add-replied-rfq' %}">
+                                <i class="bi bi-plus-circle me-2"></i> Add Reply
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div id="bulkActionsBar" class="alert alert-primary d-flex justify-content-between align-items-center mt-3" style="display: none;">
+        <div>
+            <i class="bi bi-check-square me-2"></i>
+            <span id="selectedCount">0</span> Selected
+            <span id="selectedFromTotal" class="text-muted ms-2"></span>
+            <span class="badge bg-info ms-2">Max: 50</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllRfqs()">
+                <i class="bi bi-check-all me-1"></i>Select 50
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+                <i class="bi bi-x-square me-1"></i>Clear Selection
+            </button>
+            <button type="button" class="btn btn-success btn-sm" onclick="previewSelectedRfqs()">
+                <i class="bi bi-download me-1"></i>Export Selected
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="bulkDeleteRfqs()">
+                <i class="bi bi-trash me-1"></i>Delete Selected
+            </button>
+        </div>
+    </div>
+
+    <div class="mb-4 mt-2">
+        <div class="card">
+            <div class="card-body my-3">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                      <th class="text-secondary">
+                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()" class="form-check-input">
+                      </th>
+                      <th class="text-secondary">RFQ</th>
+                      <th class="text-secondary">Unit</th>
+                      <th class="text-secondary">Replied Date</th>
+                      <th class="text-secondary text-center">Assessment</th>
+                      <th class="text-secondary text-center">Status</th>
+                      <th class="text-secondary text-center">Operation</th>
+                    </thead>
+                    <tbody>
+                        {% if rfq %}
+                        {% for rfqs in rfq %}
+                        <tr
+                          data-href="{% url 'solicitations:replied-rfq-detail' rfqs.id %}"
+                          onclick="handleRowClick(event, {{rfqs.id}})"
+                          style="cursor: pointer;"
+                          class="
+                            {% if not rfqs.solicitation_number and not rfqs.has_matching_solicitation %}
+                              table-danger
+                            {% elif not rfqs.has_matching_solicitation %}
+                              table-warning
+                            {% endif %}
+                          ">
+                            <td onclick="event.stopPropagation();">
+                                <input type="checkbox" class="form-check-input rfq-checkbox"
+                                       value="{{rfqs.id}}"
+                                       data-assessed="{{ rfqs.is_assessed|yesno:'true,false' }}">
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    {% if rfqs.rfq_unique_id %}
+                                        <span class="text-primary fw-bold" style="font-size: 0.85rem;">{{ rfqs.rfq_unique_id }}</span>
+                                    {% else %}
+                                        <span class="text-muted" style="font-size: 0.85rem;">No RFQ ID</span>
+                                    {% endif %}
+
+                                    {# Only show "Missing solicitation number" if we also cannot match any Solicitation #}
+                                    {% if not rfqs.solicitation_number and not rfqs.has_matching_solicitation %}
+                                        <span class="text-danger" style="font-size: 0.75rem;">
+                                            Missing solicitation number
+                                        </span>
+                                    {% endif %}
+
+                                    {% if not rfqs.has_matching_solicitation %}
+                                        <span class="text-warning" style="font-size: 0.75rem;">
+                                            No matching solicitation found
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if rfqs.unit_price %}
+                                    <span class="text-success">${{rfqs.unit_price|intcomma}}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if rfqs.received_date %}
+                                    {{rfqs.received_date|date:"M d, Y"}}
+                                {% else %}
+                                    {{rfqs.created_at|date:"M d, Y"}}
+                                {% endif %}
+                            </td>
+                            <td class="text-center" onclick="event.stopPropagation();">
+                                {% if rfqs.has_matching_solicitation %}
+                                    <a href="{% url 'solicitations:rfq-assessment' rfqs.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-arrow-up-right"></i>
+                                    </a>
+                                {% else %}
+                                    <span data-bs-toggle="tooltip"
+                                          data-bs-placement="top"
+                                          title="Link this reply to a solicitation before doing an assessment"
+                                          style="cursor:not-allowed; display:inline-block;">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                disabled style="pointer-events:none;">
+                                            <i class="bi bi-arrow-up-right"></i>
+                                        </button>
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <td class="text-center" onclick="event.stopPropagation();">
+                                {% if rfqs.is_assessed %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Assessed</span>
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Not Assessed</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                <div class="dropdown text-center">
+                                <a class="text-muted" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation();">
+                                    <i class="bi bi-caret-down-fill"></i>
+                                </a>
+
+                                <ul class="dropdown-menu">
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:replied-rfq-detail' rfqs.id %}">View More</a></li>
+                                  <li><a class="dropdown-item" href="{% url 'solicitations:edit-replied-rfq' rfqs.id %}" onclick="event.stopPropagation();">Edit</a></li>
+                                  <li><hr class="dropdown-divider"></li>
+                                  <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#deleteSent-{{rfqs.id}}" onclick="event.stopPropagation();">Delete</a></li>
+                                </ul>
+                              </div>
+                            </td>
+                          </tr>
+
+
+                          <!-- Single delete confirmation modal (matches archived style) -->
+                          <div class="modal fade" id="deleteSent-{{rfqs.id}}" data-bs-backdrop="static" tabindex="-1" aria-labelledby="deleteRepliedModalLabel-{{rfqs.id}}" aria-hidden="true">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h5 class="modal-title" id="deleteRepliedModalLabel-{{rfqs.id}}">Confirm Deletion</h5>
+                                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to delete this RFQ reply?</p>
+                                  <form method="POST" action="{% url 'solicitations:delete-replied-rfq' rfqs.id %}">
+                                    {% csrf_token %}
+                                    <div class="modal-footer">
+                                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        <i class="bi bi-x-circle me-1"></i>No, Cancel
+                                      </button>
+                                      <button type="submit" class="btn btn-danger">
+                                        <i class="bi bi-trash me-1"></i>Yes, Delete
+                                      </button>
+                                    </div>
+                                  </form>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                                    <p class="mt-3">No RFQ replies found.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                  </table>
+
+                  <!-- Export Validation Error Modal -->
+                  <div class="modal fade" id="exportErrorModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="exportErrorModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-scrollable">
+                        <div class="modal-content">
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title" id="exportErrorModalLabel">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Cannot Export RFQ Replies
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="mb-3">
+                                    The selected RFQ replies cannot be exported because they are missing required fields.
+                                </p>
+
+                                <div id="exportErrorContent">
+                                    <!-- Error details will be populated here -->
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <i class="bi bi-x-circle me-1"></i>Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                  </div>
+
+                  <!-- Bulk Delete Confirmation Modal -->
+                  <div class="modal fade" id="bulkDeleteModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="bulkDeleteModalLabel">Confirm Deletion</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to delete <span id="bulkDeleteCount">0</span> selected RFQ reply(ies)?</p>
+                                <form id="bulkDeleteForm" method="POST" action="{% url 'solicitations:bulk-delete-replied-rfqs' %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="bulkDeleteIds" name="rfq_ids" value="">
+                                    <input type="hidden" name="source" value="replied">
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            <i class="bi bi-x-circle me-1"></i>Cancel
+                                        </button>
+                                        <button type="submit" class="btn btn-danger">
+                                            <i class="bi bi-trash me-1"></i>Delete
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                  </div>
+
+                  <!-- ========== PAGINATION SECTION ========== -->
+                  {% if rfq and rfq.paginator.num_pages > 1 %}
+                  <div class="text-center mt-4 mb-2">
+                      <div class="text-muted small mb-2">
+                          Page {{ rfq.number }} of {{ rfq.paginator.num_pages }} 
+                          (Showing {{ rfq.start_index }}-{{ rfq.end_index }} of {{ rfq.paginator.count }} items)
+                      </div>
+                      
+                      <div class="ms-1 rounded me-1 container d-flex justify-content-center pagination">
+                          <ul class="pagination mb-0">
+                              <!-- Previous button -->
+                              {% if rfq.has_previous %}
+                                  <li class="page-item">
+                                      <a class="page-link text-secondary" href="?page={{ rfq.previous_page_number }}{% if querystring_without_page %}&{{ querystring_without_page }}{% endif %}">&laquo; Previous</a>
+                                  </li>
+                              {% else %}
+                                  <li class="page-item disabled">
+                                      <span class="page-link text-muted">&laquo; Previous</span>
+                                  </li>
+                              {% endif %}
+                              
+                              <!-- First page -->
+                              {% if rfq.number > 3 %}
+                                  <li class="page-item">
+                                      <a class="page-link text-secondary" href="?page=1{% if querystring_without_page %}&{{ querystring_without_page }}{% endif %}">1</a>
+                                  </li>
+                                  {% if rfq.number > 4 %}
+                                      <li class="page-item disabled">
+                                          <span class="page-link text-muted">...</span>
+                                      </li>
+                                  {% endif %}
+                              {% endif %}
+                              
+                              <!-- Pages around current page -->
+                              {% for num in rfq.paginator.page_range %}
+                                  {% if num >= rfq.number|add:'-2' and num <= rfq.number|add:'2' %}
+                                      {% if num == rfq.number %}
+                                          <li class="page-item active">
+                                              <span class="page-link">{{ num }}</span>
+                                          </li>
+                                      {% else %}
+                                          <li class="page-item">
+                                              <a class="page-link text-secondary" href="?page={{ num }}{% if querystring_without_page %}&{{ querystring_without_page }}{% endif %}">{{ num }}</a>
+                                          </li>
+                                      {% endif %}
+                                  {% endif %}
+                              {% endfor %}
+                              
+                              <!-- Last page -->
+                              {% if rfq.number < rfq.paginator.num_pages|add:'-2' %}
+                                  {% if rfq.number < rfq.paginator.num_pages|add:'-3' %}
+                                      <li class="page-item disabled">
+                                          <span class="page-link text-muted">...</span>
+                                      </li>
+                                  {% endif %}
+                                  <li class="page-item">
+                                      <a class="page-link text-secondary" href="?page={{ rfq.paginator.num_pages }}{% if querystring_without_page %}&{{ querystring_without_page }}{% endif %}">{{ rfq.paginator.num_pages }}</a>
+                                  </li>
+                              {% endif %}
+                              
+                              <!-- Next button -->
+                              {% if rfq.has_next %}
+                                  <li class="page-item">
+                                      <a class="page-link text-secondary" href="?page={{ rfq.next_page_number }}{% if querystring_without_page %}&{{ querystring_without_page }}{% endif %}">Next &raquo;</a>
+                                  </li>
+                              {% else %}
+                                  <li class="page-item disabled">
+                                      <span class="page-link text-muted">Next &raquo;</span>
+                                  </li>
+                              {% endif %}
+                          </ul>
+                      </div>
+                  </div>
+                  {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const statusWrapper = document.getElementById('rfqAutoFetchStatus');
+            const statusTextEl = document.getElementById('rfqAutoFetchStatusText');
+            if (!statusWrapper || !statusTextEl) {
+                return;
+            }
+
+            async function fetchAutoFetchStatus() {
+                try {
+                    const resp = await fetch("{% url 'solicitations:rfq-auto-fetch-status' %}", {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        cache: 'no-store'
+                    });
+                    if (!resp.ok) {
+                        return;
+                    }
+                    const data = await resp.json();
+
+                    // Only show badge when status is 'running'
+                    if (data.status === 'running') {
+                        // Keep text simple: just "Fetching..." with spinner
+                        statusWrapper.style.display = 'inline-block';
+                    } else {
+                        // Hide badge for completed/failed/not_started/error
+                        statusWrapper.style.display = 'none';
+                    }
+                } catch (e) {
+                    // Silent fail - do not break the page
+                }
+            }
+
+            // Initial load and periodic refresh
+            fetchAutoFetchStatus();
+            setInterval(fetchAutoFetchStatus, 15000); // every 15 seconds
+        })();
+    </script>
+
+    <!-- Filter Replies Modal -->
+    <div class="modal fade" id="filterRepliesModal" tabindex="-1" aria-labelledby="filterRepliesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="filterRepliesModalLabel">Filter Replies</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="get" action="{% url 'solicitations:replied-rfq' %}">
+                    <div class="modal-body">
+                        <div class="list-group">
+                            <label class="list-group-item d-flex gap-2 align-items-start">
+                                <input class="form-check-input mt-1" type="radio" name="reply_filter" value="all" {% if active_reply_filter == 'all' %}checked{% endif %}>
+                                <span>
+                                    <span class="fw-semibold">All replies</span>
+                                    <span class="d-block text-muted small">Show every replied RFQ.</span>
+                                </span>
+                            </label>
+                            <label class="list-group-item d-flex gap-2 align-items-start">
+                                <input class="form-check-input mt-1" type="radio" name="reply_filter" value="no_match" {% if active_reply_filter == 'no_match' %}checked{% endif %}>
+                                <span>
+                                    <span class="fw-semibold">No matching solicitation</span>
+                                    <span class="d-block text-muted small">Replies with a solicitation number, but no matching solicitation record.</span>
+                                </span>
+                            </label>
+                            <label class="list-group-item d-flex gap-2 align-items-start">
+                                <input class="form-check-input mt-1" type="radio" name="reply_filter" value="no_solicitation" {% if active_reply_filter == 'no_solicitation' %}checked{% endif %}>
+                                <span>
+                                    <span class="fw-semibold">No solicitation found</span>
+                                    <span class="d-block text-muted small">Replies with no solicitation number and no matching solicitation record.</span>
+                                </span>
+                            </label>
+                            <label class="list-group-item d-flex gap-2 align-items-start">
+                                <input class="form-check-input mt-1" type="radio" name="reply_filter" value="ready" {% if active_reply_filter == 'ready' %}checked{% endif %}>
+                                <span>
+                                    <span class="fw-semibold">Ready for assessment</span>
+                                    <span class="d-block text-muted small">Replies that are linked or matched and can be assessed.</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <a href="{% url 'solicitations:replied-rfq' %}?reply_filter=all" class="btn btn-outline-secondary">Clear</a>
+                        <button type="submit" class="btn btn-primary">Apply Filter</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fetch RFQ Replies By Date Modal -->
+    <div class="modal fade" id="fetchRfqByDateModal" tabindex="-1" aria-labelledby="fetchRfqByDateModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="fetchRfqByDateModalLabel">Choose Date</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="fetchRfqByDateForm">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <input type="date" id="fetchDateInput" name="fetch_date" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" onclick="startFetchRfqRepliesByDate()">Fetch Now</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification (similar to sending RFQs) -->
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div id="rfqFetchToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <!-- Message will be filled dynamically -->
+                </div>
+                <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+function showExportErrorModal(errorMessage) {
+    // Decode Unicode escape sequences (like \u000A for newlines)
+    // Django's escapejs converts newlines to \u000A, so we need to decode them
+    let decodedMessage = errorMessage;
+    try {
+        // Replace Unicode escape sequences with actual characters
+        // \u000A = newline, \u000D = carriage return
+        decodedMessage = decodedMessage.replace(/\\u000A/g, '\n');
+        decodedMessage = decodedMessage.replace(/\\u000D/g, '\r');
+        // Also handle standard escape sequences
+        decodedMessage = decodedMessage.replace(/\\n/g, '\n');
+        decodedMessage = decodedMessage.replace(/\\r/g, '\r');
+        // Handle other Unicode escapes (4 hex digits)
+        decodedMessage = decodedMessage.replace(/\\u([0-9a-fA-F]{4})/g, function(match, hex) {
+            return String.fromCharCode(parseInt(hex, 16));
+        });
+    } catch (e) {
+        console.warn('[Export Error Modal] Error decoding message:', e);
+    }
+    
+    // Parse the error message to extract RFQ details
+    const lines = decodedMessage.split('\n');
+    const summaryLine = lines[0] || '';
+    const errorDetails = [];
+    
+    // Extract RFQ errors (lines starting with "-")
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('-')) {
+            // Match format: "- RFQ_REF|ID:123: Missing ..."
+            const match = line.match(/^-\s*(.+?)\|ID:(\d+):\s*Missing\s+(.+)$/);
+            if (match) {
+                errorDetails.push({
+                    rfqRef: match[1],
+                    rfqId: match[2],
+                    missingFields: match[3].split(',').map(f => f.trim())
+                });
+            } else {
+                // Fallback for old format without ID
+                const fallbackMatch = line.match(/^-\s*(.+?):\s*Missing\s+(.+)$/);
+                if (fallbackMatch) {
+                    errorDetails.push({
+                        rfqRef: fallbackMatch[1],
+                        rfqId: null,
+                        missingFields: fallbackMatch[2].split(',').map(f => f.trim())
+                    });
+                }
+            }
+        }
+    }
+    
+    // Populate the error container with a simple list per RFQ
+    const container = document.getElementById('exportErrorContent');
+    const modalEl = document.getElementById('exportErrorModal');
+
+    if (!container) {
+        console.error('[Export Error Modal] exportErrorContent element not found');
+        return;
+    }
+    if (!modalEl) {
+        console.error('[Export Error Modal] exportErrorModal element not found');
+        return;
+    }
+
+    container.innerHTML = '';
+
+    if (errorDetails.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'text-muted mb-0';
+        p.textContent = 'No detailed error information available.';
+        container.appendChild(p);
+    } else {
+        errorDetails.forEach(detail => {
+            const block = document.createElement('div');
+            block.className = 'mb-3';
+
+            const title = document.createElement('div');
+            title.className = 'fw-semibold';
+            title.textContent = detail.rfqRef;
+
+            const ul = document.createElement('ul');
+            ul.className = 'mb-0 ps-3';
+            
+            detail.missingFields.forEach(field => {
+                // Expect format: "Position X (Field Name)"
+                const m = field.match(/Position\s+(\d+)\s+\((.+?)\)/);
+                let displayText;
+                if (m) {
+                    const position = m[1];
+                    const name = m[2];
+                    displayText = `Field ${position} - ${name}`;
+                } else {
+                    displayText = field;
+                }
+                const li = document.createElement('li');
+                li.textContent = displayText;
+                ul.appendChild(li);
+            });
+
+            block.appendChild(title);
+            block.appendChild(ul);
+            container.appendChild(block);
+        });
+    }
+
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+}
+
+function showRfqFetchToast(message, type = "info") {
+    const toastElement = document.getElementById('rfqFetchToast');
+    const body = toastElement.querySelector('.toast-body');
+    body.textContent = message;
+
+    toastElement.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-info');
+    if (type === 'success') {
+        toastElement.classList.add('text-bg-success');
+    } else if (type === 'error') {
+        toastElement.classList.add('text-bg-danger');
+    } else {
+        toastElement.classList.add('text-bg-info');
+    }
+
+    const delay = Math.min(10000, Math.max(3000, message.length * 80));
+    const toast = new bootstrap.Toast(toastElement, { delay: delay });
+    toast.show();
+}
+
+function startFetchRfqRepliesByDate() {
+    const dateInput = document.getElementById('fetchDateInput');
+    const dateValue = dateInput.value;
+    if (!dateValue) {
+        showRfqFetchToast('Please select a date first.', 'warning');
+        return;
+    }
+
+    // Close the date modal
+    const fetchModalEl = document.getElementById('fetchRfqByDateModal');
+    const fetchModalInstance = bootstrap.Modal.getInstance(fetchModalEl);
+    if (fetchModalInstance) {
+        fetchModalInstance.hide();
+    }
+
+    const csrfToken = document.querySelector('#fetchRfqByDateForm [name=csrfmiddlewaretoken]').value;
+
+    fetch("{% url 'solicitations:fetch-rfq-replies-by-date' %}", {
+        method: "POST",
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+        },
+        body: JSON.stringify({ fetch_date: dateValue }),
+    })
+    .then(response => response.json().then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+        if (ok && data.success) {
+            showRfqFetchToast(data.message || 'Fetch task started successfully.', 'success');
+        } else {
+            showRfqFetchToast(
+                (data && data.error) ? data.error : 'Failed to start fetch task.',
+                'error'
+            );
+        }
+    })
+    .catch(error => {
+        console.error('RFQ fetch error:', error);
+        showRfqFetchToast(`Error: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        setTimeout(() => {
+            // Refresh to show any newly fetched replies
+            window.location.reload();
+        }, 8000);
+    });
+}
+
+// Auto-trigger download if there's a pending export file
+{% if has_pending_download %}
+document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to ensure page is fully loaded
+    setTimeout(function() {
+        // Use fetch to download the file as a blob, then trigger download without navigation
+        const downloadUrl = "{% url 'solicitations:download-export-file' %}";
+        fetch(downloadUrl)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Download failed');
+                }
+                // Get filename from Content-Disposition header or use default
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'export.txt';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                return response.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
+                // Create a blob URL and trigger download
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                // Clean up
+                setTimeout(function() {
+                    if (document.body.contains(link)) {
+                        document.body.removeChild(link);
+                    }
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+            })
+            .catch(error => {
+                console.error('Download error:', error);
+                // Fallback: try direct navigation if fetch fails
+                window.location.href = downloadUrl;
+            });
+    }, 500);
+});
+{% endif %}
+
+// Global variables for bulk actions
+let selectedRfqs = new Set();
+let rfqData = {};
+let allRfqsSelected = false;
+let totalRfqs = {{total_replied_rfq}};
+const MAX_SELECTION = 50; // Maximum number of RFQs that can be selected
+
+// Store RFQ data for bulk operations
+{% for rfqs in rfq %}
+rfqData[{{rfqs.id}}] = {
+    'rfq_id': '{{rfqs.rfq_unique_id|default:"N/A"|escapejs}}',
+    'id': {{rfqs.id}}
+};
+{% endfor %}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Check for export error message and show modal
+    const errorElement = document.getElementById('exportErrorData');
+    console.log('[Export Error Modal] DOMContentLoaded - errorElement:', errorElement);
+    
+    if (errorElement) {
+        const errorText = errorElement.getAttribute('data-error-message');
+        console.log('[Export Error Modal] Error text found:', errorText ? 'Yes' : 'No');
+        
+        if (errorText) {
+            // Small delay to ensure modal is ready and function is loaded
+            setTimeout(function() {
+                console.log('[Export Error Modal] Checking function availability:', typeof showExportErrorModal);
+                if (typeof showExportErrorModal === 'function') {
+                    showExportErrorModal(errorText);
+                } else {
+                    console.error('[Export Error Modal] showExportErrorModal function not found');
+                }
+            }, 200);
+        } else {
+            console.log('[Export Error Modal] No error text in data-error-message attribute');
+        }
+    } else {
+        console.log('[Export Error Modal] No exportErrorData element found');
+    }
+    
+    // Restore selection state from sessionStorage
+    restoreSelectionState();
+    
+    // Add event listeners to all checkboxes to enforce MAX_SELECTION limit
+    document.querySelectorAll('.rfq-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const rfqId = parseInt(this.value);
+            if (this.checked) {
+                // If already in set, allow it (might be from programmatic selection)
+                if (!selectedRfqs.has(rfqId)) {
+                    if (selectedRfqs.size >= MAX_SELECTION) {
+                        // Prevent checking if limit reached
+                        this.checked = false;
+                        showRfqFetchToast(`Maximum selection limit reached (${MAX_SELECTION} RFQs). Please deselect some RFQs first.`, 'warning');
+                        return;
+                    }
+                    selectedRfqs.add(rfqId);
+                }
+            } else {
+                // Unchecked - remove from set
+                selectedRfqs.delete(rfqId);
+            }
+            updateBulkActions();
+        });
+    });
+});
+
+// Save selection state to sessionStorage
+function saveSelectionState() {
+    const selectionData = {
+        selectedRfqs: Array.from(selectedRfqs),
+        allRfqsSelected: allRfqsSelected
+    };
+    sessionStorage.setItem('rfqSelection', JSON.stringify(selectionData));
+}
+
+// Restore selection state (simplified: do NOT persist across pages)
+// For this page, selection is always per-page only.
+function restoreSelectionState() {
+    selectedRfqs = new Set();
+    allRfqsSelected = false;
+    // Ensure all checkboxes start unchecked
+    document.querySelectorAll('.rfq-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateBulkActions();
+}
+
+// Bulk Actions Functions
+function handleRowClick(event, rfqId) {
+    // Only navigate if not clicking on checkbox or dropdown
+    if (!event.target.matches('input[type="checkbox"]') && 
+        !event.target.closest('.dropdown') && 
+        !event.target.closest('.form-check-input')) {
+        const row = event.currentTarget;
+        const href = row.getAttribute('data-href');
+        if (href) {
+            window.location.href = href;
+        }
+    }
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.rfq-checkbox');
+    
+    if (selectAllCheckbox.checked) {
+        // Check how many we can select (up to MAX_SELECTION)
+        const remainingSlots = MAX_SELECTION - selectedRfqs.size;
+        if (remainingSlots <= 0) {
+        showRfqFetchToast(`Maximum selection limit reached (${MAX_SELECTION} RFQs). Please deselect some RFQs first.`, 'warning');
+            selectAllCheckbox.checked = false;
+            return;
+        }
+        
+        // Select checkboxes on current page, but respect the 50 limit
+        let selectedOnPage = 0;
+        checkboxes.forEach(checkbox => {
+            if (!checkbox.checked && selectedRfqs.size < MAX_SELECTION) {
+                checkbox.checked = true;
+                selectedRfqs.add(parseInt(checkbox.value));
+                selectedOnPage++;
+            }
+        });
+        
+        if (selectedRfqs.size >= MAX_SELECTION && selectedOnPage < checkboxes.length) {
+            showRfqFetchToast(`Selection limit reached. Only ${MAX_SELECTION} RFQs can be selected.`, 'warning');
+        }
+    } else {
+        // Uncheck all checkboxes on current page
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+            selectedRfqs.delete(parseInt(checkbox.value));
+        });
+        allRfqsSelected = false;
+    }
+    
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.rfq-checkbox');
+    const bulkActionsBar = document.getElementById('bulkActionsBar');
+    const selectedCount = document.getElementById('selectedCount');
+    const selectedFromTotal = document.getElementById('selectedFromTotal');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    
+    // Sync selectedRfqs set with checked checkboxes on current page
+    // First, remove IDs that are not checked on this page
+    const checkedIds = new Set();
+    checkboxes.forEach(checkbox => {
+        const rfqId = parseInt(checkbox.value);
+        if (checkbox.checked) {
+            checkedIds.add(rfqId);
+        }
+    });
+    
+    // Remove IDs from selectedRfqs that are not checked on current page
+    // (but keep IDs from other pages that might be in selectedRfqs)
+    const currentPageIds = new Set(Array.from(checkboxes).map(cb => parseInt(cb.value)));
+    currentPageIds.forEach(id => {
+        if (!checkedIds.has(id)) {
+            selectedRfqs.delete(id);
+        }
+    });
+    
+    // Add checked IDs to selectedRfqs (respecting MAX_SELECTION limit)
+    let reachedLimit = false;
+    checkedIds.forEach(rfqId => {
+        if (!selectedRfqs.has(rfqId)) {
+            if (selectedRfqs.size < MAX_SELECTION) {
+                selectedRfqs.add(rfqId);
+            } else {
+                // Limit reached, uncheck this checkbox
+                const checkbox = Array.from(checkboxes).find(cb => parseInt(cb.value) === rfqId);
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+                reachedLimit = true;
+            }
+        }
+    });
+    
+    if (reachedLimit) {
+        showRfqFetchToast(`Maximum selection limit reached (${MAX_SELECTION} RFQs).`, 'warning');
+    }
+    
+    // Count how many are checked on the current page
+    const checkedOnPage = document.querySelectorAll('.rfq-checkbox:checked').length;
+    
+    // If nothing is checked on this page, clear global selection completely
+    if (checkedOnPage === 0) {
+        selectedRfqs.clear();
+        allRfqsSelected = false;
+    }
+    
+    // Show/hide bulk actions bar
+    if (selectedRfqs.size > 0) {
+        bulkActionsBar.style.display = 'block';
+        selectedCount.textContent = selectedRfqs.size;
+        if (selectedRfqs.size >= MAX_SELECTION) {
+            selectedFromTotal.textContent = ``;
+            selectedFromTotal.classList.add('text-warning');
+        } else {
+            selectedFromTotal.textContent = ``;
+            selectedFromTotal.classList.remove('text-warning');
+        }
+    } else {
+        bulkActionsBar.style.display = 'none';
+    }
+    
+    // Update select all checkbox state
+    const totalCheckboxes = checkboxes.length;
+    const canSelectMore = selectedRfqs.size < MAX_SELECTION;
+    
+    if (selectedRfqs.size === 0) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = false;
+    } else if (checkedOnPage === totalCheckboxes && canSelectMore) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = true;
+    } else {
+        selectAllCheckbox.indeterminate = true;
+    }
+    
+    // Disable checkboxes if limit reached
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked && selectedRfqs.size >= MAX_SELECTION) {
+            checkbox.disabled = true;
+            checkbox.title = `Maximum selection limit (${MAX_SELECTION}) reached`;
+        } else {
+            checkbox.disabled = false;
+            checkbox.title = '';
+        }
+    });
+    
+    allRfqsSelected = false; // Never set to true since we limit to 50
+    saveSelectionState();
+}
+
+function selectAllRfqs() {
+    // Select up to 50 RFQs (starting from current page)
+    const checkboxes = Array.from(document.querySelectorAll('.rfq-checkbox'));
+    console.log('[selectAllRfqs] Found', checkboxes.length, 'checkboxes');
+    console.log('[selectAllRfqs] Current selectedRfqs.size:', selectedRfqs.size);
+    console.log('[selectAllRfqs] MAX_SELECTION:', MAX_SELECTION);
+    
+    let selected = 0;
+    
+    // First, select unchecked checkboxes on current page
+    // We need to add to selectedRfqs BEFORE setting checked=true to avoid event listener interference
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.checked && selectedRfqs.size < MAX_SELECTION) {
+            const rfqId = parseInt(checkbox.value);
+            // Add to set first
+            selectedRfqs.add(rfqId);
+            // Then set checked (this will trigger change event, but selectedRfqs already has the ID)
+            checkbox.checked = true;
+            selected++;
+            console.log('[selectAllRfqs] Selected RFQ ID:', rfqId);
+        }
+    });
+    
+    console.log('[selectAllRfqs] Selected', selected, 'new RFQs. Total now:', selectedRfqs.size);
+    
+    // If we still have slots and there are more pages, we could navigate and select more
+    // But for simplicity, we'll just select up to 50 from current page
+    if (selectedRfqs.size >= MAX_SELECTION) {
+        showRfqFetchToast(`Selected ${MAX_SELECTION} RFQs (maximum limit reached).`, 'info');
+    } else if (selected > 0) {
+        showRfqFetchToast(`Selected ${selected} RFQ(s) on this page. Total: ${selectedRfqs.size}/${MAX_SELECTION}`, 'info');
+    } else {
+        showRfqFetchToast(`All RFQs on this page are already selected. Total: ${selectedRfqs.size}/${MAX_SELECTION}`, 'info');
+    }
+    
+    document.getElementById('selectAllCheckbox').checked = checkboxes.every(cb => cb.checked);
+    updateBulkActions();
+    saveSelectionState();
+}
+
+function clearSelection() {
+    console.log('[clearSelection] Clearing selection. Current selectedRfqs.size:', selectedRfqs.size);
+    
+    // Clear all checkboxes on current page
+    const checkboxes = document.querySelectorAll('.rfq-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Clear the select all checkbox
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    }
+    
+    // Clear the selectedRfqs Set completely
+    selectedRfqs.clear();
+    allRfqsSelected = false;
+    
+    console.log('[clearSelection] After clear, selectedRfqs.size:', selectedRfqs.size);
+    
+    // Update UI directly to ensure it reflects the cleared state
+    const bulkActionsBar = document.getElementById('bulkActionsBar');
+    const selectedCount = document.getElementById('selectedCount');
+    const selectedFromTotal = document.getElementById('selectedFromTotal');
+    
+    if (bulkActionsBar) {
+        bulkActionsBar.style.display = 'none';
+    }
+    if (selectedCount) {
+        selectedCount.textContent = '0';
+    }
+    if (selectedFromTotal) {
+        selectedFromTotal.textContent = '';
+        selectedFromTotal.classList.remove('text-warning');
+    }
+    
+    // Re-enable all checkboxes
+    checkboxes.forEach(checkbox => {
+        checkbox.disabled = false;
+        checkbox.title = '';
+    });
+    
+    // Save state and update bulk actions (this will sync everything)
+    saveSelectionState();
+    updateBulkActions();
+    
+    console.log('[clearSelection] Final selectedRfqs.size:', selectedRfqs.size);
+}
+
+// Helper function to get CSRF token from cookies
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function previewSelectedRfqs() {
+    if (selectedRfqs.size === 0) {
+        showRfqFetchToast('Please select at least one RFQ to export.', 'warning');
+        return;
+    }
+
+    if (selectedRfqs.size > MAX_SELECTION) {
+        showRfqFetchToast(`Maximum ${MAX_SELECTION} RFQs can be selected. Please deselect some RFQs.`, 'warning');
+        return;
+    }
+
+    // Block export if any selected RFQ is not assessed
+    const unassessedCount = Array.from(selectedRfqs).filter(id => {
+        const cb = document.querySelector(`.rfq-checkbox[value="${id}"]`);
+        return cb && cb.dataset.assessed !== 'true';
+    }).length;
+    if (unassessedCount > 0) {
+        showRfqFetchToast(
+            `${unassessedCount} selected RFQ${unassessedCount > 1 ? 's are' : ' is'} not assessed. Please complete the assessment before exporting.`,
+            'error'
+        );
+        return;
+    }
+    
+    // Get CSRF token from cookie (Django standard method)
+    const csrfToken = getCookie('csrftoken') || 
+                     document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                     document.querySelector('input[name="csrfmiddlewaretoken"]')?.value;
+    
+    if (!csrfToken) {
+        showRfqFetchToast('CSRF token not found. Please refresh the page.', 'error');
+        return;
+    }
+    
+    // Prepare the data
+    const rfqIds = allRfqsSelected ? [] : Array.from(selectedRfqs);
+    const data = {
+        rfq_ids: rfqIds,
+        all_selected: allRfqsSelected
+    };
+    
+    // Show loading message
+    showRfqFetchToast('Starting preview of selected RFQs...', 'info');
+    
+    // Send POST request to start preview of selected RFQs
+    fetch("{% url 'solicitations:preview-selected-rfqs' %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.json();
+        }
+        return response.json().then(err => {
+            throw new Error(err.error || 'Preview failed');
+        });
+    })
+    .then(data => {
+        if (data.success) {
+            // Redirect to first RFQ preview page
+            window.location.href = data.redirect_url;
+        } else {
+            showRfqFetchToast(data.error || 'Preview failed.', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Preview error:', error);
+        showRfqFetchToast('Error starting preview: ' + error.message, 'error');
+    });
+}
+
+function bulkDeleteRfqs() {
+    if (selectedRfqs.size === 0) {
+        showRfqFetchToast('Please select at least one RFQ to delete.', 'warning');
+        return;
+    }
+    
+    // Update modal with selected count and IDs
+    const count = selectedRfqs.size;
+    const rfqIds = Array.from(selectedRfqs).join(',');
+    
+    // Update modal content
+    document.getElementById('bulkDeleteCount').textContent = count;
+    document.getElementById('bulkDeleteIds').value = rfqIds;
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('bulkDeleteModal'));
+    modal.show();
+}
+</script>
+
+<style>
+/* Pagination styling - matching other templates */
+.pagination {
+    justify-content: center;
+}
+
+.pagination .page-link {
+    color: #6c757d;
+    border-color: #dee2e6;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0.125rem;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--bs-primary, #0d6efd);
+    border-color: var(--bs-primary, #0d6efd);
+    color: white;
+    font-weight: 500;
+}
+
+.pagination .page-link:hover:not(.disabled) {
+    color: var(--bs-primary, #0d6efd);
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    transform: translateY(-1px);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: #6c757d;
+    background-color: #fff;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+}
+
+.pagination .page-link:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Checkbox styling improvements */
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Indeterminate checkbox styling */
+.form-check-input:indeterminate {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10h8'/%3e%3c/svg%3e");
+}
+
+/* Selected row styling */
+.table tbody tr:has(.form-check-input:checked) {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+/* Cost breakdown styling */
+.collapse.show {
+    display: table-row !important;
+}
+
+.collapse[id^="costDetails-"] td {
+    padding: 0 !important;
+}
+
+.cost-breakdown-card {
+    transition: transform 0.2s ease;
+}
+
+.cost-breakdown-card:hover {
+    transform: translateY(-2px);
+}
+
+/* Additional costs button styling */
+.btn-outline-info:hover {
+    background-color: #0dcaf0;
+    border-color: #0dcaf0;
+    color: #000;
+}
+</style>
+
+<script>
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
+</script>
+
+{% endblock content %}

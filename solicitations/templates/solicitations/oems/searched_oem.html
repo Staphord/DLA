@@ -1,0 +1,219 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<section class="mt-5">
+    <div class="d-flex justify-content-between">
+        <div class="">
+            Search Results for <span class="badge bg-light text-dark">{{searched}}</span>
+        </div>
+        <div class="d-flex gap-3">
+            <a href="{% url 'solicitations:active-oems' %}" class="btn bg-secondary text-white">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <div class="mt-5">
+        {% if oem %}
+            {% for oem_item in oem %}
+            <div class="my-2">
+                <div class="">
+                    OEM Data for {{oem_item.display_name|title}}...
+                </div>
+                <div class="mt-2">
+                    <div class="card">
+                        <div class="card-body my-3">
+                            <!-- First Row -->
+                            <div class="row my-2">
+                                <div class="col-md-4">
+                                    CAGE Code: {{oem_item.cage}}
+                                </div>
+                                <div class="col-md-4">
+                                    Company Name: {{oem_item.display_name|title}}
+                                    {% if oem_item.has_customizations %}
+                                        <i class="bi bi-pencil-square text-info ms-1" title="You have customized this OEM"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    Email: {{oem_item.display_email|lower}}
+                                </div>
+                            </div>
+                            <hr>
+                            
+                            <!-- Second Row -->
+                            <div class="row my-2">
+                                <div class="col-md-4">
+                                    Phone: {{oem_item.display_phone}}
+                                </div>
+                                <div class="col-md-4">
+                                    City: {{oem_item.display_city|title}}
+                                </div>
+                                <div class="col-md-4">
+                                    Data Source: {{oem_item.get_data_source_display}}
+                                    {% if oem_item.has_customizations %}
+                                        <span class="badge bg-info ms-1">Customized</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <hr>
+                            
+                            <!-- Actions Row -->
+                            <div class="row my-2">
+                                <div class="col-md-4">
+                                    <a href="{% url 'solicitations:oem-detail' oem_item.id %}" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-eye me-1"></i>View Details
+                                    </a>
+                                </div>
+                                <div class="col-md-4">
+                                    <a href="{% url 'solicitations:edit-oem' oem_item.id %}" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-pencil me-1"></i>Customize
+                                    </a>
+                                </div>
+                                <div class="col-md-4">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" 
+                                            data-bs-toggle="modal" data-bs-target="#disableOem-{{oem_item.id}}">
+                                        <i class="bi bi-x-circle me-1"></i>Disable
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Disable OEM Modal for each item -->
+            <div class="modal fade" id="disableOem-{{oem_item.id}}" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Disable OEM</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                <strong>This will disable {{oem_item.display_name}} for your account only.</strong>
+                            </div>
+                            <p>Are you sure you want to disable this OEM from your list?</p>
+                            <form method="POST" action="{% url 'solicitations:disable-oem' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="oem" value="{{oem_item.id}}">
+                                <div class="mb-3">
+                                    <label for="reason-{{oem_item.id}}" class="form-label">Reason for disabling:</label>
+                                    <textarea class="form-control" name="reason" id="reason-{{oem_item.id}}" rows="3" 
+                                              required placeholder="Enter reason for disabling this OEM..."></textarea>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="bi bi-x-circle me-1"></i>Yes, Disable
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- Search Again Section -->
+            <div class="my-2">
+                <div class="">
+                    Search Again...
+                </div>
+                <div class="mt-2">
+                    <div class="card">
+                        <div class="card-body my-3">
+                            <form action="{% url 'solicitations:search-oem' %}" method="post">
+                                {% csrf_token %}
+                                <div class="row my-2">
+                                    <div class="col-md-8">
+                                        <input type="text" name="search-oem" class="form-control" 
+                                               placeholder="Search by Cage Code..." value="{{searched}}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button type="submit" class="btn btn-warning">
+                                            <i class="bi bi-search text-white"></i> Search
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        {% else %}
+            <!-- No Results Found -->
+            <div class="my-2">
+                <div class="">
+                    No Results Found...
+                </div>
+                <div class="mt-2">
+                    <div class="card">
+                        <div class="card-body my-3">
+                            <div class="row my-2">
+                                <div class="col-md-12 text-center">
+                                    <h4 class="text-muted">No OEMs Found</h4>
+                                    {% if searched %}
+                                    <p class="text-muted">
+                                        No OEMs found matching "{{searched}}" in your list.
+                                    </p>
+                                    {% else %}
+                                    <p class="text-muted">
+                                        Please enter a search term to find OEMs.
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Again Section for No Results -->
+            <div class="my-2">
+                <div class="">
+                    Try Another Search...
+                </div>
+                <div class="mt-2">
+                    <div class="card">
+                        <div class="card-body my-3">
+                            <form action="{% url 'solicitations:search-oem' %}" method="post">
+                                {% csrf_token %}
+                                <div class="row my-2">
+                                    <div class="col-md-8">
+                                        <input type="text" name="search-oem" class="form-control" 
+                                               placeholder="Search by Cage Code..." value="">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button type="submit" class="btn btn-warning">
+                                            <i class="bi bi-search text-white"></i> Search
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Results Summary -->
+        <div class="text-center">
+            <span class="text-center mt-2">
+                {% if oem %}
+                    <i class="bi bi-check-circle text-success"></i>
+                    <small class="text-muted">Found {{oem|length}} result{{oem|length|pluralize}} for "{{searched}}"</small>
+                {% else %}
+                    <i class="bi bi-x-circle text-warning"></i>
+                    <small class="text-muted">No results found for "{{searched}}"</small>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+
+</section>
+
+{% endblock content %}

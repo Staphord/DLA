@@ -1,0 +1,50 @@
+{% extends "solicitations/base.html" %}
+
+{% block content %}
+<div class="pagetitle">
+  <h1>Assessment Search Results</h1>
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:replied-rfq' %}">RFQ Replies</a></li>
+      <li class="breadcrumb-item active">Search</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+<div class="card">
+  <div class="card-body pt-3">
+    <p class="text-muted mb-3">Multiple RFQ replies found for <strong>"{{ query }}"</strong>. Select one to open its assessment:</p>
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Solicitation No</th>
+            <th>Nomenclature</th>
+            <th>Part Number</th>
+            <th>Received</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in results %}
+          <tr>
+            <td>{{ r.solicitation_number|default:'—' }}</td>
+            <td>{{ r.nomenclature|default:'—' }}</td>
+            <td>{{ r.part_number|default:'—' }}</td>
+            <td>{{ r.received_date|date:'Y-m-d'|default:'—' }}</td>
+            <td>
+              <a href="{% url 'solicitations:rfq-assessment' r.id %}" class="btn btn-sm btn-outline-primary">
+                Open Assessment
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</section>
+{% endblock %}
