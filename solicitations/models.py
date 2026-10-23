@@ -18,6 +18,20 @@ class Solicitation(models.Model):
     nomenclature = models.CharField(max_length=50)
     solicitation = models.CharField(max_length=50, blank=True, null=True)
     status = models.CharField(max_length=50, blank=True, null=True)
+
+    SOLICITATION_TYPE_CHOICES = [
+        ('', '-- Not Set --'),
+        ('F', 'F - Fast Auto Evaluation'),
+        ('I', 'I - Automated Indefinite Delivery Contract (AIDC)'),
+        ('P', 'P - Auto Evaluation'),
+    ]
+    solicitation_type = models.CharField(
+        max_length=1,
+        blank=True,
+        default='',
+        choices=SOLICITATION_TYPE_CHOICES,
+        help_text="Solicitation Type Indicator (DLA export field 2)",
+    )
     part_number = models.CharField(max_length=500, blank=True, null=True)
     pr = models.CharField(max_length=255, blank=True, null=True)
     unit = models.CharField(max_length=15, blank=True, null=True)
@@ -60,6 +74,56 @@ class Solicitation(models.Model):
         help_text="Higher-Level Quality Indicator (DLA export field 117)",
     )
 
+    # Fields below were identified as present in real DIBBS RFQ PDFs but not
+    # previously scraped/stored (see RFQ_REPLY_TO_EXPORT_PIPELINE.md analysis).
+    naics_code = models.CharField(max_length=10, blank=True)
+    qty_variance_plus = models.CharField(max_length=10, blank=True)
+    qty_variance_minus = models.CharField(max_length=10, blank=True)
+    original_required_delivery_date = models.CharField(max_length=20, blank=True)
+    need_ship_date = models.CharField(max_length=20, blank=True)
+    rdd_days = models.CharField(max_length=20, blank=True)
+    fast_pay_note = models.TextField(blank=True)
+
+    SET_ASIDE_CODE_CHOICES = [
+        ('', '-- Not Set --'),
+        ('Y', 'Y - Small Business Set-Aside'),
+        ('H', 'H - HUBZone Set-Aside'),
+        ('R', 'R - Service Disabled Veteran-Owned Small Business Set-Aside'),
+        ('L', 'L - Woman Owned Small Business Set-Aside'),
+        ('A', 'A - 8a Set-Aside'),
+        ('E', 'E - Economically Disadvantaged Woman Owned Small Business Set-Aside'),
+        ('N', 'N - Unrestricted/Not Set-Aside'),
+    ]
+    set_aside_code = models.CharField(
+        max_length=1,
+        blank=True,
+        default='',
+        choices=SET_ASIDE_CODE_CHOICES,
+        help_text="Exact Small Business Set-Aside Indicator code (DLA export field 3)",
+    )
+
+    approved_sources = models.JSONField(
+        default=list, blank=True,
+        help_text="List of approved source records with CAGE, part_number, and name")
+    packaging_details = models.JSONField(
+        default=dict, blank=True,
+        help_text="Structured PREP FOR DELIVERY sub-fields: QUP, preservation method, "
+                   "cleaning/drying, preservative material, wrap material, cushioning "
+                   "material/thickness, unit/intermediate container codes and quantities, "
+                   "pack code, special marking code, SPI document number/revision/date, "
+                   "intermediate-package and shipping-container quantities")
+
+    ship_to_address = models.TextField(blank=True)
+
+    FDA_REGULATED_CHOICES = [
+        ('', '-- Not Set --'),
+        ('Y', 'Yes'),
+        ('N', 'No'),
+    ]
+    fda_regulated = models.CharField(
+        max_length=1, blank=True, default='', choices=FDA_REGULATED_CHOICES)
+    regulatory_notes = models.TextField(blank=True)
+
     class Meta:
         indexes = [
             # Single field indexes
@@ -81,6 +145,115 @@ class Solicitation(models.Model):
 
     def __str__(self):
         return f"Solicitation-{self.cage} ({self.nomenclature})"
+
+
+class NoCageSolicitation(models.Model):
+    """
+    Listing-level data for an NSN that DIBBS shows with no approved-source
+    CAGE, so the scraper has no OEM to auto-send an RFQ to. Kept here for a
+    person to action manually rather than being dropped by the scraper.
+
+    Shared scraped data, same for every user (like Solicitation). Whether a
+    given user has handled it lives separately in NoCageSolicitationHandledBy,
+    since each user works these manually and independently: one user marking
+    a record handled must not hide it from anyone else.
+
+    Identity is (nsn, solicitation): re-scraping the same listing updates its
+    quantity/dates without touching any user's handled status.
+    """
+    nsn = models.CharField(max_length=30)
+    nomenclature = models.CharField(max_length=255, blank=True)
+    solicitation = models.CharField(max_length=50)
+    quantity = models.CharField(max_length=20, blank=True)
+    purchase_request = models.CharField(max_length=50, blank=True)
+    issued_date = models.CharField(max_length=20, blank=True)
+    return_by_date = models.CharField(max_length=20, blank=True)
+    scraped_date = models.DateField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "No-CAGE Solicitation"
+        verbose_name_plural = "No-CAGE Solicitations"
+        unique_together = [('nsn', 'solicitation')]
+        ordering = ['-scraped_date', '-id']
+        indexes = [
+            models.Index(fields=['nsn']),
+        ]
+
+    def __str__(self):
+        return f"{self.nsn} / {self.solicitation}"
+
+
+class NoCageSolicitationHandledBy(models.Model):
+    """
+    Per-user handled flag for a NoCageSolicitation. A row's existence means
+    that user has handled it; deleting the row un-marks it. Keeping this
+    separate from NoCageSolicitation (instead of a boolean there) is what
+    makes one user's "handled" invisible to every other user.
+    """
+    solicitation = models.ForeignKey(
+        NoCageSolicitation, on_delete=models.CASCADE, related_name='handled_by_users'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='handled_no_cage_solicitations'
+    )
+    handled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "No-CAGE Solicitation Handled By"
+        verbose_name_plural = "No-CAGE Solicitations Handled By"
+        unique_together = [('solicitation', 'user')]
+
+    def __str__(self):
+        return f"{self.solicitation} handled by user {self.user_id}"
+
+
+class GovernmentEmailSolicitation(models.Model):
+    """Solicitations whose CAGE-registered contact email is a .mil/.gov address.
+    Kept out of solicitations_solicitation entirely so they are never auto-sent;
+    handled manually, same pattern as NoCageSolicitation."""
+    cage = models.CharField(max_length=10)
+    email = models.CharField(max_length=255, blank=True)
+    nsn = models.CharField(max_length=30)
+    nomenclature = models.CharField(max_length=255, blank=True)
+    part_number = models.CharField(max_length=500, blank=True)
+    organization_name = models.CharField(max_length=255, blank=True)
+    solicitation = models.CharField(max_length=50)
+    quantity = models.CharField(max_length=20, blank=True)
+    purchase_request = models.CharField(max_length=50, blank=True)
+    issued_date = models.CharField(max_length=20, blank=True)
+    return_by_date = models.CharField(max_length=20, blank=True)
+    scraped_date = models.DateField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Government Solicitation"
+        verbose_name_plural = "Government Solicitations"
+        unique_together = [('nsn', 'cage', 'part_number', 'return_by_date')]
+        ordering = ['-scraped_date', '-id']
+        indexes = [models.Index(fields=['nsn']), models.Index(fields=['cage'])]
+
+    def __str__(self):
+        return f"{self.nsn} / {self.cage} ({self.email})"
+
+
+class GovernmentEmailSolicitationHandledBy(models.Model):
+    solicitation = models.ForeignKey(
+        GovernmentEmailSolicitation, on_delete=models.CASCADE,
+        related_name='handled_by_users'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='handled_government_email_solicitations'
+    )
+    handled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Government Solicitation Handled By"
+        verbose_name_plural = "Government Solicitations Handled By"
+        unique_together = [('solicitation', 'user')]
+
+    def __str__(self):
+        return f"{self.solicitation} handled by user {self.user_id}"
 
 
 def get_default_send_time():
@@ -2356,7 +2529,7 @@ EXPORT_FIELD_DEFINITIONS = {
     24: {'column_name': 'Bid Type Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
     25: {'column_name': 'Prompt Payment Discount Terms Code', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 2, 'definition': ''},
     26: {'column_name': 'Vendor Quote Number', 'field_type': 'optional', 'quote_level': 'header', 'max_length': 15, 'definition': ''},
-    27: {'column_name': 'Days Quote Valid', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 3, 'definition': '', 'default_value': '90'},
+    27: {'column_name': 'Days Quote Valid', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 3, 'definition': ''},
     28: {'column_name': 'Meets Packaging Requirement', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 1, 'definition': ''},
     29: {'column_name': 'Basic Ordering Agreement (BOA)/ Federal Supply Schedule (FSS)/Blanket Purchase Agreement (BPA).', 'field_type': 'mandatory', 'quote_level': 'header', 'max_length': 3, 'definition': ''},
     30: {'column_name': 'BOA/FSS/BPA Contract Number', 'field_type': 'conditional', 'quote_level': 'header', 'max_length': 17, 'definition': ''},
@@ -2609,6 +2782,7 @@ EXPORT_FIELD_CHOICES = {
         {'value': 'Y', 'label': 'Y - Free Trade Agreements'},
         {'value': 'A', 'label': 'A - Free Trade Agreements (formerly ALT I)'},
         {'value': 'B', 'label': 'B - Free Trade Agreements ALT IV'},
+        {'value': 'I', 'label': 'I - Informational Only (Overseas Shipment)'},
     ],
     70: [  # Buy American/Free Trade/Trade Agreements End Product
         {'value': '', 'label': '-- Select --'},
@@ -2975,10 +3149,39 @@ class UserExportConfiguration(models.Model):
         if not self.is_enabled:
             return ""
 
+        field_position = getattr(self.field_definition, "position", None)
+
+        def resolve_related_solicitation(obj):
+            """Shared resolver for the newer special-case blocks below: given
+            either a Solicitation or an RfqReply, return the Solicitation to
+            read scraped fields from (or None if it can't be resolved)."""
+            if obj is None:
+                return None
+            if obj.__class__.__name__ == 'RfqReply':
+                if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
+                    return obj.rfq.solicitation
+                if hasattr(obj, 'find_matching_solicitation'):
+                    return obj.find_matching_solicitation()
+                return None
+            return obj
+
+        # SPECIAL HANDLING: Field position 2 - Solicitation Type Indicator
+        # Only overrides custom_value/source_field when the solicitation has
+        # actually been scraped/set with a type; otherwise falls through so
+        # existing per-user defaults keep working (this field is new and most
+        # historical Solicitation rows won't have it populated yet).
+        if field_position == 2 and obj:
+            try:
+                solicitation = resolve_related_solicitation(obj)
+                solicitation_type = getattr(solicitation, "solicitation_type", "") if solicitation else ""
+                if solicitation_type:
+                    return str(solicitation_type).strip().upper()
+            except Exception:
+                pass
+
         # SPECIAL HANDLING: Field position 32 - FOB Point
         # This should ALWAYS come from the solicitation's deliver_fob field (overrides custom_value)
         # Convert: "destination" or contains "destination" to "D", "origin" or contains "origin" to "O"
-        field_position = getattr(self.field_definition, "position", None)
         if field_position == 32 and obj:
             try:
                 # Check if obj is an RfqReply instance
@@ -3092,45 +3295,61 @@ class UserExportConfiguration(models.Model):
                 pass
 
         # SPECIAL HANDLING: Field position 3 - Small Business Set Aside Indicator
-        # This should ALWAYS come from the solicitation's is_set_aside field (overrides custom_value)
+        # Fully owns this field (like positions 32/36/49/50/51/117 below) and
+        # never falls through to source_field/custom_value — position 3 is
+        # already in views.py's locked_positions, so the export-config UI
+        # never lets a user set a custom_value here anyway. Falling through
+        # would otherwise reach create_default_configurations()'s default
+        # source_field mapping ('is_set_aside'), which resolves through the
+        # generic str(value) fallback to the literal string "True"/"False" -
+        # worse than a blank. Prefers the exact set_aside_code (Y/H/R/L/A/E/N)
+        # when scraped/set; trusts an explicit is_set_aside=False (spec's own
+        # default for "blank RFQ requirement" is "N" anyway); otherwise
+        # returns "" rather than asserting a code we don't actually know.
+        # is_set_aside=True is NEVER trusted here - extractSolicitations.py
+        # hardcodes it True on every scraped row regardless of the real
+        # solicitation, so it carries no genuine signal (this previously
+        # caused every unrestricted solicitation to export "A" instead of "N").
         if field_position == 3 and obj:
             try:
-                # Check if obj is an RfqReply instance
                 is_rfq_reply = obj.__class__.__name__ == 'RfqReply'
 
                 if is_rfq_reply:
-                    # Try to get is_set_aside from related Solicitation
                     solicitation = None
-
-                    # Method 1: Get from matched RFQ -> Solicitation
                     if hasattr(obj, 'rfq') and obj.rfq and hasattr(obj.rfq, 'solicitation') and obj.rfq.solicitation:
                         solicitation = obj.rfq.solicitation
-
-                    # Method 2: Find matching solicitation using RfqReply's find_matching_solicitation method
                     if not solicitation:
                         solicitation = obj.find_matching_solicitation()
 
-                    # If we found a solicitation, get its is_set_aside value
-                    if solicitation and hasattr(solicitation, 'is_set_aside'):
-                        is_set_aside = solicitation.is_set_aside
-                        # True to "A" (8a Set-Aside), False to "N" (Unrestricted/Not Set-Aside)
-                        if is_set_aside is True:
-                            return "A"
-                        elif is_set_aside is False:
+                    if solicitation:
+                        set_aside_code = getattr(solicitation, 'set_aside_code', '')
+                        if set_aside_code:
+                            return str(set_aside_code).strip().upper()
+                        if getattr(solicitation, 'is_set_aside', None) is False:
                             return "N"
-                        # If None or not set, fall through to normal logic
+                    return ""
                 else:
-                    # For Solicitation objects, directly get the is_set_aside value
-                    if hasattr(obj, 'is_set_aside'):
-                        is_set_aside = obj.is_set_aside
-                        # True to "A" (8a Set-Aside), False to "N" (Unrestricted/Not Set-Aside)
-                        if is_set_aside is True:
-                            return "A"
-                        elif is_set_aside is False:
-                            return "N"
-                        # If None or not set, fall through to normal logic
+                    set_aside_code = getattr(obj, 'set_aside_code', '')
+                    if set_aside_code:
+                        return str(set_aside_code).strip().upper()
+                    if getattr(obj, 'is_set_aside', None) is False:
+                        return "N"
+                    return ""
             except Exception:
                 # If any error occurs, fall through to normal source_field logic
+                pass
+
+        # SPECIAL HANDLING: Field positions 96/97 - Quantity Variance Plus/Minus
+        # Only overrides when the solicitation has a scraped value; otherwise
+        # falls through to the user's configured default (spec default is "0").
+        if field_position in (96, 97) and obj:
+            try:
+                solicitation = resolve_related_solicitation(obj)
+                attr_name = 'qty_variance_plus' if field_position == 96 else 'qty_variance_minus'
+                value = getattr(solicitation, attr_name, '') if solicitation else ''
+                if value:
+                    return str(value).strip()
+            except Exception:
                 pass
 
         # SPECIAL HANDLING: Field position 103 - Actual Manufacturing/Production Source CAGE code
@@ -3748,12 +3967,18 @@ class RFQIDTemplate(models.Model):
             return dt.strftime('%m%d%y')
     
     def generate_preview(self, user):
-        """Generate a preview of what RFQ ID will look like"""
-        preview = self.generate_rfq_id(
+        """Generate a preview of what RFQ ID will look like.
+
+        Uses get_next_rfq_id_without_saving() rather than generate_rfq_id(),
+        because the latter calls get_next_sequence(), which persists an
+        incremented sequence number immediately. A preview must not consume
+        a real sequence slot from the counter the actual send flow depends on.
+        """
+        preview = self.get_next_rfq_id_without_saving(
             user=user,
             oem_cage_code='ABC12',
             solicitation_id=1
-        )
+        )['rfq_id']
         self.preview = preview
         return preview
 
@@ -3787,15 +4012,11 @@ class RFQIDTemplate(models.Model):
 
             elif comp_type == 'date':
                 from django.utils.timezone import now
-                date_format = self.date_format.upper()
-                if date_format == 'MMDDYY':
-                    rfq_parts.append(now().strftime('%m%d%y'))
-                elif date_format == 'DDMMYY':
-                    rfq_parts.append(now().strftime('%d%m%y'))
-                elif date_format == 'YYYYMMDD':
-                    rfq_parts.append(now().strftime('%Y%m%d'))
-                else:
-                    rfq_parts.append(now().strftime('%m%d%y'))
+                # Reuse the same _format_date() generate_rfq_id() uses, so the
+                # actual sent RFQ ID always matches what the preview showed —
+                # this used to re-implement only 3 of the 8 date_format
+                # choices here and silently fall back to MMDDYY for the rest.
+                rfq_parts.append(self._format_date(now(), self.date_format))
 
             elif comp_type == 'cage_code':
                 if oem_cage_code:

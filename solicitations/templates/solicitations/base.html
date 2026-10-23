@@ -259,6 +259,22 @@
         </a>
       </li>
 
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'no-cage-solicitations' %}collapsed{% endif %}"
+           href="{% url 'solicitations:no-cage-solicitations' %}">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <span>No-CAGE Solicitations</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name != 'government-email-solicitations' %}collapsed{% endif %}"
+           href="{% url 'solicitations:government-email-solicitations' %}">
+          <i class="bi bi-bank2"></i>
+          <span>Government Solicitations</span>
+        </a>
+      </li>
+
       <!-- MANAGEMENT -->
       <li class="nav-heading">Management</li>
 

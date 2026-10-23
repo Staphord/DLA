@@ -21,7 +21,25 @@ class Command(BaseCommand):
             48: 'unit',  # Unit of Issue
             49: 'quantity',  # Quantity
             50: 'unit_price',  # Unit Price
+            13: 'user.small_business_representation_code',
+            27: 'user.default_quote_valid_days',
+            28: 'user.default_meets_packaging',
+            29: 'user.agreement_type',
+            30: 'user.contract_number',
+            31: 'user.agreement_expiry',
+            67: 'user.default_material_requirements',
+            96: 'user.default_quantity_variance_plus',
+            97: 'user.default_quantity_variance_minus',
+            18: 'user.joint_venture_code',
+            19: 'user.joint_venture_remarks',
+            21: 'user.affirmative_action_code',
+            22: 'user.previous_contracts_code',
+            23: 'user.alternate_disputes_resolution',
+            25: 'user.prompt_payment_terms_code',
+            37: 'user.inspection_packaging_cage',
+            38: 'user.inspection_supplies_cage',
             51: '',  # Delivery Days (not in RfqReply)
+            120: 'user.child_labor_certification_code',
         }
         
         updated_count = 0

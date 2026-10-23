@@ -1,0 +1,173 @@
+================================================================================
+DIBBS 121-FIELD EXPORT — SOLICITATION DATA THAT MUST BE SCRAPED
+Status as of code review, cross-checked against:
+  - index.html                          (raw 121-field DLA spec)
+  - SwyftNEasyRFQ_DIBBS_Developer_Update_Instructions 8.25.2026.pdf, Appendix A
+  - solicitations/models.py  -> class Solicitation
+  - extractSolicitations.py             (actual scraper implementation)
+================================================================================
+
+SCOPE OF THIS LIST
+------------------
+Of the 121 DIBBS export fields, 30 require data that originates from the
+DIBBS solicitation itself (not from the vendor's quote, not a static
+profile value, and not reserved/blank). These 30 split into two groups:
+
+  GROUP A (22 fields) - value is copied straight from the solicitation into
+                         the export record.
+  GROUP B (8 fields)  - the RFQ's own value must be scraped so the vendor's
+                         quoted value can be validated/compared against it
+                         (FOB point/city/state/country, inspection point,
+                         inspection CAGEs, delivery days). The export column
+                         itself holds the vendor's answer, but the app cannot
+                         judge compliance (or set Bid Type BW/AB correctly)
+                         without knowing the RFQ's original value.
+
+Status legend:
+  [SCRAPED]     - a Solicitation model field exists AND extractSolicitations.py
+                   actively populates it.
+  [NOT SCRAPED] - no model field, or a model field exists but is not actually
+                   populated from the scrape (see notes).
+
+
+================================================================================
+GROUP A — DIRECT-COPY FIELDS (value comes straight from the solicitation)
+================================================================================
+
+#001  Solicitation Number                        [SCRAPED]
+      -> Solicitation.solicitation
+
+#002  Solicitation Type Indicator (F/I/P)         [NOT SCRAPED]
+      -> No model field. No extraction logic found in extractSolicitations.py.
+
+#003  Small Business Set Aside Indicator          [NOT SCRAPED]
+      -> Solicitation.is_set_aside exists, but it is a plain Boolean and is
+         hard-coded to True at save time ("True, # is_set_aside - default to
+         True as per model" in extractSolicitations.py) rather than derived
+         from the RFQ's actual set-aside code (Y/H/R/L/A/E/N). This is the
+         exact defect flagged in the developer spec ("A Boolean set-aside
+         source is being converted to A (8(a)) or otherwise mismapped").
+
+#004  Additional Clause Fill-Ins Indicator (Y/N)  [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#005  Return By Date                              [SCRAPED]
+      -> Solicitation.return_by_date
+
+#044  Solicitation Line Number                    [SCRAPED]
+      -> Solicitation.solicitation_line_number
+
+#046  Purchase Request Number                     [SCRAPED]
+      -> Solicitation.purchase_request_number / Solicitation.pr
+
+#047  National Stock Number / Part Number         [SCRAPED]
+      -> Solicitation.NSN / Solicitation.part_number
+
+#048  Unit of Issue                               [SCRAPED]
+      -> Solicitation.unit
+
+#049  Quantity                                    [SCRAPED]
+      -> Solicitation.quantity
+
+#052  Guaranteed Minimum                          [NOT SCRAPED]
+      -> No model field, no extraction logic (AIDC-only field).
+
+#053  DO Minimum                                  [NOT SCRAPED]
+      -> No model field, no extraction logic (AIDC-only field).
+
+#054  Contract Maximum                            [NOT SCRAPED]
+      -> No model field, no extraction logic (AIDC-only field).
+
+#055  Annual Frequency of Buys (AFB)               [NOT SCRAPED]
+      -> No model field, no extraction logic (AIDC-only field).
+
+#056  No DO Minimum Quantity?                     [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#057  HUBZone Preference Indicator                [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#062  Trade Agreements Indicator                  [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#068  Buy American Indicator                      [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#069  Free Trade Agreements Indicator             [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#077  Price Breaks Solicited Indicator            [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#105  Item Description Indicator                  [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#117  Higher-Level Quality Indicator              [SCRAPED]
+      -> Solicitation.higher_level_quality_indicator, populated via
+         extract_higher_level_quality_indicator() in extractSolicitations.py.
+
+
+================================================================================
+GROUP B — COMPARISON FIELDS (RFQ value needed to validate the vendor's quote)
+================================================================================
+
+#032  FOB Point (Destination/Origin)              [SCRAPED]
+      -> Solicitation.deliver_fob
+
+#033  FOB City                                    [NOT SCRAPED]
+      -> No dedicated field. Solicitation.city exists but holds the
+         organization/buyer address, not a distinct FOB origin city — do not
+         assume it can be reused for this purpose without verification.
+
+#034  FOB State/Province                          [NOT SCRAPED]
+      -> No dedicated field.
+
+#035  FOB Country                                 [NOT SCRAPED]
+      -> No dedicated field. (Developer spec flags full names like "USA"
+         being emitted here instead of 2-letter codes — consistent with
+         this not being a clean, purpose-built field yet.)
+
+#036  Inspection Point Code (Destination/Origin)  [SCRAPED]
+      -> Solicitation.inspection_point
+
+#037  Govt Inspection - Packaging CAGE code       [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#038  Govt Inspection - Supplies CAGE code        [NOT SCRAPED]
+      -> No model field, no extraction logic.
+
+#051  Delivery Days                               [SCRAPED]
+      -> Solicitation.deliver_days
+
+
+================================================================================
+SUMMARY
+================================================================================
+Total fields requiring solicitation data to be scraped:   30
+  Already scraped:                                        11   (37%)
+  Not yet scraped:                                         19   (63%)
+
+Group A (direct-copy, 22 fields):    8 scraped / 14 not scraped
+Group B (comparison-only, 8 fields): 3 scraped /  5 not scraped
+
+SCRAPED (11):  001, 005, 032, 036, 044, 046, 047, 048, 049, 051, 117
+NOT SCRAPED (19): 002, 003*, 004, 033, 034, 035, 037, 038, 052, 053, 054,
+                  055, 056, 057, 062, 068, 069, 077, 105
+
+  * #003 has a model field but it is not populated from the RFQ — treated
+    as not scraped because the current value is always hard-coded True.
+
+
+NOTES / CAVEATS
+----------------
+1. This assessment reflects what solicitations/models.py (Solicitation) and
+   extractSolicitations.py actually implement as of this review. It does not
+   cover extractSolicitationsOld.py or any other legacy/unused script.
+2. Several "not scraped" fields (052-055, the AIDC block) only apply to
+   Solicitation Type Indicator = "I" (Automated Indefinite Delivery
+   Contract) solicitations — but since #002 itself isn't scraped, the app
+   currently has no way to know when that condition even applies.
+3. Fields in Group B are not necessarily meant to be copied verbatim into
+   the export (the vendor's own FOB/inspection terms go into the column);
+   they are listed because the RFQ's original value must still be known to
+   run DIBBS's required comparison/Bid-Type-exception logic correctly.

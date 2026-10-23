@@ -1,462 +1,454 @@
-<!-- MODIFIED: solicitations/clients/client_profile.html -->
-<!-- This is your existing template with the RFQ ID Settings tab added -->
-
 {% extends 'solicitations/base.html' %}
-
 {% load static %}
 
 {% block content %}
+<div class="pagetitle">
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item active">User Profile</li>
+    </ol>
+  </nav>
+</div>
+
 <section class="section profile">
-    <div class="row">
-      <div class="col-xl-4">
-
-        <div class="card">
-          <div class="card-body profile-card pt-4 d-flex flex-column align-items-center">
-
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="card-body py-4 px-4">
+      <div class="row align-items-center g-3">
+        <div class="col-auto">
+          <div class="rounded-circle border d-flex align-items-center justify-content-center overflow-hidden" style="width:72px;height:72px;background:#f3f6fb;">
             {% if client.logo %}
-            <img src="{{ client.logo.url }}"
-                 alt="Profile"
-                 class="rounded-circle"
-                 onerror="this.onerror=null;this.src='{% static 'gil/img/profile-img.webp' %}';">
+              <img src="{{ client.logo.url }}" alt="Company logo" style="width:100%;height:100%;object-fit:cover;" onerror="this.onerror=null;this.src='{% static 'gil/img/profile-img.webp' %}';">
             {% else %}
-            <img src="{% static 'gil/img/profile-img.webp'%}" alt="Profile" class="rounded-circle">
+              <img src="{% static 'gil/img/profile-img.webp' %}" alt="Profile" style="width:100%;height:100%;object-fit:cover;">
             {% endif %}
-            <h3 class="mt-3">{{client.first_name}} {{client.last_name}}</h3>
-            <div class="">
-              <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#updateDetailsModal">Update Details</button>
+          </div>
+        </div>
+        <div class="col">
+          <div class="small text-muted mb-1">Company Profile</div>
+          <h3 class="mb-1">{{ client.companyName|default:client.username }}</h3>
+          <div class="text-secondary">
+            {{ client.first_name|default:'' }} {{ client.last_name|default:'' }}{% if client.title %} · {{ client.title }}{% endif %}
+          </div>
+        </div>
+        <div class="col-12 col-md-auto d-flex gap-2">
+          <a href="{% url 'solicitations:user-profile-edit' client.id %}" class="btn btn-sm btn-primary">
+            <i class="bi bi-pencil-square me-1"></i>Update Details
+          </a>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#profileQuickActions">
+            <i class="bi bi-gear me-1"></i>Quick Actions
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapse mb-4" id="profileQuickActions">
+    <div class="card shadow-sm border-0">
+      <div class="card-body d-flex flex-wrap gap-2">
+        <a href="{% url 'solicitations:user-profile-edit' client.id %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-person-lines-fill me-1"></i>Edit profile
+        </a>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#logoUpdateModal">
+          <i class="bi bi-image me-1"></i>Update logo
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#passwordUpdateModal">
+          <i class="bi bi-shield-lock me-1"></i>Change password
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-person-vcard-fill text-secondary"></i>
+          <span class="fw-semibold">Profile Overview</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Full Name</div>
+              <div class="fw-semibold">{{ client.first_name|default:'—' }} {{ client.last_name|default:'' }}</div>
             </div>
-            
-            <div class="text-warning">
-              <i class="bi bi-star-fill"></i>
-              <i class="bi bi-star-fill"></i>
-              <i class="bi bi-star-fill"></i>
-              <i class="bi bi-star-fill"></i>
-              <i class="bi bi-star-fill"></i>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Position</div>
+              <div class="fw-semibold">{{ client.title|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Email</div>
+              <div class="fw-semibold">{{ client.email|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Personal Email</div>
+              <div class="fw-semibold">{{ client.personal_email|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Phone</div>
+              <div class="fw-semibold">{{ client.phone|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Fax</div>
+              <div class="fw-semibold">{{ client.fax|default:'—' }}</div>
+            </div>
+            <div class="col-12">
+              <div class="text-muted small mb-1">Address</div>
+              <div class="fw-semibold">{{ client.address|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Business Name</div>
+              <div class="fw-semibold">{{ client.companyName|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Company Initial</div>
+              <div class="fw-semibold">{{ client.company_initial|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">CAGE Code</div>
+              <div class="fw-semibold">{{ client.cage|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Website</div>
+              <div class="fw-semibold">{{ client.website|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Delivery Padding</div>
+              <div class="fw-semibold">{{ client.added_days|default:0 }} days</div>
             </div>
           </div>
         </div>
-
       </div>
 
-      <div class="col-xl-8">
-
-        <div class="card">
-          <div class="card-body pt-3">
-            <!-- Bordered Tabs -->
-            <ul class="nav nav-tabs nav-tabs-bordered">
-
-              <li class="nav-item">
-                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#profile-overview">Profile Details</button>
-              </li>
-
-              <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-settings">Client Logo</button>
-              </li>
-
-              <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-change-password">Password</button>
-              </li>
-
-            </ul>
-            <div class="tab-content pt-2">
-
-              <div class="tab-pane fade show active profile-overview" id="profile-overview"> 
-
-                <div class="row mt-3">
-                  <div class="col-lg-3 col-md-4 label ">Full Name</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.first_name}} {{client.last_name}}</div>
-                </div>
-
-                <div class="row">
-                  <div class="col-lg-3 col-md-4 label">Position</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.title}}</div>
-                </div>
-
-                <div class="row">
-                  <div class="col-lg-3 col-md-4 label">Point of Contact (POC)</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.personal_email}}</div>
-                </div>
-
-                <div class="row">
-                  <div class="col-lg-3 col-md-4 label">Phone</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.phone}}</div>
-                </div>
-
-                <div class="row">
-                  <div class="col-lg-3 col-md-4 label">Address</div>
-                  <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.address}}</div>
-                </div>
-
-                <div class="row">
-                    <div class="col-lg-3 col-md-4 label">Business Name</div>
-                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.companyName}}</div>
-                </div>
-                
-                <div class="row">
-                    <div class="col-lg-3 col-md-4 label">Company Initial</div>
-                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.company_initial}}</div>
-                </div>
-
-                <div class="row">
-                    <div class="col-lg-3 col-md-4 label">Cage Code</div>
-                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.cage}}</div>
-                </div>
-  
-                <div class="row">
-                    <div class="col-lg-3 col-md-4 label">Fax</div>
-                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.fax}}</div>
-                </div>
-  
-                <div class="row">
-                    <div class="col-lg-3 col-md-4 label">Website</div>
-                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.website}}</div>
-                </div>
-
-                <div class="row">
-                    <div class="col-lg-3 col-md-4 label">Delivery Padding (days)</div>
-                    <div class="col-lg-9 col-md-8 bg-light p-2 rounded-2">{{client.added_days|default:0}}</div>
-                </div>
-
-              </div>
-
-              <div class="tab-pane fade pt-3" id="profile-settings">
-                <div class="d-flex flex-column align-items-center justify-content-center my-3">
-                    {% if client.logo %}
-                    <div class="text-center">
-                        {# logo.url uses MEDIA_URL — must match /DLA/ when FORCE_SCRIPT_NAME is /DLA #}
-                        <img src="{{ client.logo.url }}"
-                             alt="Company logo"
-                             class="img-fluid shadow-sm"
-                             style="max-height: 220px; max-width: 100%;"
-                             onerror="this.onerror=null;this.src='{% static 'gil/img/profile-img.webp' %}';">
-                    </div>
-                    {% else %}
-                    <img src="{% static 'gil/img/profile-img.webp' %}" alt="Default Logo" class="img-fluid shadow-sm" style="max-height: 220px; max-width: 100%;">
-                    {% endif %}
-                    <div class="d-block mt-3">
-                        <form action="" method="post" enctype="multipart/form-data">
-                            {% csrf_token %}
-                            {{ logo_form.as_p }}
-                            <button type="submit" name="logo_update" class="btn mybg text-white myhover mt-2 w-100">Update Logo</button>
-                        </form>
-                    </div>
-                </div>
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-shield-check text-secondary"></i>
+          <span class="fw-semibold">Business &amp; Compliance</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Legal Name</div>
+              <div class="fw-semibold">{{ client.legal_name|default:'—' }}</div>
             </div>
-
-              <div class="tab-pane fade pt-3" id="profile-change-password">
-                <div class="d-flex flex-column align-items-center justify-content-center my-3">
-                    <div class="col-md-8">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bi bi-shield-lock me-2"></i>
-                                    Change Password
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <form action="" method="post">
-                                    {% csrf_token %}
-
-                                    <!-- Display form errors -->
-                                    {% if password_form.non_field_errors %}
-                                        <div class="alert alert-danger">
-                                            {% for error in password_form.non_field_errors %}
-                                                {{ error }}
-                                            {% endfor %}
-                                        </div>
-                                    {% endif %}
-
-                                    <div class="mb-3">
-                                        <label for="{{ password_form.old_password.id_for_label }}" class="form-label">
-                                            Current Password *
-                                        </label>
-                                        <div class="input-group">
-                                            {{ password_form.old_password }}
-                                            <button class="btn btn-secondary" type="button" onclick="togglePassword('{{ password_form.old_password.id_for_label }}', this)">
-                                                <i class="bi bi-eye"></i>
-                                            </button>
-                                        </div>
-                                        {% if password_form.old_password.errors %}
-                                            <div class="text-danger small">
-                                                {% for error in password_form.old_password.errors %}
-                                                    {{ error }}
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="{{ password_form.new_password1.id_for_label }}" class="form-label">
-                                            New Password *
-                                        </label>
-                                        <div class="input-group">
-                                            {{ password_form.new_password1 }}
-                                            <button class="btn btn-secondary" type="button" onclick="togglePassword('{{ password_form.new_password1.id_for_label }}', this)">
-                                                <i class="bi bi-eye"></i>
-                                            </button>
-                                        </div>
-                                        {% if password_form.new_password1.errors %}
-                                            <div class="text-danger small">
-                                                {% for error in password_form.new_password1.errors %}
-                                                    {{ error }}
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                        <div class="form-text">
-                                            <small>
-                                                Password must be at least 8 characters long and not too similar to your personal information.
-                                            </small>
-                                        </div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label for="{{ password_form.new_password2.id_for_label }}" class="form-label">
-                                            Confirm New Password *
-                                        </label>
-                                        <div class="input-group">
-                                            {{ password_form.new_password2 }}
-                                            <button class="btn btn-secondary" type="button" onclick="togglePassword('{{ password_form.new_password2.id_for_label }}', this)">
-                                                <i class="bi bi-eye"></i>
-                                            </button>
-                                        </div>
-                                        {% if password_form.new_password2.errors %}
-                                            <div class="text-danger small">
-                                                {% for error in password_form.new_password2.errors %}
-                                                    {{ error }}
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                    </div>
-
-                                    <div class="d-grid">
-                                        <button type="submit" name="password_update" class="btn btn-secondary">
-                                            <i class="bi bi-shield-check me-2"></i>
-                                            Update Password
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">UEI</div>
+              <div class="fw-semibold">{{ client.uei|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">NAICS Code</div>
+              <div class="fw-semibold">{{ client.naics_code|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Business Size</div>
+              <div class="fw-semibold">{{ client.business_size|default:'—' }}</div>
+            </div>
+            <div class="col-12">
+              <div class="text-muted small mb-2">Small Business Certifications</div>
+              <div class="d-flex flex-wrap gap-2">
+                {% if client.is_wosb %}<span class="badge bg-success-subtle text-success">WOSB</span>{% endif %}
+                {% if client.is_edwosb %}<span class="badge bg-success-subtle text-success">EDWOSB</span>{% endif %}
+                {% if client.is_hubzone %}<span class="badge bg-success-subtle text-success">HubZone</span>{% endif %}
+                {% if client.is_8a %}<span class="badge bg-success-subtle text-success">Certified Small Business</span>{% endif %}
+                {% if client.is_sdvosb %}<span class="badge bg-success-subtle text-success">SDVOSB</span>{% endif %}
+                {% if not client.is_wosb and not client.is_edwosb and not client.is_hubzone and not client.is_8a and not client.is_sdvosb %}
+                  <span class="text-muted">No small business certifications recorded.</span>
+                {% endif %}
               </div>
-
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">ISO 9001 Certified</div>
+              <div class="fw-semibold">{% if client.is_iso_9001_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">ISO 9001 Expiry</div>
+              <div class="fw-semibold">{{ client.iso_9001_expiry|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">AS9100 Certified</div>
+              <div class="fw-semibold">{% if client.is_as9100_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">AS9100 Expiry</div>
+              <div class="fw-semibold">{{ client.as9100_expiry|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">AS9003 Certified</div>
+              <div class="fw-semibold">{% if client.is_as9003_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">AS9003 Expiry</div>
+              <div class="fw-semibold">{{ client.as9003_expiry|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">JCP Certified</div>
+              <div class="fw-semibold">{% if client.is_jcp_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">QSL Certified</div>
+              <div class="fw-semibold">{% if client.is_qsl_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">QPL Certified</div>
+              <div class="fw-semibold">{% if client.is_qpl_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">QML Certified</div>
+              <div class="fw-semibold">{% if client.is_qml_certified %}Yes{% else %}No{% endif %}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Small Business Representation</div>
+              <div class="fw-semibold">{{ client.get_small_business_representation_code_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Joint Venture</div>
+              <div class="fw-semibold">{{ client.get_joint_venture_code_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Joint Venture Remarks</div>
+              <div class="fw-semibold">{{ client.joint_venture_remarks|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Affirmative Action Code</div>
+              <div class="fw-semibold">{{ client.get_affirmative_action_code_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Previous Contracts &amp; Compliance Reports</div>
+              <div class="fw-semibold">{{ client.get_previous_contracts_code_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Alternate Disputes Resolution</div>
+              <div class="fw-semibold">{{ client.get_alternate_disputes_resolution_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Prompt Payment Discount Terms</div>
+              <div class="fw-semibold">{{ client.get_prompt_payment_terms_code_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Child Labor Certification</div>
+              <div class="fw-semibold">{{ client.get_child_labor_certification_code_display|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Packaging Inspection CAGE</div>
+              <div class="fw-semibold">{{ client.inspection_packaging_cage|default:'—' }}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1">Supplies Inspection CAGE</div>
+              <div class="fw-semibold">{{ client.inspection_supplies_cage|default:'—' }}</div>
+            </div>
           </div>
         </div>
-
       </div>
     </div>
 
-  <!-- Update Details Modal -->
-  <div class="modal fade" id="updateDetailsModal" tabindex="-1" aria-labelledby="updateDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="col-lg-4">
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-telephone text-secondary"></i>
+          <span class="fw-semibold">Contact &amp; Details</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="rounded-circle bg-primary-subtle d-flex align-items-center justify-content-center" style="width:42px;height:42px;">
+              <i class="bi bi-building text-primary"></i>
+            </div>
+            <div>
+              <div class="fw-semibold">{{ client.companyName|default:'Company' }}</div>
+              <div class="small text-muted">{{ client.website|default:'No website provided' }}</div>
+            </div>
+          </div>
+          <hr class="my-2">
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">POC</span>
+            <span class="small fw-semibold text-end">{{ client.personal_email|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Phone</span>
+            <span class="small fw-semibold">{{ client.phone|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">CAGE</span>
+            <span class="small fw-semibold">{{ client.cage|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2">
+            <span class="text-muted small">Agreement</span>
+            <span class="small fw-semibold">{{ client.agreement_type|default:'—' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-currency-dollar text-secondary"></i>
+          <span class="fw-semibold">Quote Defaults</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">FOB</span>
+            <span class="small fw-semibold">{{ client.default_fob|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Origin</span>
+            <span class="small fw-semibold">{{ client.default_origin_country|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">MOQ</span>
+            <span class="small fw-semibold">{{ client.default_moq|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Quote Valid Days</span>
+            <span class="small fw-semibold">{{ client.default_quote_valid_days|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Meets Packaging Requirement</span>
+            <span class="small fw-semibold">{{ client.get_default_meets_packaging_display|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Material Requirements</span>
+            <span class="small fw-semibold">{{ client.get_default_material_requirements_display|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Quantity Variance Plus / Minus</span>
+            <span class="small fw-semibold">{{ client.default_quantity_variance_plus|default:'—' }} / {{ client.default_quantity_variance_minus|default:'—' }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2 border-bottom">
+            <span class="text-muted small">Lead Time</span>
+            <span class="small fw-semibold">{{ client.default_lead_time_days|default:0 }} days</span>
+          </div>
+          <div class="d-flex justify-content-between py-2">
+            <span class="text-muted small">Immediate Shipment</span>
+            <span class="small fw-semibold">
+              {% if client.immediate_shipment_allowed %}Yes{% else %}No{% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal fade" id="logoUpdateModal" tabindex="-1" aria-labelledby="logoUpdateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="updateDetailsModalLabel">Update Profile Details</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form action="" method="post">
-            {% csrf_token %}
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label for="id_first_name" class="form-label">First Name</label>
-                {{ user_form.first_name }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_last_name" class="form-label">Last Name</label>
-                {{ user_form.last_name }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_last_name" class="form-label">Position</label>
-                {{ user_form.title }}
-              </div>
-            </div>
-
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label for="id_email" class="form-label">Email</label>
-                {{ user_form.email }}
-              </div>
-              <div class="col-md-4">
-                <label for="" class="form-label">Personal Email</label>
-                {{ user_form.personal_email }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_phone" class="form-label">Phone</label>
-                {{ user_form.phone }}
-              </div> 
-            </div>
-            
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label for="id_address" class="form-label">Address</label>
-                {{ user_form.address }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_companyName" class="form-label">Business Name</label>
-                {{ user_form.companyName }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_website" class="form-label">Company Initial (3 Letters)</label>
-                {{ user_form.company_initial }}
-              </div>
-            </div>
-
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label for="id_cage" class="form-label">Cage Code</label>
-                {{ user_form.cage }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_fax" class="form-label">Fax</label>
-                {{ user_form.fax }}
-              </div>
-              <div class="col-md-4">
-                <label for="id_website" class="form-label">Website</label>
-                {{ user_form.website }}
-              </div>
-            </div>
-            <div class="row mb-3">
-              <div class="col-md-4">
-                <label for="id_added_days" class="form-label">Delivery Padding (days)</label>
-                {{ user_form.added_days }}
-                <div class="form-text">Days added to company delivery days on bid assessments.</div>
-              </div>
-            </div>
-            <div class="d-grid gap-2">
-              <button type="submit" name="details_update" class="btn mybg text-white myhover">Save Changes</button>
-            </div>
-          </form>
-        </div>
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title" id="logoUpdateModalLabel">Update Logo</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            {{ logo_form.as_p }}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" name="logo_update" class="btn btn-primary">Save Logo</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
 
-  <!-- Toast Container for Messages -->
-  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
-      {% if messages %}
-          {% for message in messages %}
-              <div class="toast align-items-center text-white border-0 {% if message.tags == 'success' %}bg-success{% elif message.tags == 'error' %}bg-danger{% elif message.tags == 'warning' %}bg-warning text-dark{% else %}bg-info{% endif %}" 
-                   role="alert" aria-live="assertive" aria-atomic="true">
-                  <div class="d-flex">
-                      <div class="toast-body">
-                          {% if message.tags == 'success' %}
-                              <i class="bi bi-check-circle-fill me-2"></i>
-                          {% elif message.tags == 'error' %}
-                              <i class="bi bi-exclamation-circle-fill me-2"></i>
-                          {% elif message.tags == 'warning' %}
-                              <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                          {% else %}
-                              <i class="bi bi-info-circle-fill me-2"></i>
-                          {% endif %}
-                          {{ message }}
-                      </div>
-                      <button type="button" class="btn-close {% if message.tags == 'warning' %}btn-close-dark{% else %}btn-close-white{% endif %} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                  </div>
+  <div class="modal fade" id="passwordUpdateModal" tabindex="-1" aria-labelledby="passwordUpdateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form method="post">
+          {% csrf_token %}
+          <div class="modal-header">
+            <h5 class="modal-title" id="passwordUpdateModalLabel">Change Password</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            {% for field in password_form %}
+              <div class="mb-3">
+                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                  <div class="text-danger small mt-1">{{ field.errors|join:', ' }}</div>
+                {% endif %}
               </div>
-          {% endfor %}
-      {% endif %}
+            {% endfor %}
+            {% if password_form.non_field_errors %}
+              <div class="alert alert-danger py-2 mb-0">
+                {{ password_form.non_field_errors|join:', ' }}
+              </div>
+            {% endif %}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" name="password_update" class="btn btn-primary">Update Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055;">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="toast align-items-center text-white border-0 {% if message.tags == 'success' %}bg-success{% elif message.tags == 'error' %}bg-danger{% elif message.tags == 'warning' %}bg-warning text-dark{% else %}bg-info{% endif %}" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body">
+              {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>{% elif message.tags == 'error' %}<i class="bi bi-exclamation-circle-fill me-2"></i>{% elif message.tags == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>{% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+              {{ message }}
+            </div>
+            <button type="button" class="btn-close {% if message.tags == 'warning' %}btn-close-dark{% else %}btn-close-white{% endif %} me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
 </section>
 
 <script>
-// Password toggle functionality
 function togglePassword(fieldId, button) {
-    const passwordField = document.getElementById(fieldId);
-    const icon = button.querySelector('i');
-    
-    if (passwordField.type === 'password') {
-        passwordField.type = 'text';
-        icon.classList.remove('bi-eye');
-        icon.classList.add('bi-eye-slash');
-        button.setAttribute('title', 'Hide password');
-    } else {
-        passwordField.type = 'password';
-        icon.classList.remove('bi-eye-slash');
-        icon.classList.add('bi-eye');
-        button.setAttribute('title', 'Show password');
-    }
+  const passwordField = document.getElementById(fieldId);
+  const icon = button.querySelector('i');
+
+  if (passwordField.type === 'password') {
+    passwordField.type = 'text';
+    icon.classList.remove('bi-eye');
+    icon.classList.add('bi-eye-slash');
+  } else {
+    passwordField.type = 'password';
+    icon.classList.remove('bi-eye-slash');
+    icon.classList.add('bi-eye');
+  }
 }
 
-// Initialize toasts
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if Bootstrap is loaded
-    if (typeof bootstrap !== 'undefined') {
-        // Initialize and show all toasts
-        const toastElements = document.querySelectorAll('.toast');
-        
-        toastElements.forEach(function(toastElement) {
-            const toast = new bootstrap.Toast(toastElement, {
-                autohide: true,
-                delay: 5000
-            });
-            toast.show();
-        });
-    }
-
-    // Set initial tooltips for password toggle buttons
-    const toggleButtons = document.querySelectorAll('.input-group button[onclick*="togglePassword"]');
-    toggleButtons.forEach(function(button) {
-        button.setAttribute('title', 'Show password');
+  if (typeof bootstrap !== 'undefined') {
+    const toastElements = document.querySelectorAll('.toast');
+    toastElements.forEach(function(toastElement) {
+      const toast = new bootstrap.Toast(toastElement, { autohide: true, delay: 5000 });
+      toast.show();
     });
+  }
 });
 </script>
 
 <style>
-/* Toast Styling */
 .toast-container {
-    z-index: 1055 !important;
+  z-index: 1055 !important;
 }
 
 .toast {
-    min-width: 300px;
-    max-width: 400px;
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    margin-bottom: 0.5rem;
+  min-width: 300px;
+  max-width: 400px;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+  margin-bottom: 0.5rem;
 }
 
 .toast-body {
-    font-weight: 500;
-    padding: 0.75rem;
+  font-weight: 500;
+  padding: 0.75rem;
 }
 
-/* Ensure toast colors work */
-.toast.bg-success {
-    background-color: #198754 !important;
+.form-check-input {
+  margin-top: 0.3rem;
 }
 
-.toast.bg-danger {
-    background-color: #dc3545 !important;
-}
-
-.toast.bg-warning {
-    background-color: #ffc107 !important;
-}
-
-.toast.bg-info {
-    background-color: #0dcaf0 !important;
-}
-
-/* Password toggle button styling */
-.input-group .btn-outline-secondary {
-    border-left: 0;
-}
-
-.input-group .form-control:focus + .btn-outline-secondary {
-    border-color: #86b7fe;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-}
-
-/* Ensure password fields have proper styling */
-.input-group .form-control {
-    border-right: 0;
-}
-
-.input-group .form-control:focus {
-    border-right: 0;
-    box-shadow: none;
+.card-header {
+  background-color: #fff;
 }
 </style>
-{% endblock %}
+{% endblock content %}

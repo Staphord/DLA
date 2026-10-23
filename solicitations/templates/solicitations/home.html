@@ -32,7 +32,7 @@
   <div class="row">
     <div class="col-xxl-4 col-md-4">
       <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
-          <div class="card info-card revenue-card myhover">
+          <div class="card info-card revenue-card myhover card-bg-warning">
               <div class="card-body rounded-3">
                 <h5 class="card-title">Unsent Solicitations <span class="text-muted">| All</span></h5>
                 <div class="d-flex align-items-center">
@@ -50,7 +50,7 @@
 
     <div class="col-xxl-4 col-md-4">
       <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
-        <div class="card info-card revenue-card myhover">
+        <div class="card info-card revenue-card myhover card-bg-blue">
           <div class="card-body rounded-3">
             <h5 class="card-title">Sent RFQs <span class="text-muted">| All</span></h5>
             <div class="d-flex align-items-center">
@@ -69,7 +69,7 @@
 
     <div class="col-xxl-4 col-md-4">
       <a href="{% url 'solicitations:clients' %}" class="text-decoration-none">
-        <div class="card info-card revenue-card myhover">
+        <div class="card info-card revenue-card myhover card-bg-secondary">
           <div class="card-body rounded-3">
             <h5 class="card-title">Users <span class="">| All</span></h5>
             <div class="d-flex align-items-center">
@@ -89,7 +89,7 @@
   <div class="row">
     <div class="col-md-6">
       <a href="{% url 'solicitations:solicitations' %}" class="text-decoration-none">
-          <div class="card info-card revenue-card myhover">
+          <div class="card info-card revenue-card myhover card-bg-warning">
               <div class="card-body rounded-3">
                 <h5 class="card-title">Unsent Solicitations <span class="text-muted">| All</span></h5>
                 <div class="d-flex align-items-center">
@@ -108,7 +108,7 @@
     <!-- Procurement Card -->
       <div class="col-md-6">
         <a href="{% url 'solicitations:sent-rfq' %}" class="text-decoration-none">
-        <div class="card info-card revenue-card myhover">
+        <div class="card info-card revenue-card myhover card-bg-blue">
           <div class="card-body rounded-3">
             <h5 class="card-title">Sent RFQs <span class="text-muted">| All</span></h5>
             <div class="d-flex align-items-center">
@@ -142,7 +142,7 @@
         <script>
           document.addEventListener("DOMContentLoaded", () => {
             // Fetch dynamic data from the Django backend
-            fetch('https://swiftneasyrfq.com/DLA/solicitations/get-oem-status-data/')
+            fetch('{% url "solicitations:get_oem_status_data" %}')
               .then(response => response.json())
               .then(data => {
                 // Extract dynamic data
@@ -160,7 +160,7 @@
                       borderColor: 'rgb(75, 192, 192)',
                       backgroundColor: [
                           'rgb(54, 162, 235)',  // Active color
-                          'rgb(104, 99, 200)'   // Disabled color
+                          'rgb(255, 99, 132)'   // Disabled color
                         ],
                       tension: 0.1
                     }]
@@ -199,7 +199,7 @@
         <script>
           document.addEventListener("DOMContentLoaded", () => {
             // Fetch dynamic data from Django view
-            fetch('https://swiftneasyrfq.com/DLA/solicitations/get-chart-data/')
+            fetch('{% url "solicitations:get_chart_data" %}')
               .then(response => response.json())
               .then(data => {
                 // Extract dynamic data

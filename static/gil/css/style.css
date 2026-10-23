@@ -820,6 +820,20 @@ h6 {
   background: #ffecdf;
 }
 
+/* Dashboard summary card background accents.
+   Single-class selectors so .myhover:hover (two classes) always wins on hover. */
+.card-bg-warning {
+  background-color: #ffc107; /* Bootstrap's --bs-warning */
+}
+
+.card-bg-blue {
+  background-color: rgb(54, 162, 235); /* matches the "Active" bar color in the OEMs Status Chart */
+}
+
+.card-bg-secondary {
+  background-color: #6c757d; /* Bootstrap's --bs-secondary */
+}
+
 /* Activity */
 .dashboard .activity {
   font-size: 14px;

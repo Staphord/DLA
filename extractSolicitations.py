@@ -932,6 +932,322 @@ def extract_higher_level_quality_indicator(pdf_text):
     return ""
 
 
+def _extract_labeled_block(full_text, label_pattern):
+    """Grab the multi-line block after a `LABEL:` marker, stopping at the next
+    known DIBBS section marker or a long run of stars. Shares the boundary
+    logic used by extract_prep_for_delivery for the same reason: these blocks
+    are free-text and can only be bounded by "what comes next", not a fixed
+    length.
+    """
+    match = re.search(label_pattern, full_text, re.IGNORECASE)
+    if not match:
+        return ""
+    block = full_text[match.end():]
+
+    # Take whichever boundary occurs first — a star separator can appear much
+    # later in the document (end of Section B), so preferring it unconditionally
+    # would swallow closer markers like "M/F:"/"RDD:" that actually bound this block.
+    candidate_positions = []
+
+    stars_separator_match = re.search(r"(?m)^\s*(?:\*\s*){20,}\*?\s*$", block)
+    if stars_separator_match:
+        candidate_positions.append(stars_separator_match.start())
+
+    stop_match = re.search(
+        r"\n\s*(?:"
+        r"SECTION\s+[C-Z]\b|"
+        r"M/F\s*:|"
+        r"RDD\s*:|"
+        r"PROJ\s*:|"
+        r"SUPP\s+ADD\s*:|"
+        r"MARKFOR\b|"
+        r"PARCEL\s+POST\s+ADDRESS\s*:|"
+        r"FOR\s+(?:TRANSPORTATION|GOVERNMENT\s+USE\s+ONLY)\b|"
+        r"SHIP\s+BY\b|"
+        r"NEED\s+SHIP\s+DATE\s*:|"
+        r"CONTINUED\s+ON\s+NEXT\s+PAGE\b"
+        r")",
+        block,
+        re.IGNORECASE
+    )
+    if stop_match:
+        candidate_positions.append(stop_match.start())
+
+    if candidate_positions:
+        block = block[:min(candidate_positions)]
+
+    return "\n".join(line.strip() for line in block.strip().splitlines() if line.strip())
+
+
+def read_set_aside_checkbox(page):
+    """Return True if the RFQ header box 'IS' (small business set-aside) is checked,
+    False if 'IS NOT' is checked, None if the page layout can't be read.
+
+    DIBBS draws each checkbox as a rectangle; a checked box has extra drawn lines
+    inside it. Text extraction drops this, so the marks are read from geometry.
+    """
+    try:
+        header_limit = page.height * 0.15
+        rfq_words = [w for w in page.extract_words()
+                     if w['text'] == 'RFQ' and w['top'] < header_limit]
+        if not rfq_words:
+            return None
+        row_top = rfq_words[0]['top']
+        boxes = sorted(
+            (r for r in page.rects
+             if abs(r['top'] - row_top) <= 10 and 8 < r['width'] < 20 and 8 < r['height'] < 20),
+            key=lambda r: r['x0'])
+        if len(boxes) != 2:
+            return None
+
+        drawn = page.lines + page.curves + page.rects
+
+        def has_mark(box):
+            return any(
+                o is not box
+                and o['x0'] >= box['x0'] - 1 and o['x1'] <= box['x1'] + 1
+                and o['top'] >= box['top'] - 1 and o['bottom'] <= box['bottom'] + 1
+                and o['top'] < header_limit
+                for o in drawn)
+
+        is_marked, is_not_marked = has_mark(boxes[0]), has_mark(boxes[1])
+        if is_marked == is_not_marked:
+            return None
+        return is_marked
+    except Exception:
+        return None
+
+
+def extract_additional_solicitation_fields(full_text, first_page=None):
+    """Best-effort extraction of the fields identified as present-but-unscraped
+    in real DIBBS RFQ PDFs (see RFQ_REPLY_TO_EXPORT_PIPELINE.md analysis).
+    Every sub-extraction is independent and defaults to blank/empty on any
+    miss, mirroring the defensive style already used throughout this file
+    (a missing field here should never abort the rest of the scrape).
+
+    Returns a dict matching the new Solicitation model fields:
+      naics_code, qty_variance_plus, qty_variance_minus,
+      original_required_delivery_date, need_ship_date, rdd_days,
+      fast_pay_note, approved_sources, packaging_details, ship_to_address,
+      fda_regulated, regulatory_notes, set_aside_code, is_set_aside
+    """
+    result = {
+        'naics_code': '',
+        'qty_variance_plus': '',
+        'qty_variance_minus': '',
+        'original_required_delivery_date': '',
+        'need_ship_date': '',
+        'rdd_days': '',
+        'fast_pay_note': '',
+        'approved_sources': [],
+        'packaging_details': {},
+        'ship_to_address': '',
+        'fda_regulated': '',
+        'regulatory_notes': '',
+        'set_aside_code': '',
+        'is_set_aside': True,
+    }
+
+    if not full_text:
+        return result
+
+    set_aside_checked = read_set_aside_checkbox(first_page) if first_page is not None else None
+    if set_aside_checked is not None:
+        result['is_set_aside'] = set_aside_checked
+
+    try:
+        match = re.search(
+            r"NORTH\s+AMERICAN\s+INDUSTRY\s+CLASSIFICATION\s+SYSTEM\s+(\d+)",
+            full_text, re.IGNORECASE)
+        if match:
+            result['naics_code'] = match.group(1).strip()
+    except Exception:
+        pass
+
+    try:
+        match = re.search(
+            r"QTY\s+VARIANCE\s*:\s*PLUS\s+([\d.]+%?)\s+MINUS\s+([\d.]+%?)",
+            full_text, re.IGNORECASE)
+        if match:
+            result['qty_variance_plus'] = match.group(1).strip()
+            result['qty_variance_minus'] = match.group(2).strip()
+    except Exception:
+        pass
+
+    try:
+        match = re.search(
+            r"Original\s+Required\s+Delivery\s+Date\s*:\s*([\d/]+)",
+            full_text, re.IGNORECASE)
+        if match:
+            result['original_required_delivery_date'] = match.group(1).strip()
+    except Exception:
+        pass
+
+    try:
+        match = re.search(r"Need\s+Ship\s+Date\s*:\s*([\d/]+)", full_text, re.IGNORECASE)
+        if match:
+            result['need_ship_date'] = match.group(1).strip()
+    except Exception:
+        pass
+
+    try:
+        match = re.search(r"^\s*RDD\s*:\s*(\d+)", full_text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            result['rdd_days'] = match.group(1).strip()
+    except Exception:
+        pass
+
+    try:
+        no_fast_pay_match = re.search(
+            r"Fast\s+Pay\s+does\s+not\s+apply\s+to\s+this\s+solicitation",
+            full_text, re.IGNORECASE)
+        if no_fast_pay_match:
+            result['fast_pay_note'] = no_fast_pay_match.group(0).strip()
+        else:
+            applies_match = re.search(
+                r"Fast\s+Pay\s+applies\s+to\s+this\s+solicitation",
+                full_text, re.IGNORECASE)
+            if applies_match:
+                # The condition clause can wrap onto a second line (e.g.
+                # "...if the final award value is less\nthan or equal to the
+                # dollar threshold cited in FAR 13.402(a)"). pdfplumber text
+                # has no reliable blank-line paragraph breaks to stop at, so
+                # cap the tail and prefer stopping at the citation's closing
+                # ")" rather than risk swallowing unrelated later text.
+                tail = full_text[applies_match.end():applies_match.end() + 300]
+                paren_idx = tail.find(')')
+                snippet = tail[:paren_idx + 1] if paren_idx != -1 else tail
+                result['fast_pay_note'] = " ".join(
+                    (applies_match.group(0) + " " + snippet).split())
+    except Exception:
+        pass
+
+    try:
+        approved_sources = []
+        for name, cage, part_number in re.findall(
+            r"^(.{3,80}?)\s+([A-Z0-9]{5})\s+P/N\s*:?\s*(\S+)\s*$",
+            full_text, re.MULTILINE
+        ):
+            approved_sources.append({
+                'name': name.strip(),
+                'cage': cage.strip(),
+                'part_number': part_number.strip(),
+            })
+        result['approved_sources'] = approved_sources
+    except Exception:
+        pass
+
+    try:
+        ship_to = _extract_labeled_block(full_text, r"FREIGHT\s+SHIPPING\s+ADDRESS\s*:\s*")
+        if ship_to:
+            result['ship_to_address'] = ship_to
+    except Exception:
+        pass
+
+    try:
+        packaging_details = {}
+        prep_block = extract_prep_for_delivery(full_text)
+        pkg_patterns = {
+            'qup': r"QUP\s*:\s*(\S+)",
+            'preservation_method': r"PRES\s+MTHD\s*:\s*(\S+)",
+            'cleaning_drying': r"CLNG/DRY\s*:\s*(\S+)",
+            'preservative_material': r"PRESV\s+MAT\s*:\s*(\S+)",
+            'wrap_material': r"WRAP\s+MAT\s*:\s*(\S+)",
+            'cushioning_dunnage_material': r"CUSH/DUNN\s+MAT\s*:\s*(\S+)",
+            'cushioning_dunnage_thickness': r"CUSH/DUNN\s+THKNESS\s*:\s*(\S+)",
+            'unit_container': r"UNIT\s+CONT\s*:\s*(\S+)",
+            'opi': r"\bOPI\s*:\s*(\S+)",
+            'intermediate_container_qty': r"INTRMDTE\s+CONT\s+QTY\s*:\s*(\S+)",
+            'intermediate_container': r"INTRMDTE\s+CONT\s*:\s*(\S+)",
+            'pack_code': r"PACK\s+CODE\s*:\s*(\S+)",
+            'special_marking_code': r"SPECIAL\s+MARKING\s+CODE\s*:\s*([^\n\r]+)",
+        }
+        for key, pattern in pkg_patterns.items():
+            match = re.search(pattern, prep_block, re.IGNORECASE)
+            if match:
+                packaging_details[key] = match.group(1).strip()
+
+        spi_match = re.search(
+            r"SPECIAL\s+PACKAGING\s+INSTRUCTIONS\s+(\S+)\s*REV\s*DATED\s*([\d/]+)",
+            prep_block, re.IGNORECASE)
+        if spi_match:
+            packaging_details['spi_number'] = spi_match.group(1).strip()
+            packaging_details['spi_revision_date'] = spi_match.group(2).strip()
+
+        intermediate_qty_match = re.search(
+            r"INTERMEDIATE\s+PACKAGE\s+SHALL\s+CONTAIN\s+(\d+)\s+UNITS",
+            prep_block, re.IGNORECASE)
+        if intermediate_qty_match:
+            packaging_details['intermediate_package_units'] = intermediate_qty_match.group(1).strip()
+
+        shipping_qty_match = re.search(
+            r"SHIPPING\s+CONTAINER\s+SHALL\s+CONTAIN\s+(\d+)\s+UNITS",
+            prep_block, re.IGNORECASE)
+        if shipping_qty_match:
+            packaging_details['shipping_container_units'] = shipping_qty_match.group(1).strip()
+
+        result['packaging_details'] = packaging_details
+    except Exception:
+        pass
+
+    try:
+        if re.search(r"NOT\s+REGULATED\s+BY\s+THE\s+FDA", full_text, re.IGNORECASE):
+            result['fda_regulated'] = 'N'
+        elif re.search(r"regulated\s+by\s+the\s+FDA", full_text, re.IGNORECASE):
+            result['fda_regulated'] = 'Y'
+            notes = []
+            reg_match = re.search(
+                r"REGULATION\s*([\d.]+)[,]?\s*CLASS\s*([IVX]+)",
+                full_text, re.IGNORECASE)
+            if reg_match:
+                notes.append(f"Regulation {reg_match.group(1)}, Class {reg_match.group(2)}")
+            cid_match = re.search(r"CID\s+([A-Z0-9-]+)", full_text, re.IGNORECASE)
+            if cid_match:
+                notes.append(f"CID {cid_match.group(1)}")
+            result['regulatory_notes'] = "; ".join(notes)
+    except Exception:
+        pass
+
+    try:
+        # Only one of the 7 codes (WOSB) is confirmed against a real solicitation
+        # (FAR 52.219-30). The others are matched by clause TITLE keywords rather
+        # than hardcoded FAR clause numbers, since we haven't verified the exact
+        # clause numbers DIBBS uses for HUBZone/SDVOSB/8(a)/EDWOSB against a real
+        # example — matching on the descriptive program name is safer than
+        # trusting an unverified clause number. Deliberately does NOT infer 'N'
+        # from absence: a missed positive match is safer left blank (falls
+        # through to existing config) than asserted as a wrong code.
+        set_aside_match = re.search(
+            r"Notice\s+of\s+(?:Total\s+|Partial\s+)?Set-[Aa]side\s+for,?\s+or\s+Sole\s+Source\s+Award\s+to,?\s*"
+            r"([^\n\r.]{3,120})",
+            full_text, re.IGNORECASE
+        )
+        if set_aside_match:
+            program_text = set_aside_match.group(1).upper()
+            if 'ECONOMICALLY DISADVANTAGED' in program_text:
+                result['set_aside_code'] = 'E'
+            elif 'HUBZONE' in program_text:
+                result['set_aside_code'] = 'H'
+            elif 'SERVICE-DISABLED VETERAN' in program_text or 'SERVICE DISABLED VETERAN' in program_text:
+                result['set_aside_code'] = 'R'
+            elif '8(A)' in program_text or '8-A' in program_text:
+                result['set_aside_code'] = 'A'
+            elif 'WOMEN-OWNED' in program_text or 'WOMEN OWNED' in program_text:
+                result['set_aside_code'] = 'L'
+            elif 'SMALL BUSINESS' in program_text:
+                result['set_aside_code'] = 'Y'
+    except Exception:
+        pass
+
+    if set_aside_checked is False:
+        result['set_aside_code'] = 'N'
+    elif set_aside_checked and not result['set_aside_code'] and re.search(
+            r"NOTICE\s+OF\s+SMALL\s+BUSINESS\s+RESERVE", full_text, re.IGNORECASE):
+        result['set_aside_code'] = 'Y'
+
+    return result
+
+
 def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     """Enhanced PDF extraction with comprehensive retry logic"""
     unit = "N/A"
@@ -944,6 +1260,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     solicitation_line_number = ""
     procurement_history = []
     higher_level_quality_indicator = ""
+    additional_fields = {}
 
     print(f"\nExtracting from PDF: {pdf_url}")
 
@@ -1510,6 +1827,11 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
                     higher_level_quality_indicator = extract_higher_level_quality_indicator(full_text)
                     print(f"  Higher-Level Quality Indicator: {higher_level_quality_indicator or '(unknown)'}")
 
+                    # Best-effort extraction of the previously-unscraped fields
+                    # (NAICS, qty variance, ship-to address, packaging sub-fields,
+                    # approved sources, FDA/regulatory notes, etc.)
+                    additional_fields = extract_additional_solicitation_fields(full_text, pdf.pages[0] if pdf.pages else None)
+
                     # AI-ENHANCED EXTRACTION: Use GPT-4 as fallback for missing fields
                     # Use AI if unit, line number, or procurement history are missing
                     # Unit is critical - if missing, solicitation will be skipped
@@ -1606,7 +1928,7 @@ def extract_unit_from_pdf_comprehensive(pdf_url, driver, max_pdf_retries=3):
     print(f"Prep for Delivery: {prep_for_delivery[:50]}...")
     print(f"Buyer: {buyer_info[:50]}...")
 
-    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, solicitation_line_number, procurement_history, higher_level_quality_indicator
+    return unit, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, solicitation_line_number, procurement_history, higher_level_quality_indicator, additional_fields
 
 
 @retry(max_attempts=2, delay=2, cleanup_func=cleanup_resources)
@@ -1959,6 +2281,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
 
                 if not cage_values:
                     print(f"SKIPPING NSN {nsn}: No CAGE codes found - NSN page may be empty or data not available")
+                    save_no_cage_solicitations(nsn, nsn_rows)
                     failed_saves += 1
                     nsn_status[nsn] = "failed"
                     nsn_failed_reasons[nsn] = "No CAGE codes found: NSN page structure may have changed or no approved sources available"
@@ -1966,6 +2289,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
 
             except Exception as cage_error:
                 print(f"SKIPPING NSN {nsn}: Error finding CAGE table - {cage_error}")
+                save_no_cage_solicitations(nsn, nsn_rows)
                 failed_saves += 1
                 nsn_status[nsn] = "failed"
                 nsn_failed_reasons[nsn] = f"CAGE table extraction error: {str(cage_error)} - Page structure may have changed or element not found"
@@ -1994,7 +2318,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
                 print(f"[NSN {nsn}] PDF URL found: {pdf_url[:50]}...")
 
                 print(f"[NSN {nsn}] Extracting PDF data (this may take a moment)...")
-                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, solicitation_line_number, procurement_history, higher_level_quality_indicator = extract_unit_from_pdf_comprehensive(
+                unit_value, inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, solicitation_line_number, procurement_history, higher_level_quality_indicator, additional_fields = extract_unit_from_pdf_comprehensive(
                     pdf_url, driver=driver)
                 print(f"[NSN {nsn}] PDF extracted - Unit: {unit_value}, Line Number: {solicitation_line_number}, Procurement History: {len(procurement_history)} records, HLQI: {higher_level_quality_indicator or '(unknown)'}")
 
@@ -2004,6 +2328,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
                 unit_value = inspection_point = acceptance_point = deliver_fob = deliver_days = buyer_info = prep_for_delivery = solicitation_line_number = ""
                 procurement_history = []
                 higher_level_quality_indicator = ""
+                additional_fields = {}
             except Exception as pdf_error:
                 print(f"[NSN {nsn}] PDF extraction failed: {pdf_error}")
                 print(f"[NSN {nsn}] Error type: {type(pdf_error).__name__}")
@@ -2012,6 +2337,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
                 unit_value = inspection_point = acceptance_point = deliver_fob = deliver_days = buyer_info = prep_for_delivery = solicitation_line_number = ""
                 procurement_history = []
                 higher_level_quality_indicator = ""
+                additional_fields = {}
 
             unit_code = unit_value.strip().upper() if unit_value else 'N/A'
             unit_description = UNIT_MAPPING.get(
@@ -2068,6 +2394,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
                         'Prep For Delivery': prep_for_delivery,
                         'Buyer Info': buyer_info,
                         'Higher Level Quality Indicator': higher_level_quality_indicator,
+                        'Extra Fields': additional_fields,
                     }
 
                     print(
@@ -2574,15 +2901,161 @@ def process_row_data(row_data_list):
     return consolidated_data
 
 
-def save_single_record_to_db(record_data, cage_details_list):
-    """Save record to database or update quantity if it already exists.
-       Identity = (NSN, CAGE, PART_NUMBER, RETURN_BY_DATE). Solicitation is metadata only.
+def save_no_cage_solicitations(nsn, nsn_rows):
+    """
+    Persist listing-level data for an NSN that DIBBS shows with no approved-
+    source CAGE, so it can be handled manually instead of being dropped.
+    One row per solicitation listed for this NSN; identity is (NSN,
+    Solicitation), so re-scraping updates the listing fields. Whether any
+    user has handled a record lives in a separate per-user table this
+    function never touches, so re-scraping can never affect that status.
+    """
+    saved = 0
+    sql_query = """
+    INSERT INTO solicitations_nocagesolicitation
+    (nsn, nomenclature, solicitation, quantity, purchase_request, issued_date, return_by_date,
+     scraped_date)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, CURDATE())
+    ON DUPLICATE KEY UPDATE
+        nomenclature = VALUES(nomenclature),
+        quantity = VALUES(quantity),
+        purchase_request = VALUES(purchase_request),
+        issued_date = VALUES(issued_date),
+        return_by_date = VALUES(return_by_date)
+    """
+    try:
+        db_connection = MySQLdb.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            passwd=DB_PASSWORD,
+            db=DB_NAME,
+            port=DB_PORT,
+            cursorclass=DictCursor,
+            autocommit=True
+        )
+        cursor = db_connection.cursor()
+        for row in nsn_rows:
+            quantity = extract_quantity(row.get('quantity', '0'))
+            cursor.execute(sql_query, (
+                nsn,
+                row.get('nomenclature', 'N/A'),
+                row.get('solicitation', 'N/A'),
+                str(quantity),
+                row.get('purchase_request', ''),
+                row.get('issued_date', 'N/A'),
+                row.get('return_by_date', 'N/A'),
+            ))
+            saved += 1
+        print(f"  Saved {saved} no-CAGE record(s) for NSN {nsn} for manual handling")
+    except Exception as e:
+        print(f"  Error saving no-CAGE records for NSN {nsn}: {e}")
+    finally:
+        try:
+            if 'db_connection' in locals():
+                db_connection.close()
+        except Exception:
+            pass
+    return saved
+
+
+def _is_government_email(email):
+    """True if any address in the CAGE record's Email field (semicolon-
+    separated) ends in .mil or .gov (e.g. government-owned/operated
+    facilities, federal labs) rather than a commercial vendor."""
+    if not email or email == 'N/A':
+        return False
+    for part in email.split(';'):
+        addr = part.strip().lower()
+        if addr.endswith('.mil') or addr.endswith('.gov'):
+            return True
+    return False
+
+
+def save_government_email_solicitation(record_data, cage_details):
+    """
+    Persist a solicitation whose CAGE-registered contact email is a
+    .mil/.gov address to a table separate from solicitations_solicitation,
+    so it is never picked up by the auto-send pipeline; handled manually
+    instead, same pattern as save_no_cage_solicitations. Identity is
+    (NSN, CAGE, PART_NUMBER, RETURN_BY_DATE), matching the main table's
+    identity, so re-scraping accumulates quantity the same way.
     """
     nsn = record_data.get('NSN', 'N/A')
     solicitation = record_data.get('Solicitation', 'N/A')
     cage_code = record_data.get('CAGE Code', 'N/A')
     part_number = record_data.get('Part Number', 'N/A')
     return_by = record_data.get('Return By Date', 'N/A')
+    organization_name = cage_details.get('Organization Name', 'N/A') if cage_details else 'N/A'
+    email = cage_details.get('Email', 'N/A') if cage_details else 'N/A'
+
+    new_quantity = record_data.get('Quantity') or 0
+    try:
+        new_quantity = int(new_quantity)
+    except Exception:
+        new_quantity = 0
+
+    sql_query = """
+    INSERT INTO solicitations_governmentemailsolicitation
+    (cage, email, nsn, nomenclature, part_number, organization_name, solicitation, quantity,
+     purchase_request, issued_date, return_by_date, scraped_date)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURDATE())
+    ON DUPLICATE KEY UPDATE
+        quantity = CAST(quantity AS SIGNED) + CAST(VALUES(quantity) AS SIGNED),
+        nomenclature = VALUES(nomenclature),
+        organization_name = VALUES(organization_name),
+        email = VALUES(email),
+        solicitation = VALUES(solicitation),
+        purchase_request = VALUES(purchase_request),
+        issued_date = VALUES(issued_date)
+    """
+    try:
+        db_connection = MySQLdb.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            passwd=DB_PASSWORD,
+            db=DB_NAME,
+            port=DB_PORT,
+            cursorclass=DictCursor,
+            autocommit=True
+        )
+        cursor = db_connection.cursor()
+        cursor.execute(sql_query, (
+            cage_code, email, nsn, record_data.get('Nomenclature', 'N/A'), part_number,
+            organization_name, solicitation, new_quantity,
+            record_data.get('Purchase Request', ''),
+            record_data.get('Issued Date', 'N/A'), return_by,
+        ))
+        print(f"  GOV-EMAIL: saved (NSN={nsn}, CAGE={cage_code}, PART={part_number}, EMAIL={email}) for manual handling")
+        return True, True
+    except Exception as e:
+        print(f"  Error saving government-email solicitation (NSN={nsn}, CAGE={cage_code}): {e}")
+        return False, False
+    finally:
+        try:
+            if 'db_connection' in locals():
+                db_connection.close()
+        except Exception:
+            pass
+
+
+def save_single_record_to_db(record_data, cage_details_list):
+    """Save record to database or update quantity if it already exists.
+       Identity = (NSN, CAGE, PART_NUMBER, RETURN_BY_DATE). Solicitation is metadata only.
+
+       CAGEs whose registered contact email is a .mil/.gov address are
+       diverted to save_government_email_solicitation() and never reach
+       solicitations_solicitation, so they can't be auto-sent an RFQ.
+    """
+    nsn = record_data.get('NSN', 'N/A')
+    solicitation = record_data.get('Solicitation', 'N/A')
+    cage_code = record_data.get('CAGE Code', 'N/A')
+    part_number = record_data.get('Part Number', 'N/A')
+    return_by = record_data.get('Return By Date', 'N/A')
+
+    cage_details = next(
+        (item for item in cage_details_list if item['CAGE Code'] == cage_code), None)
+    if _is_government_email(cage_details.get('Email', 'N/A') if cage_details else 'N/A'):
+        return save_government_email_solicitation(record_data, cage_details)
 
     # coerce quantity to int safely
     new_quantity = record_data.get('Quantity') or 0
@@ -2623,8 +3096,10 @@ def save_single_record_to_db(record_data, cage_details_list):
     INSERT INTO solicitations_solicitation
     (cage, nsn, nomenclature, solicitation, status, quantity, issued_date, return_by_date,
      organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit,
-     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, scraped_date, solicitation_line_number, procurement_history, purchase_request_number, is_set_aside, higher_level_quality_indicator)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, scraped_date, solicitation_line_number, procurement_history, purchase_request_number, is_set_aside, higher_level_quality_indicator,
+     naics_code, qty_variance_plus, qty_variance_minus, original_required_delivery_date, need_ship_date, rdd_days, fast_pay_note, approved_sources, packaging_details, ship_to_address, fda_regulated, regulatory_notes, set_aside_code, solicitation_type)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     try:
@@ -2639,10 +3114,7 @@ def save_single_record_to_db(record_data, cage_details_list):
         )
         cursor = db_connection.cursor()
 
-        # attach CAGE details if available
-        cage_details = next(
-            (item for item in cage_details_list if item['CAGE Code'] == cage_code), None)
-
+        # cage_details already resolved above (used for the government-email check)
         if cage_details:
             organization_name = cage_details.get('Organization Name', 'N/A')
             street_name = cage_details.get('Street Name', 'N/A')
@@ -2657,7 +3129,13 @@ def save_single_record_to_db(record_data, cage_details_list):
         # Convert procurement_history list to JSON string for MySQL JSON field
         procurement_history_data = record_data.get('Procurement History', [])
         procurement_history_json = json.dumps(procurement_history_data) if procurement_history_data else '[]'
-        
+
+        # Fields identified as present-but-unscraped in real DIBBS RFQ PDFs
+        # (see RFQ_REPLY_TO_EXPORT_PIPELINE.md analysis); best-effort, defaults to blank.
+        extra = record_data.get('Extra Fields', {}) or {}
+        approved_sources_json = json.dumps(extra.get('approved_sources', []))
+        packaging_details_json = json.dumps(extra.get('packaging_details', {}))
+
         db_record = (
             cage_code, nsn, record_data.get(
                 'Nomenclature', 'N/A'), solicitation,
@@ -2675,8 +3153,22 @@ def save_single_record_to_db(record_data, cage_details_list):
             record_data.get('Line Number', ''),
             procurement_history_json,
             record_data.get('Purchase Request', ''),
-            True,  # is_set_aside - default to True as per model
+            extra.get('is_set_aside', True),
             record_data.get('Higher Level Quality Indicator', ''),
+            extra.get('naics_code', ''),
+            extra.get('qty_variance_plus', ''),
+            extra.get('qty_variance_minus', ''),
+            extra.get('original_required_delivery_date', ''),
+            extra.get('need_ship_date', ''),
+            extra.get('rdd_days', ''),
+            extra.get('fast_pay_note', ''),
+            approved_sources_json,
+            packaging_details_json,
+            extra.get('ship_to_address', ''),
+            extra.get('fda_regulated', ''),
+            extra.get('regulatory_notes', ''),
+            extra.get('set_aside_code', ''),
+            '',
         )
 
         cursor.execute(sql_query, db_record)

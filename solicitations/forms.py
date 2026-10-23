@@ -333,16 +333,88 @@ class RfqAutoFetchSettingsForm(forms.ModelForm):
 
 
 class UserUpdateForm(forms.ModelForm):
+    FOB_LOCATION_CHOICES = (
+        ('destination', 'Destination'),
+        ('origin', 'Origin'),
+    )
+
+    default_fob = forms.ChoiceField(
+        choices=FOB_LOCATION_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    default_origin_country = forms.ChoiceField(
+        choices=FOB_LOCATION_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'title', 'email', 'personal_email', 'phone', 'address',
-                  'companyName', 'company_initial', 'cage', 'fax', 'website', 'added_days']
+        fields = [
+            'first_name', 'last_name', 'title', 'email', 'personal_email', 'phone', 'address',
+            'companyName', 'company_initial', 'legal_name', 'uei', 'naics_code', 'business_size',
+            'cage', 'fax', 'website', 'agreement_type', 'contract_number', 'agreement_expiry',
+            'default_fob', 'default_origin_country', 'default_moq', 'default_lead_time_days',
+            'immediate_shipment_allowed', 'is_wosb', 'is_edwosb', 'is_hubzone', 'is_8a', 'is_sdvosb',
+            'is_iso_9001_certified', 'iso_9001_expiry',
+            'is_as9100_certified', 'as9100_expiry',
+            'is_as9003_certified', 'as9003_expiry',
+            'is_jcp_certified', 'jcp_expiry', 'is_qsl_certified', 'qsl_expiry',
+            'is_qpl_certified', 'qpl_expiry', 'is_qml_certified', 'qml_expiry',
+            'joint_venture_code', 'joint_venture_remarks', 'affirmative_action_code',
+            'previous_contracts_code', 'alternate_disputes_resolution', 'prompt_payment_terms_code',
+            'child_labor_certification_code', 'inspection_packaging_cage', 'inspection_supplies_cage',
+            'small_business_representation_code', 'default_quote_valid_days', 'default_meets_packaging',
+            'default_material_requirements', 'default_quantity_variance_plus', 'default_quantity_variance_minus',
+            'added_days'
+        ]
 
     def __init__(self, *args, **kwargs):
         super(UserUpdateForm, self).__init__(*args, **kwargs)
-        # Add Bootstrap classes to form fields
         for field_name, field in self.fields.items():
             field.widget.attrs['class'] = 'form-control'
+            if field_name in ['is_wosb', 'is_edwosb', 'is_hubzone', 'is_8a', 'is_sdvosb',
+                              'is_iso_9001_certified', 'is_as9100_certified', 'is_as9003_certified',
+                              'is_jcp_certified', 'is_qsl_certified', 'is_qpl_certified', 'is_qml_certified',
+                              'immediate_shipment_allowed']:
+                field.widget.attrs['class'] = 'form-check-input'
+            if field_name in ['agreement_type', 'default_fob', 'default_origin_country',
+                              'joint_venture_code', 'affirmative_action_code', 'previous_contracts_code',
+                              'alternate_disputes_resolution', 'prompt_payment_terms_code',
+                              'child_labor_certification_code', 'small_business_representation_code',
+                              'default_meets_packaging', 'default_material_requirements']:
+                field.widget.attrs['class'] = 'form-select'
+            if field_name in ['agreement_expiry', 'iso_9001_expiry', 'as9100_expiry', 'as9003_expiry',
+                              'jcp_expiry', 'qsl_expiry', 'qpl_expiry', 'qml_expiry']:
+                field.widget.input_type = 'date'
+            if field_name in ['default_lead_time_days', 'added_days']:
+                field.widget.attrs['min'] = 0
+
+        if 'agreement_type' in self.fields:
+            self.fields['agreement_type'].choices = CustomUser.AGREEMENT_TYPE_CHOICES
+
+    def clean(self):
+        cleaned = super().clean()
+        cage = (cleaned.get('cage') or '').strip()
+        if cage and len(cage) != 5:
+            self.add_error('cage', 'CAGE code must be exactly 5 characters.')
+        contract_number = (cleaned.get('contract_number') or '').strip()
+        if len(contract_number) > 17:
+            self.add_error('contract_number', 'Contract number cannot exceed 17 characters.')
+        agreement_type = cleaned.get('agreement_type') or ''
+        agreement_expiry = cleaned.get('agreement_expiry')
+        if agreement_type in ('BOA', 'FSS', 'BPA'):
+            if not contract_number:
+                self.add_error('contract_number', 'Required for BOA, FSS, or BPA agreements.')
+            if not agreement_expiry:
+                self.add_error('agreement_expiry', 'Required for BOA, FSS, or BPA agreements.')
+        elif agreement_type == 'NAP':
+            if contract_number:
+                self.add_error('contract_number', 'Must be blank when the agreement is NAP.')
+            if agreement_expiry:
+                self.add_error('agreement_expiry', 'Must be blank when the agreement is NAP.')
+        return cleaned
 
 
 class EmailConfigForm(forms.ModelForm):

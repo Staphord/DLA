@@ -3,6 +3,7 @@ import os
 from django.core.mail import send_mail, get_connection
 from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.http import HttpResponseForbidden, HttpResponseNotFound, JsonResponse, HttpResponse
 from accounts.models import CustomUser, Invitation, VerificationToken
 from . models import RFQ, EmailSettings, RFQIDTemplate, BidReferenceTemplate, RfqAutoFetchSettings, RfqAutoFetchStatus, UserEmailConfig, RFQTaskSummary, UserSelectionState, RFQScriptLog, RFQScriptSession, MailTemplate, OEMUser, Solicitation, OEM, GitHubWorkflow, SolicitationEmailStatus, UserOEMCustomization, RfqReplyExportOverride, ScrapingSchedule, EmailTemplateConfig, EmailTextStyleOverride, OEMImportJob, DEFAULT_RESALE_NOTICE_TEXT, QClusterMonitorConfig
@@ -2125,6 +2126,258 @@ def archived_replied_rfq(request):
 
 
 @login_required
+def no_cage_solicitations(request):
+    """
+    List NSNs DIBBS shows with no approved-source CAGE, so there's no OEM to
+    auto-send an RFQ to. The scraped data is shared, but "handled" is
+    per-user: one user marking a record handled must not hide it from
+    anyone else, since each user works these manually and independently.
+    """
+    from .models import NoCageSolicitation, NoCageSolicitationHandledBy
+
+    show_handled = request.GET.get('show') == 'handled'
+    search_query = (request.GET.get('q') or '').strip()
+
+    handled_by_me = NoCageSolicitationHandledBy.objects.filter(
+        user=request.user, solicitation=OuterRef('pk')
+    )
+    base_queryset = NoCageSolicitation.objects.annotate(
+        handled_by_me=Exists(handled_by_me)
+    )
+    active_count = base_queryset.filter(handled_by_me=False).count()
+    handled_count = base_queryset.filter(handled_by_me=True).count()
+
+    queryset = base_queryset.filter(handled_by_me=show_handled)
+    if search_query:
+        queryset = queryset.filter(
+            Q(nsn__icontains=search_query) |
+            Q(nomenclature__icontains=search_query) |
+            Q(solicitation__icontains=search_query) |
+            Q(purchase_request__icontains=search_query)
+        )
+
+    p = Paginator(queryset, 25)
+    page = request.GET.get('page')
+    records = p.get_page(page)
+
+    if show_handled:
+        my_handled_at = dict(
+            NoCageSolicitationHandledBy.objects.filter(
+                user=request.user, solicitation__in=records
+            ).values_list('solicitation_id', 'handled_at')
+        )
+        for record in records:
+            record.handled_at_for_me = my_handled_at.get(record.id)
+
+    context = {
+        'records': records,
+        'active_count': active_count,
+        'handled_count': handled_count,
+        'show_handled': show_handled,
+        'search_query': search_query,
+    }
+    return render(request, 'solicitations/procurements/no_cage_solicitations.html', context)
+
+
+@login_required
+def mark_no_cage_handled(request, pk):
+    """Toggle whether the current user (and only the current user) has handled this record."""
+    from .models import NoCageSolicitation, NoCageSolicitationHandledBy
+
+    if request.method != 'POST':
+        return redirect('solicitations:no-cage-solicitations')
+
+    record = get_object_or_404(NoCageSolicitation, pk=pk)
+    handling, created = NoCageSolicitationHandledBy.objects.get_or_create(
+        solicitation=record, user=request.user
+    )
+    if created:
+        messages.success(
+            request, f"Marked {record.nsn} / {record.solicitation} as handled.")
+    else:
+        handling.delete()
+        messages.success(
+            request, f"Marked {record.nsn} / {record.solicitation} as not handled.")
+
+    next_url = request.POST.get('next') or 'solicitations:no-cage-solicitations'
+    return redirect(next_url)
+
+
+@login_required
+def export_no_cage_solicitations(request):
+    """Export the current user's no-CAGE solicitations list (active or handled) to CSV."""
+    import csv
+    from .models import NoCageSolicitation, NoCageSolicitationHandledBy
+
+    show_handled = request.GET.get('show') == 'handled'
+    handled_by_me = NoCageSolicitationHandledBy.objects.filter(
+        user=request.user, solicitation=OuterRef('pk')
+    )
+    queryset = NoCageSolicitation.objects.annotate(
+        handled_by_me=Exists(handled_by_me)
+    ).filter(handled_by_me=show_handled).order_by('-scraped_date', '-id')
+
+    response = HttpResponse(content_type='text/csv')
+    label = 'handled' if show_handled else 'active'
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    response['Content-Disposition'] = f'attachment; filename="no_cage_solicitations_{label}_{timestamp}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['NSN', 'Nomenclature', 'Solicitation', 'Quantity', 'Purchase Request',
+                      'Issued Date', 'Return By Date', 'Scraped Date'])
+    for record in queryset:
+        writer.writerow([
+            record.nsn, record.nomenclature, record.solicitation, record.quantity,
+            record.purchase_request, record.issued_date, record.return_by_date,
+            record.scraped_date,
+        ])
+    return response
+
+
+@login_required
+def no_cage_detail(request, pk):
+    """Full-detail, read-only view of a single no-CAGE record, plus this user's handled status."""
+    from .models import NoCageSolicitation, NoCageSolicitationHandledBy
+
+    record = get_object_or_404(NoCageSolicitation, pk=pk)
+    handling = NoCageSolicitationHandledBy.objects.filter(
+        solicitation=record, user=request.user).first()
+    context = {
+        'record': record,
+        'handled_by_me': handling is not None,
+        'handled_at_for_me': handling.handled_at if handling else None,
+    }
+    return render(request, 'solicitations/procurements/no-cage-detail.html', context)
+
+
+@login_required
+def government_email_solicitations(request):
+    """
+    List solicitations whose CAGE-registered contact email is a .mil/.gov
+    address, kept separate from solicitations_solicitation so they're never
+    auto-sent. "Handled" is per-user, same pattern as no-CAGE solicitations:
+    one user marking a record handled must not hide it from anyone else.
+    """
+    from .models import GovernmentEmailSolicitation, GovernmentEmailSolicitationHandledBy
+
+    show_handled = request.GET.get('show') == 'handled'
+    search_query = (request.GET.get('q') or '').strip()
+
+    handled_by_me = GovernmentEmailSolicitationHandledBy.objects.filter(
+        user=request.user, solicitation=OuterRef('pk')
+    )
+    base_queryset = GovernmentEmailSolicitation.objects.annotate(
+        handled_by_me=Exists(handled_by_me)
+    )
+    active_count = base_queryset.filter(handled_by_me=False).count()
+    handled_count = base_queryset.filter(handled_by_me=True).count()
+
+    queryset = base_queryset.filter(handled_by_me=show_handled)
+    if search_query:
+        queryset = queryset.filter(
+            Q(nsn__icontains=search_query) |
+            Q(nomenclature__icontains=search_query) |
+            Q(solicitation__icontains=search_query) |
+            Q(purchase_request__icontains=search_query) |
+            Q(cage__icontains=search_query) |
+            Q(email__icontains=search_query)
+        )
+
+    p = Paginator(queryset, 25)
+    page = request.GET.get('page')
+    records = p.get_page(page)
+
+    if show_handled:
+        my_handled_at = dict(
+            GovernmentEmailSolicitationHandledBy.objects.filter(
+                user=request.user, solicitation__in=records
+            ).values_list('solicitation_id', 'handled_at')
+        )
+        for record in records:
+            record.handled_at_for_me = my_handled_at.get(record.id)
+
+    context = {
+        'records': records,
+        'active_count': active_count,
+        'handled_count': handled_count,
+        'show_handled': show_handled,
+        'search_query': search_query,
+    }
+    return render(request, 'solicitations/procurements/government_email_solicitations.html', context)
+
+
+@login_required
+def mark_government_email_handled(request, pk):
+    """Toggle whether the current user (and only the current user) has handled this record."""
+    from .models import GovernmentEmailSolicitation, GovernmentEmailSolicitationHandledBy
+
+    if request.method != 'POST':
+        return redirect('solicitations:government-email-solicitations')
+
+    record = get_object_or_404(GovernmentEmailSolicitation, pk=pk)
+    handling, created = GovernmentEmailSolicitationHandledBy.objects.get_or_create(
+        solicitation=record, user=request.user
+    )
+    if created:
+        messages.success(
+            request, f"Marked {record.nsn} / {record.solicitation} as handled.")
+    else:
+        handling.delete()
+        messages.success(
+            request, f"Marked {record.nsn} / {record.solicitation} as not handled.")
+
+    next_url = request.POST.get('next') or 'solicitations:government-email-solicitations'
+    return redirect(next_url)
+
+
+@login_required
+def export_government_email_solicitations(request):
+    """Export the current user's government-email solicitations list (active or handled) to CSV."""
+    import csv
+    from .models import GovernmentEmailSolicitation, GovernmentEmailSolicitationHandledBy
+
+    show_handled = request.GET.get('show') == 'handled'
+    handled_by_me = GovernmentEmailSolicitationHandledBy.objects.filter(
+        user=request.user, solicitation=OuterRef('pk')
+    )
+    queryset = GovernmentEmailSolicitation.objects.annotate(
+        handled_by_me=Exists(handled_by_me)
+    ).filter(handled_by_me=show_handled).order_by('-scraped_date', '-id')
+
+    response = HttpResponse(content_type='text/csv')
+    label = 'handled' if show_handled else 'active'
+    timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+    response['Content-Disposition'] = f'attachment; filename="government_email_solicitations_{label}_{timestamp}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['NSN', 'CAGE', 'Email', 'Organization', 'Nomenclature', 'Solicitation',
+                      'Quantity', 'Purchase Request', 'Issued Date', 'Return By Date', 'Scraped Date'])
+    for record in queryset:
+        writer.writerow([
+            record.nsn, record.cage, record.email, record.organization_name, record.nomenclature,
+            record.solicitation, record.quantity, record.purchase_request, record.issued_date,
+            record.return_by_date, record.scraped_date,
+        ])
+    return response
+
+
+@login_required
+def government_email_detail(request, pk):
+    """Full-detail, read-only view of a single government-email record, plus this user's handled status."""
+    from .models import GovernmentEmailSolicitation, GovernmentEmailSolicitationHandledBy
+
+    record = get_object_or_404(GovernmentEmailSolicitation, pk=pk)
+    handling = GovernmentEmailSolicitationHandledBy.objects.filter(
+        solicitation=record, user=request.user).first()
+    context = {
+        'record': record,
+        'handled_by_me': handling is not None,
+        'handled_at_for_me': handling.handled_at if handling else None,
+    }
+    return render(request, 'solicitations/procurements/government-email-detail.html', context)
+
+
+@login_required
 def download_export_file(request):
     """
     Serve a pending export file for download, then clear the session.
@@ -2156,6 +2409,22 @@ def download_export_file(request):
     )
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+def _redirect_back_or(request, fallback_url_name):
+    """
+    Redirect to the page the current request came from (e.g. the RFQ
+    preview page a failed export was triggered from), falling back to
+    fallback_url_name when there's no safe referer to return to. Used so a
+    failed export leaves the user where they were instead of bouncing them
+    to the general replied-RFQs list.
+    """
+    referer = request.META.get('HTTP_REFERER')
+    if referer and url_has_allowed_host_and_scheme(
+        referer, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return redirect(referer)
+    return redirect(fallback_url_name)
 
 
 @login_required
@@ -2230,28 +2499,49 @@ def export_replied_rfqs(request):
 
     if not rfq_replies.exists():
         messages.warning(request, "No RFQ replies found to export.")
-        return redirect('solicitations:replied-rfq')
+        return _redirect_back_or(request, 'solicitations:replied-rfq')
 
     try:
         # Debug logging
         logger.info(
             f"[EXPORT_REPLIED_RFQS] Starting export for {rfq_replies.count()} RFQ replies")
 
-        # Export to file using user's export configuration.
-        # Mandatory-field empties should not block export.
+        # Export to file using the user's export configuration. RFQs that
+        # fail mandatory-field validation are excluded from the file
+        # individually (see result['errors']) rather than blocking the
+        # whole batch.
         result = export_rfq_replies_to_file(
-            user, rfq_replies, validate_mandatory=False)
+            user, rfq_replies, validate_mandatory=True)
 
         logger.info(
             f"[EXPORT_REPLIED_RFQS] Export result: count={result.get('count')}, errors={len(result.get('errors', []))}, file_path={result.get('file_path')}")
 
-        # All RFQs passed validation - mark all as exported
+        # Only mark the RFQs that actually made it into the file as exported -
+        # skipped_ids covers RFQs excluded for missing/invalid mandatory fields.
+        skipped_ids = {
+            err['rfq_reply_id'] for err in result.get('errors', [])
+            if err.get('rfq_reply_id')
+        }
         if result.get('count', 0) > 0:
-            all_ids = list(rfq_replies.values_list('id', flat=True))
-            RfqReply.objects.filter(id__in=all_ids).update(
+            exported_ids = [
+                rid for rid in rfq_replies.values_list('id', flat=True)
+                if rid not in skipped_ids
+            ]
+            RfqReply.objects.filter(id__in=exported_ids).update(
                 is_exported=True, exported_at=timezone.now())
             logger.info(
-                f"[EXPORT_REPLIED_RFQS] Marked {len(all_ids)} RFQs as exported")
+                f"[EXPORT_REPLIED_RFQS] Marked {len(exported_ids)} RFQs as exported")
+
+        if skipped_ids:
+            skipped_refs = [
+                err['rfq_reply_ref'] for err in result.get('errors', [])
+                if err.get('rfq_reply_id')
+            ]
+            messages.warning(
+                request,
+                f"Excluded {len(skipped_refs)} RFQ reply(ies) with missing/invalid mandatory fields: "
+                f"{', '.join(skipped_refs)}"
+            )
 
         # Store file info in session for auto-download after redirect (if file was created)
         file_path = result.get('file_path')
@@ -2277,11 +2567,13 @@ def export_replied_rfqs(request):
                     request, "Export file was not created successfully.")
             logger.error(
                 f"[EXPORT_REPLIED_RFQS] No file created: count={result.get('count')}, errors={len(result.get('errors', []))}, file_path={file_path}")
-            return redirect('solicitations:replied-rfq')
+            # Stay on the page the export was triggered from (e.g. the RFQ
+            # preview) instead of bouncing to the general replied-RFQs list.
+            return _redirect_back_or(request, 'solicitations:replied-rfq')
 
     except Exception as e:
         messages.error(request, f"Error exporting RFQ replies: {str(e)}")
-        return redirect('solicitations:replied-rfq')
+        return _redirect_back_or(request, 'solicitations:replied-rfq')
 
 
 @login_required
@@ -2337,20 +2629,35 @@ def export_selected_rfqs(request):
         return JsonResponse({'success': False, 'error': 'No RFQ replies found to export'}, status=404)
 
     try:
-        # Export to file using user's export configuration.
-        # Mandatory-field empties should not block export.
+        # Export to file using the user's export configuration. RFQs that
+        # fail mandatory-field validation are excluded from the file
+        # individually (see result['errors']) rather than blocking the
+        # whole batch.
         result = export_rfq_replies_to_file(
-            user, rfq_replies, validate_mandatory=False)
+            user, rfq_replies, validate_mandatory=True)
 
-        # All RFQs passed validation - mark all as exported
+        # Only mark the RFQs that actually made it into the file as exported -
+        # skipped_ids covers RFQs excluded for missing/invalid mandatory fields.
+        skipped_ids = {
+            err['rfq_reply_id'] for err in result.get('errors', [])
+            if err.get('rfq_reply_id')
+        }
         if result.get('count', 0) > 0:
-            all_ids = list(rfq_replies.values_list('id', flat=True))
-            RfqReply.objects.filter(id__in=all_ids).update(
+            exported_ids = [
+                rid for rid in rfq_replies.values_list('id', flat=True)
+                if rid not in skipped_ids
+            ]
+            RfqReply.objects.filter(id__in=exported_ids).update(
                 is_exported=True, exported_at=timezone.now())
 
         # Clear session RFQ IDs if they were stored (from preview flow)
         if 'rfq_export_ids' in request.session:
             del request.session['rfq_export_ids']
+
+        skipped_refs = [
+            err['rfq_reply_ref'] for err in result.get('errors', [])
+            if err.get('rfq_reply_id')
+        ]
 
         # Store file info in session for auto-download after redirect (if file was created)
         file_path = result.get('file_path')
@@ -2360,18 +2667,34 @@ def export_selected_rfqs(request):
                 'filename': result['filename'],
                 'type': 'selected_export'
             }
+            message = f'Successfully exported {result["count"]} RFQ reply(ies) to {result["filename"]}.'
+            if skipped_refs:
+                message += (
+                    f' Excluded {len(skipped_refs)} with missing/invalid mandatory fields: '
+                    f'{", ".join(skipped_refs)}'
+                )
             response_data = {
                 'success': True,
-                'message': f'Successfully exported {result["count"]} RFQ reply(ies) to {result["filename"]}.',
+                'message': message,
                 'count': result['count'],
-                'filename': result['filename']
+                'filename': result['filename'],
+                'skipped_count': len(skipped_refs),
+                'skipped': skipped_refs,
             }
             return JsonResponse(response_data)
         else:
             if result.get('count', 0) == 0:
+                error_msg = 'No RFQ replies were exported.'
+                if skipped_refs:
+                    error_msg += (
+                        f' All {len(skipped_refs)} selected RFQ reply(ies) were excluded for '
+                        f'missing/invalid mandatory fields: {", ".join(skipped_refs)}'
+                    )
                 return JsonResponse({
                     'success': False,
-                    'error': 'No RFQ replies were exported.'
+                    'error': error_msg,
+                    'skipped_count': len(skipped_refs),
+                    'skipped': skipped_refs,
                 }, status=400)
             else:
                 return JsonResponse({'success': False, 'error': 'Export file was not created successfully'}, status=500)
@@ -2528,18 +2851,19 @@ def export_single_rfq_reply(request, rfq_id):
         return redirect('solicitations:replied-rfq')
 
     try:
-        # Export single reply to file using user's export configuration
+        # Export single reply to file using user's export configuration.
+        # A reply that fails mandatory-field validation is excluded from the
+        # file (result['file_path'] is None) rather than exported anyway.
         result = export_rfq_replies_to_file(
-            user, [rfq_reply], validate_mandatory=False)
+            user, [rfq_reply], validate_mandatory=True)
 
-        # Mark this RFQ reply as exported
-        rfq_reply.is_exported = True
-        rfq_reply.exported_at = timezone.now()
-        rfq_reply.save(update_fields=['is_exported', 'exported_at'])
+        file_path = result.get('file_path')
+        if file_path and os.path.exists(file_path):
+            # Mark this RFQ reply as exported only once the file actually exists.
+            rfq_reply.is_exported = True
+            rfq_reply.exported_at = timezone.now()
+            rfq_reply.save(update_fields=['is_exported', 'exported_at'])
 
-        # Store file info in session for auto-download after redirect
-        file_path = result['file_path']
-        if os.path.exists(file_path):
             filename = f"rfq_reply_{rfq_reply.id}_{result['filename']}"
             request.session['pending_download'] = {
                 'file_path': file_path,
@@ -2552,13 +2876,26 @@ def export_single_rfq_reply(request, rfq_id):
             )
             return redirect('solicitations:replied-rfq')
         else:
-            messages.error(
-                request, "Export file was not created successfully.")
-            return redirect('solicitations:replied-rfq')
+            errors = result.get('errors', [])
+            if errors and errors[0].get('missing_fields'):
+                missing_list = ", ".join(
+                    f"Position {f['position']} ({f['column_name']})"
+                    for f in errors[0]['missing_fields']
+                )
+                messages.error(
+                    request,
+                    f"Cannot export RFQ reply: missing/invalid mandatory fields: {missing_list}"
+                )
+            else:
+                messages.error(
+                    request, "Export file was not created successfully.")
+            # Stay on the page the export was triggered from instead of
+            # bouncing to the general replied-RFQs list.
+            return _redirect_back_or(request, 'solicitations:replied-rfq')
 
     except Exception as e:
         messages.error(request, f"Error exporting RFQ reply: {str(e)}")
-        return redirect('solicitations:replied-rfq')
+        return _redirect_back_or(request, 'solicitations:replied-rfq')
 
 
 @login_required
@@ -2568,7 +2905,7 @@ def preview_single_rfq_export(request, rfq_id):
     without changing the user's global export configuration.
     """
     from .models import RfqReply, UserExportConfiguration
-    from .export_utils import build_rfq_reply_values, get_rfq_requirement_quantity, serialize_export_values, validate_export_file_structure, apply_row_23_alternate_disputes_resolution_rule, validate_row_23_alternate_disputes_resolution, apply_row_49_quantity_rule, validate_row_50_unit_price, validate_row_51_delivery_days, apply_row_51_delivery_days_rule, apply_row_56_no_do_minimum_rule, validate_row_56_no_do_minimum, apply_row_58_hubzone_waiver_rule, validate_row_58_hubzone_waiver, apply_row_59_immediate_shipment_price_rule, validate_row_59_immediate_shipment_price, apply_row_60_immediate_shipment_delivery_rule, validate_row_60_immediate_shipment_delivery, apply_row_63_source_supply_cage_rule, validate_row_63_source_supply_cage, apply_row_64_first_article_waiver_rule, validate_row_64_first_article_waiver, apply_row_67_material_requirements_rule, validate_row_67_material_requirements, validate_row_70_end_product, apply_row_71_country_origin_rule, validate_row_71_country_origin, apply_row_72_country_code_rule, validate_row_72_country_code, apply_row_73_duty_free_entry_rule, validate_row_73_duty_free_entry, apply_row_74_foreign_supplies_rule, validate_row_74_foreign_supplies, apply_row_75_duty_paid_rule, validate_row_75_duty_paid, apply_row_76_duty_paid_amount_rule, validate_row_76_duty_paid_amount, apply_rows_78_95_price_breaks_rule, validate_rows_78_95_price_breaks, validate_row_96_quantity_variance_plus, validate_row_97_quantity_variance_minus, validate_row_98_minimum_order_quantity_code, validate_row_99_minimum_order_maximum_quantity, apply_row_100_immediate_shipment_available_rule, validate_row_100_immediate_shipment_available, apply_rows_101_116_conditional_rules, validate_rows_101_116_conditional, apply_rows_118_121_quality_labor_remarks_rules, validate_rows_118_121_quality_labor_remarks
+    from .export_utils import build_rfq_reply_values, get_rfq_requirement_quantity, serialize_export_values, validate_export_file_structure, validate_mandatory_fields, apply_dla_field_rules, apply_row_23_alternate_disputes_resolution_rule, validate_row_23_alternate_disputes_resolution, apply_row_49_quantity_rule, validate_row_50_unit_price, validate_row_51_delivery_days, apply_row_51_delivery_days_rule, apply_row_56_no_do_minimum_rule, validate_row_56_no_do_minimum, apply_row_58_hubzone_waiver_rule, validate_row_58_hubzone_waiver, apply_row_59_immediate_shipment_price_rule, validate_row_59_immediate_shipment_price, apply_row_60_immediate_shipment_delivery_rule, validate_row_60_immediate_shipment_delivery, apply_row_63_source_supply_cage_rule, validate_row_63_source_supply_cage, apply_row_64_first_article_waiver_rule, validate_row_64_first_article_waiver, apply_row_67_material_requirements_rule, validate_row_67_material_requirements, validate_row_70_end_product, apply_row_71_country_origin_rule, validate_row_71_country_origin, apply_row_72_country_code_rule, validate_row_72_country_code, apply_row_73_duty_free_entry_rule, validate_row_73_duty_free_entry, apply_row_74_foreign_supplies_rule, validate_row_74_foreign_supplies, apply_row_75_duty_paid_rule, validate_row_75_duty_paid, apply_row_76_duty_paid_amount_rule, validate_row_76_duty_paid_amount, apply_rows_78_95_price_breaks_rule, validate_rows_78_95_price_breaks, validate_row_96_quantity_variance_plus, validate_row_97_quantity_variance_minus, validate_row_98_minimum_order_quantity_code, validate_row_99_minimum_order_maximum_quantity, apply_row_100_immediate_shipment_available_rule, validate_row_100_immediate_shipment_available, apply_rows_101_116_conditional_rules, validate_rows_101_116_conditional, apply_rows_118_121_quality_labor_remarks_rules, validate_rows_118_121_quality_labor_remarks
 
     user = request.user
     batch_mode = request.GET.get('mode') == 'batch'
@@ -2604,207 +2941,12 @@ def preview_single_rfq_export(request, rfq_id):
             base_values = build_rfq_reply_values(user, rfq_reply)
             if len(base_values) >= 50 and len(values) >= 50:
                 values[49] = base_values[49]
-            requirement_inspection_point = str(base_values[35]).strip().upper() if len(base_values) >= 36 else ''
-            requirement_quantity = get_rfq_requirement_quantity(rfq_reply)
-        except Exception:
-            requirement_inspection_point = ''
-            requirement_quantity = ''
-            pass
-        try:
-            if len(values) >= 18:
-                set_aside = str(values[2]).strip().upper() if len(values) >= 3 else ''
-                small_biz = str(values[12]).strip().upper() if len(values) >= 13 else ''
-                joint_venture = str(values[17]).strip().upper()
-                if set_aside == 'N' or small_biz not in ('B', 'M'):
-                    values[17] = ''
-                else:
-                    values[17] = joint_venture if joint_venture in ('JV', 'JN') else ''
-            if len(values) >= 19 and str(values[17]).strip().upper() != 'JV':
-                values[18] = ''
         except Exception:
             pass
-        try:
-            if len(values) >= 27:
-                solicitation_type = str(values[1]).strip().upper() if len(values) >= 2 else ''
-                if solicitation_type == 'I':
-                    days_raw = str(values[26]).strip()
-                    if days_raw:
-                        try:
-                            days_val = int(days_raw)
-                        except ValueError:
-                            days_val = None
-                        if days_val is not None and days_val < 90 and len(values) >= 24:
-                            bid_type = str(values[23]).strip().upper()
-                            if bid_type not in ('BW', 'AB'):
-                                values[23] = 'BW'
-        except Exception:
-            pass
-        try:
-            if len(values) >= 28:
-                packaging_requirement = str(values[27]).strip().upper()
-                if packaging_requirement == 'N' and len(values) >= 24:
-                    bid_type = str(values[23]).strip().upper()
-                    if bid_type not in ('BW', 'AB'):
-                        values[23] = 'BW'
-        except Exception:
-            pass
-        try:
-            apply_row_23_alternate_disputes_resolution_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_49_quantity_rule(values, requirement_quantity)
-        except Exception:
-            pass
-        try:
-            apply_row_51_delivery_days_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_56_no_do_minimum_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_58_hubzone_waiver_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_100_immediate_shipment_available_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_rows_101_116_conditional_rules(values)
-        except Exception:
-            pass
-        try:
-            apply_rows_118_121_quality_labor_remarks_rules(values)
-        except Exception:
-            pass
-        try:
-            apply_row_59_immediate_shipment_price_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_60_immediate_shipment_delivery_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_63_source_supply_cage_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_64_first_article_waiver_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_67_material_requirements_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_71_country_origin_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_72_country_code_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_73_duty_free_entry_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_74_foreign_supplies_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_75_duty_paid_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_row_76_duty_paid_amount_rule(values)
-        except Exception:
-            pass
-        try:
-            apply_rows_78_95_price_breaks_rule(values)
-        except Exception:
-            pass
-        try:
-            if len(values) >= 31:
-                boa_code = str(values[28]).strip().upper()
-                if boa_code == 'NAP':
-                    values[29] = ''
-                    values[30] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 33:
-                fob_point = str(values[31]).strip().upper()
-                if fob_point == 'D':
-                    values[32] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 35:
-                fob_point = str(values[31]).strip().upper()
-                fob_country = str(values[34]).strip().upper()
-                if fob_point == 'D' or fob_country not in {'US', 'CA'}:
-                    values[33] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 35:
-                fob_point = str(values[31]).strip().upper()
-                if fob_point == 'D':
-                    values[34] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 36:
-                inspection_point = str(values[35]).strip().upper()
-                if inspection_point not in {'D', 'O'}:
-                    values[35] = ''
-                elif requirement_inspection_point and inspection_point != requirement_inspection_point and len(values) >= 24:
-                    bid_type = str(values[23]).strip().upper()
-                    if bid_type not in {'BW', 'AB'}:
-                        values[23] = 'BW'
-        except Exception:
-            pass
-        try:
-            if len(values) >= 37:
-                inspection_point = str(values[35]).strip().upper() if len(values) >= 36 else ''
-                if inspection_point == 'D':
-                    values[36] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 38:
-                inspection_point = str(values[35]).strip().upper() if len(values) >= 36 else ''
-                if inspection_point == 'D':
-                    values[37] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 66:
-                hazardous_warning_label = str(values[65]).strip()
-                values[65] = hazardous_warning_label if hazardous_warning_label in {'1', '2', '3', '4', '5', '6', '7'} else ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 104:
-                manufacturer_dealer = str(values[101]).strip().upper() if len(values) >= 102 else ''
-                if manufacturer_dealer in {'MM', 'QM'}:
-                    if len(values) >= 103:
-                        values[102] = ''
-                    values[103] = ''
-        except Exception:
-            pass
-        try:
-            if len(values) >= 72:
-                end_product_code = str(values[69]).strip().upper() if len(values) >= 70 else ''
-                if end_product_code in {'D', 'NQ', 'O', 'ND', 'US'}:
-                    values[71] = ''
-        except Exception:
-            pass
+
+        # Apply the same DLA field rules used by the batch export path,
+        # so a manually edited preview can't drift from build_rfq_reply_values().
+        apply_dla_field_rules(values, rfq_reply)
 
         # Save per-RFQ override (does not touch global configuration)
         override, _ = RfqReplyExportOverride.objects.get_or_create(
@@ -2863,715 +3005,17 @@ def preview_single_rfq_export(request, rfq_id):
                         request, "Export data saved. Exporting all replied RFQs.")
                     return redirect('solicitations:export-replied-rfqs')
 
-            # In single-RFQ mode, validate mandatory fields using the edited values
-            from .export_utils import ExportFieldDefinition
-            mandatory_fields = ExportFieldDefinition.objects.filter(
-                field_type='mandatory').order_by('position')
-            missing_fields = []
-
-            for field_def in mandatory_fields:
-                position = field_def.position
-                value_index = position - 1
-                if value_index < len(values):
-                    value = values[value_index]
-                    if position == 72:
-                        end_product_code = str(values[69]).strip().upper() if len(values) >= 70 else ''
-                        if end_product_code in {'D', 'NQ', 'O', 'ND', 'US'}:
-                            continue
-                    if position in (30, 31):
-                        boa_code = str(values[28]).strip().upper() if len(values) >= 29 else ''
-                        if boa_code == 'NAP':
-                            continue
-                    if not value or (isinstance(value, str) and not value.strip()):
-                        missing_fields.append({
-                            'position': position,
-                            'column_name': field_def.column_name
-                        })
-
-            try:
-                row_23_error = validate_row_23_alternate_disputes_resolution(
-                    values[22] if len(values) >= 23 else ""
-                )
-                if row_23_error:
-                    already_missing = any(item.get('position') == 23 for item in missing_fields)
-                    if not already_missing:
-                        field_def = ExportFieldDefinition.objects.filter(position=23).first()
-                        missing_fields.append({
-                            'position': 23,
-                            'column_name': f"{field_def.column_name if field_def else 'Alternate Disputes Resolution'}: {row_23_error}"
-                        })
-            except Exception:
-                pass
-
-            try:
-                joint_venture = str(values[17]).strip().upper() if len(values) >= 18 else ''
-                joint_venture_remarks = str(values[18]).strip() if len(values) >= 19 else ''
-                if joint_venture == 'JV' and not joint_venture_remarks:
-                    missing_fields.append({
-                        'position': 19,
-                        'column_name': 'Joint Venture Remarks'
-                    })
-            except Exception:
-                pass
-
-            try:
-                boa_code = str(values[28]).strip().upper() if len(values) >= 29 else ''
-                if boa_code in {'BOA', 'FSS', 'BPA'}:
-                    for required_position, fallback_name in (
-                        (30, 'BOA/FSS/BPA Contract Number'),
-                        (31, 'BOA/FSS/BPA Contract Expiration Date'),
-                    ):
-                        value = str(values[required_position - 1]).strip() if len(values) >= required_position else ''
-                        already_missing = any(item.get('position') == required_position for item in missing_fields)
-                        if not value and not already_missing:
-                            field_def = ExportFieldDefinition.objects.filter(position=required_position).first()
-                            missing_fields.append({
-                                'position': required_position,
-                                'column_name': field_def.column_name if field_def else fallback_name
-                            })
-            except Exception:
-                pass
-
-            try:
-                contract_number = str(values[29]).strip() if len(values) >= 30 else ''
-                if contract_number and len(contract_number) > 17:
-                    field_def = ExportFieldDefinition.objects.filter(position=30).first()
-                    missing_fields.append({
-                        'position': 30,
-                            'column_name': f"{field_def.column_name if field_def else 'BOA/FSS/BPA Contract Number'} exceeds 17 characters"
-                    })
-            except Exception:
-                pass
-
-            try:
-                expiration_date = str(values[30]).strip() if len(values) >= 31 else ''
-                if expiration_date:
-                    format_ok = (
-                        len(expiration_date) == 10 and
-                        expiration_date[2] == '/' and
-                        expiration_date[5] == '/' and
-                        expiration_date[:2].isdigit() and
-                        expiration_date[3:5].isdigit() and
-                        expiration_date[6:].isdigit()
-                    )
-                    if format_ok:
-                        try:
-                            datetime.strptime(expiration_date, '%m/%d/%Y')
-                        except ValueError:
-                            format_ok = False
-                    if not format_ok:
-                        field_def = ExportFieldDefinition.objects.filter(position=31).first()
-                        missing_fields.append({
-                            'position': 31,
-                            'column_name': f"{field_def.column_name if field_def else 'BOA/FSS/BPA Contract Expiration Date'} must be MM/DD/YYYY"
-                        })
-            except Exception:
-                pass
-
-            try:
-                fob_point = str(values[31]).strip().upper() if len(values) >= 32 else ''
-                fob_city = str(values[32]).strip() if len(values) >= 33 else ''
-                if fob_point == 'O' and not fob_city:
-                    field_def = ExportFieldDefinition.objects.filter(position=33).first()
-                    missing_fields.append({
-                        'position': 33,
-                        'column_name': field_def.column_name if field_def else 'FOB City'
-                    })
-            except Exception:
-                pass
-
-            try:
-                fob_city = str(values[32]).strip() if len(values) >= 33 else ''
-                if fob_city and len(fob_city) > 30:
-                    field_def = ExportFieldDefinition.objects.filter(position=33).first()
-                    missing_fields.append({
-                        'position': 33,
-                        'column_name': f"{field_def.column_name if field_def else 'FOB City'} exceeds 30 characters"
-                    })
-            except Exception:
-                pass
-
-            try:
-                fob_point = str(values[31]).strip().upper() if len(values) >= 32 else ''
-                fob_state = str(values[33]).strip().upper() if len(values) >= 34 else ''
-                fob_country = str(values[34]).strip().upper() if len(values) >= 35 else ''
-                us_codes = {
-                    'AK', 'AL', 'AR', 'AS', 'AZ', 'CA', 'CO', 'CT', 'DC', 'DE', 'FL', 'FM',
-                    'GA', 'GU', 'HI', 'IA', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MA', 'MD',
-                    'ME', 'MH', 'MI', 'MN', 'MO', 'MS', 'MT', 'NC', 'ND', 'NE', 'NH', 'NJ',
-                    'NM', 'NV', 'NY', 'OH', 'OK', 'OR', 'PA', 'PR', 'PW', 'RI', 'SC', 'SD',
-                    'TN', 'TX', 'UT', 'VA', 'VI', 'VT', 'WA', 'WV', 'WI', 'WY'
-                }
-                ca_codes = {'AB', 'BC', 'MB', 'NB', 'NF', 'NS', 'NT', 'ON', 'PE', 'QC', 'SK', 'YT'}
-                if fob_point == 'O' and fob_country in {'US', 'CA'}:
-                    field_def = ExportFieldDefinition.objects.filter(position=34).first()
-                    if not fob_state:
-                        missing_fields.append({
-                            'position': 34,
-                            'column_name': field_def.column_name if field_def else 'FOB State/Province'
-                        })
-                    elif len(fob_state) > 2:
-                        missing_fields.append({
-                            'position': 34,
-                            'column_name': f"{field_def.column_name if field_def else 'FOB State/Province'} exceeds 2 characters"
-                        })
-                    elif fob_country == 'US' and fob_state not in us_codes:
-                        missing_fields.append({
-                            'position': 34,
-                            'column_name': f"{field_def.column_name if field_def else 'FOB State/Province'} must be a valid US state or territory code"
-                        })
-                    elif fob_country == 'CA' and fob_state not in ca_codes:
-                        missing_fields.append({
-                            'position': 34,
-                            'column_name': f"{field_def.column_name if field_def else 'FOB State/Province'} must be a valid Canadian province code"
-                        })
-            except Exception:
-                pass
-
-            try:
-                fob_point = str(values[31]).strip().upper() if len(values) >= 32 else ''
-                fob_country = str(values[34]).strip().upper() if len(values) >= 35 else ''
-                valid_country_codes = {
-                    'AF', 'AL', 'DZ', 'AS', 'AD', 'AO', 'AI', 'AQ', 'AG', 'AR', 'AM', 'AW', 'AU', 'AT', 'AZ',
-                    'BS', 'BH', 'BD', 'BB', 'BY', 'BE', 'BZ', 'BJ', 'BM', 'BT', 'BO', 'BQ', 'BA', 'BW', 'BV',
-                    'BR', 'IO', 'BN', 'BG', 'BF', 'CV', 'KH', 'CM', 'BI', 'CA', 'KY', 'CF', 'TD', 'CL', 'CN',
-                    'CX', 'CC', 'CO', 'KM', 'CG', 'CD', 'CK', 'CR', 'CI', 'HR', 'CU', 'CW', 'CY', 'CZ', 'DK',
-                    'DJ', 'DM', 'DO', 'EC', 'EG', 'SV', 'GQ', 'ER', 'EE', 'SZ', 'ET', 'FK', 'FO', 'FJ', 'FI',
-                    'FR', 'GF', 'PF', 'TF', 'GA', 'GM', 'GE', 'DE', 'GH', 'GI', 'GR', 'GL', 'GD', 'GP', 'GU',
-                    'GT', 'GN', 'GW', 'GY', 'HT', 'HM', 'VA', 'HN', 'HK', 'HU', 'IS', 'IN', 'ID', 'IR', 'IQ',
-                    'IE', 'IM', 'IL', 'IT', 'JM', 'JP', 'JO', 'KZ', 'KE', 'KI', 'KP', 'KR', 'XK', 'KW', 'KG',
-                    'LA', 'LV', 'LB', 'LS', 'LR', 'LY', 'LI', 'LT', 'LU', 'NF', 'MO', 'MG', 'MW', 'MY', 'MV',
-                    'ML', 'MT', 'MH', 'MQ', 'MR', 'MU', 'YT', 'MX', 'FM', 'MD', 'MC', 'MN', 'ME', 'MS', 'MA',
-                    'MZ', 'MM', 'NA', 'NR', 'NP', 'NL', 'NC', 'NZ', 'NI', 'NE', 'NG', 'NU', 'MK', 'MP', 'NO',
-                    'OM', 'PK', 'PW', 'PS', 'PA', 'PG', 'PY', 'PE', 'PH', 'PN', 'PL', 'PT', 'PR', 'QA', 'RE',
-                    'RO', 'RU', 'RW', 'SH', 'LC', 'KN', 'MF', 'PM', 'VC', 'WS', 'SM', 'ST', 'SA', 'SN', 'RS',
-                    'SC', 'SL', 'SG', 'SX', 'SK', 'SI', 'SB', 'SO', 'ZA', 'GS', 'SS', 'ES', 'LK', 'SD', 'SR',
-                    'SJ', 'SE', 'CH', 'SY', 'TW', 'TJ', 'TZ', 'TH', 'TL', 'TG', 'TK', 'TT', 'TN', 'TO', 'TR',
-                    'TM', 'TC', 'TV', 'UG', 'UA', 'AE', 'GB', 'US', 'UM', 'UY', 'UZ', 'VU', 'VE', 'VN', 'VI',
-                    'VG', 'WF', 'EH', 'YE', 'ZM', 'ZW'
-                }
-                if fob_point == 'O':
-                    field_def = ExportFieldDefinition.objects.filter(position=35).first()
-                    if not fob_country:
-                        missing_fields.append({
-                            'position': 35,
-                            'column_name': field_def.column_name if field_def else 'FOB Country'
-                        })
-                    elif len(fob_country) > 2:
-                        missing_fields.append({
-                            'position': 35,
-                            'column_name': f"{field_def.column_name if field_def else 'FOB Country'} exceeds 2 characters"
-                        })
-                    elif fob_country not in valid_country_codes:
-                        missing_fields.append({
-                            'position': 35,
-                            'column_name': f"{field_def.column_name if field_def else 'FOB Country'} must be a valid country code"
-                        })
-            except Exception:
-                pass
-
-            try:
-                inspection_point = str(values[35]).strip().upper() if len(values) >= 36 else ''
-                if inspection_point and inspection_point not in {'D', 'O'}:
-                    field_def = ExportFieldDefinition.objects.filter(position=36).first()
-                    missing_fields.append({
-                        'position': 36,
-                        'column_name': f"{field_def.column_name if field_def else 'Inspection Point Code'} must be D or O"
-                    })
-            except Exception:
-                pass
-
-            try:
-                inspection_point = str(values[35]).strip().upper() if len(values) >= 36 else ''
-                packaging_cage = str(values[36]).strip() if len(values) >= 37 else ''
-                if inspection_point == 'O':
-                    field_def = ExportFieldDefinition.objects.filter(position=37).first()
-                    if not packaging_cage:
-                        missing_fields.append({
-                            'position': 37,
-                            'column_name': field_def.column_name if field_def else 'Place of Government Inspection - Packaging CAGE code'
-                        })
-                    elif len(packaging_cage) > 5:
-                        missing_fields.append({
-                            'position': 37,
-                            'column_name': f"{field_def.column_name if field_def else 'Place of Government Inspection - Packaging CAGE code'} exceeds 5 characters"
-                        })
-            except Exception:
-                pass
-
-            try:
-                inspection_point = str(values[35]).strip().upper() if len(values) >= 36 else ''
-                supplies_cage = str(values[37]).strip() if len(values) >= 38 else ''
-                if inspection_point == 'O':
-                    field_def = ExportFieldDefinition.objects.filter(position=38).first()
-                    if not supplies_cage:
-                        missing_fields.append({
-                            'position': 38,
-                            'column_name': field_def.column_name if field_def else 'Place of Government Inspection - Supplies CAGE code'
-                        })
-                    elif len(supplies_cage) > 5:
-                        missing_fields.append({
-                            'position': 38,
-                            'column_name': f"{field_def.column_name if field_def else 'Place of Government Inspection - Supplies CAGE code'} exceeds 5 characters"
-                        })
-            except Exception:
-                pass
-
-            try:
-                quoted_quantity = str(values[48]).strip() if len(values) >= 49 else ''
-                requirement_quantity = get_rfq_requirement_quantity(rfq_reply)
-                solicitation_type = str(values[1]).strip().upper() if len(values) >= 2 else ''
-                bid_type = str(values[23]).strip().upper() if len(values) >= 24 else ''
-                nsn_part = str(values[46]).strip().upper() if len(values) >= 47 else ''
-                prohibited_parts = {'0001S00000052', '0001S00000053'}
-                field_def = ExportFieldDefinition.objects.filter(position=49).first()
-                try:
-                    quoted_quantity_num = Decimal(quoted_quantity.replace(',', '')) if quoted_quantity else None
-                except Exception:
-                    quoted_quantity_num = None
-                quantities_match = False
-                if quoted_quantity and requirement_quantity:
-                    try:
-                        quantities_match = Decimal(quoted_quantity.replace(',', '')) == Decimal(str(requirement_quantity).replace(',', ''))
-                    except Exception:
-                        quantities_match = quoted_quantity == str(requirement_quantity).strip()
-                if quoted_quantity and len(quoted_quantity) > 10:
-                    missing_fields.append({
-                        'position': 49,
-                        'column_name': f"{field_def.column_name if field_def else 'Quantity'} exceeds 10 characters"
-                    })
-                if quoted_quantity and quoted_quantity_num == 0 and bid_type != 'DQ':
-                    missing_fields.append({
-                        'position': 24,
-                        'column_name': 'Bid Type Code must be DQ when Quantity is zero'
-                    })
-                elif quoted_quantity and requirement_quantity and not quantities_match:
-                    if solicitation_type == 'I':
-                        missing_fields.append({
-                            'position': 49,
-                            'column_name': 'Quantity must match the estimated RFQ quantity when Solicitation Type Indicator is I'
-                        })
-                    elif nsn_part in prohibited_parts:
-                        missing_fields.append({
-                            'position': 49,
-                            'column_name': 'Quantity cannot differ from the RFQ requirement for this NSN/Part Number'
-                        })
-                    elif bid_type not in {'BW', 'AB'}:
-                        missing_fields.append({
-                            'position': 24,
-                            'column_name': 'Bid Type Code must be BW or AB when Quantity differs from the RFQ requirement'
-                        })
-            except Exception:
-                pass
-
-            try:
-                unit_price = str(values[49]).strip() if len(values) >= 50 else ''
-                unit_price_error = validate_row_50_unit_price(unit_price)
-                if unit_price_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=50).first()
-                    missing_fields.append({
-                        'position': 50,
-                        'column_name': f"{field_def.column_name if field_def else 'Unit Price'}: {unit_price_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                delivery_days = str(values[50]).strip() if len(values) >= 51 else ''
-                solicitation_number = str(values[0]).strip() if len(values) >= 1 else ''
-                delivery_days_error = validate_row_51_delivery_days(delivery_days, solicitation_number)
-                if delivery_days_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=51).first()
-                    missing_fields.append({
-                        'position': 51,
-                        'column_name': f"{field_def.column_name if field_def else 'Delivery Days'}: {delivery_days_error}"
-                    })
-
-                try:
-                    unit_price_num = Decimal(str(values[49]).strip().replace(',', '')) if len(values) >= 50 and str(values[49]).strip() else None
-                except Exception:
-                    unit_price_num = None
-                delivery_days_num = int(delivery_days) if delivery_days.isdigit() else None
-                nsn_part = str(values[46]).strip().upper() if len(values) >= 47 else ''
-                bid_type = str(values[23]).strip().upper() if len(values) >= 24 else ''
-                waiver_code = str(values[63]).strip().upper() if len(values) >= 64 else ''
-                special_parts = {'0001S00000052', '0001S00000053'}
-                if unit_price_num == Decimal('0') and delivery_days_num == 0 and nsn_part in special_parts and bid_type not in {'BW', 'AB'}:
-                    missing_fields.append({
-                        'position': 24,
-                        'column_name': 'Bid Type Code must be BW or AB when Unit Price and Delivery Days are zero for this NSN/Part Number'
-                    })
-                if waiver_code == 'N' and delivery_days_num == 0:
-                    field_def = ExportFieldDefinition.objects.filter(position=51).first()
-                    missing_fields.append({
-                        'position': 51,
-                        'column_name': f"{field_def.column_name if field_def else 'Delivery Days'} cannot be zero when First Article Waiver Code is N"
-                    })
-            except Exception:
-                pass
-
-            try:
-                solicitation_type = str(values[1]).strip().upper() if len(values) >= 2 else ''
-                no_do_minimum = str(values[55]).strip().upper() if len(values) >= 56 else ''
-                no_do_minimum_error = validate_row_56_no_do_minimum(no_do_minimum, solicitation_type)
-                if no_do_minimum_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=56).first()
-                    missing_fields.append({
-                        'position': 56,
-                        'column_name': f"{field_def.column_name if field_def else 'No DO Minimum Quantity'}: {no_do_minimum_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                hubzone = str(values[56]).strip().upper() if len(values) >= 57 else ''
-                hubzone_waiver = str(values[57]).strip().upper() if len(values) >= 58 else ''
-                small_business_code = str(values[12]).strip().upper() if len(values) >= 13 else ''
-                hubzone_waiver_error = validate_row_58_hubzone_waiver(
-                    hubzone_waiver,
-                    hubzone,
-                    small_business_code
-                )
-                if hubzone_waiver_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=58).first()
-                    missing_fields.append({
-                        'position': 58,
-                        'column_name': f"{field_def.column_name if field_def else 'Waiver of HUBZone Preference'}: {hubzone_waiver_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                immediate_price = str(values[58]).strip() if len(values) >= 59 else ''
-                immediate_available = str(values[99]).strip().upper() if len(values) >= 100 else ''
-                immediate_price_error = validate_row_59_immediate_shipment_price(
-                    immediate_price,
-                    immediate_available
-                )
-                if immediate_price_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=59).first()
-                    missing_fields.append({
-                        'position': 59,
-                        'column_name': f"{field_def.column_name if field_def else 'Immediate Shipment Price'}: {immediate_price_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                immediate_delivery = str(values[59]).strip() if len(values) >= 60 else ''
-                immediate_available = str(values[99]).strip().upper() if len(values) >= 100 else ''
-                immediate_delivery_error = validate_row_60_immediate_shipment_delivery(
-                    immediate_delivery,
-                    immediate_available
-                )
-                if immediate_delivery_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=60).first()
-                    missing_fields.append({
-                        'position': 60,
-                        'column_name': f"{field_def.column_name if field_def else 'Immediate Shipment Delivery Days'}: {immediate_delivery_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                source_supply_cage = str(values[62]).strip() if len(values) >= 63 else ''
-                manufacturer_dealer = str(values[101]).strip().upper() if len(values) >= 102 else ''
-                source_supply_cage_error = validate_row_63_source_supply_cage(
-                    source_supply_cage,
-                    manufacturer_dealer
-                )
-                if source_supply_cage_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=63).first()
-                    missing_fields.append({
-                        'position': 63,
-                        'column_name': f"{field_def.column_name if field_def else 'Source of Supply CAGE Code'}: {source_supply_cage_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                first_article_waiver = str(values[63]).strip().upper() if len(values) >= 64 else ''
-                nsn_part = str(values[46]).strip().upper() if len(values) >= 47 else ''
-                first_article_waiver_error = validate_row_64_first_article_waiver(
-                    first_article_waiver,
-                    nsn_part
-                )
-                if first_article_waiver_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=64).first()
-                    missing_fields.append({
-                        'position': 64,
-                        'column_name': f"{field_def.column_name if field_def else 'First Article Waiver Code'}: {first_article_waiver_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                material_requirement = str(values[66]).strip() if len(values) >= 67 else ''
-                solicitation_type = str(values[1]).strip().upper() if len(values) >= 2 else ''
-                bid_type = str(values[23]).strip().upper() if len(values) >= 24 else ''
-                material_requirement_error = validate_row_67_material_requirements(
-                    material_requirement,
-                    solicitation_type,
-                    bid_type
-                )
-                if material_requirement_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=67).first()
-                    missing_fields.append({
-                        'position': 67,
-                        'column_name': f"{field_def.column_name if field_def else 'Material Requirements'}: {material_requirement_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                end_product = str(values[69]).strip().upper() if len(values) >= 70 else ''
-                trade_agreement = str(values[61]).strip().upper() if len(values) >= 62 else ''
-                buy_american = str(values[67]).strip().upper() if len(values) >= 68 else ''
-                free_trade = str(values[68]).strip().upper() if len(values) >= 69 else ''
-                end_product_error = validate_row_70_end_product(
-                    end_product,
-                    trade_agreement,
-                    buy_american,
-                    free_trade
-                )
-                if end_product_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=70).first()
-                    missing_fields.append({
-                        'position': 70,
-                        'column_name': f"{field_def.column_name if field_def else 'Buy American/Free Trade/Trade Agreements End Product'}: {end_product_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                country_origin = str(values[70]).strip().upper() if len(values) >= 71 else ''
-                trade_agreement = str(values[61]).strip().upper() if len(values) >= 62 else ''
-                buy_american = str(values[67]).strip().upper() if len(values) >= 68 else ''
-                free_trade = str(values[68]).strip().upper() if len(values) >= 69 else ''
-                end_product = str(values[69]).strip().upper() if len(values) >= 70 else ''
-                country_origin_error = validate_row_71_country_origin(
-                    country_origin,
-                    trade_agreement,
-                    buy_american,
-                    free_trade,
-                    end_product
-                )
-                if country_origin_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=71).first()
-                    missing_fields.append({
-                        'position': 71,
-                        'column_name': f"{field_def.column_name if field_def else 'Country of Origin Code'}: {country_origin_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                country_code = str(values[71]).strip().upper() if len(values) >= 72 else ''
-                end_product = str(values[69]).strip().upper() if len(values) >= 70 else ''
-                country_code_error = validate_row_72_country_code(country_code, end_product)
-                if country_code_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=72).first()
-                    missing_fields.append({
-                        'position': 72,
-                        'column_name': f"{field_def.column_name if field_def else 'Country Code'}: {country_code_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                duty_free_entry = str(values[72]).strip().upper() if len(values) >= 73 else ''
-                buy_american = str(values[67]).strip().upper() if len(values) >= 68 else ''
-                duty_free_entry_error = validate_row_73_duty_free_entry(
-                    duty_free_entry,
-                    buy_american
-                )
-                if duty_free_entry_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=73).first()
-                    missing_fields.append({
-                        'position': 73,
-                        'column_name': f"{field_def.column_name if field_def else 'Duty Free Entry Requested'}: {duty_free_entry_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                foreign_supplies = str(values[73]).strip().upper() if len(values) >= 74 else ''
-                buy_american = str(values[67]).strip().upper() if len(values) >= 68 else ''
-                duty_free_entry = str(values[72]).strip().upper() if len(values) >= 73 else ''
-                foreign_supplies_error = validate_row_74_foreign_supplies(
-                    foreign_supplies,
-                    buy_american,
-                    duty_free_entry
-                )
-                if foreign_supplies_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=74).first()
-                    missing_fields.append({
-                        'position': 74,
-                        'column_name': f"{field_def.column_name if field_def else 'Foreign Supplies in US Code'}: {foreign_supplies_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                duty_paid = str(values[74]).strip().upper() if len(values) >= 75 else ''
-                buy_american = str(values[67]).strip().upper() if len(values) >= 68 else ''
-                foreign_supplies = str(values[73]).strip().upper() if len(values) >= 74 else ''
-                duty_paid_error = validate_row_75_duty_paid(
-                    duty_paid,
-                    buy_american,
-                    foreign_supplies
-                )
-                if duty_paid_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=75).first()
-                    missing_fields.append({
-                        'position': 75,
-                        'column_name': f"{field_def.column_name if field_def else 'Duty Paid Code'}: {duty_paid_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                duty_paid_amount = str(values[75]).strip() if len(values) >= 76 else ''
-                buy_american = str(values[67]).strip().upper() if len(values) >= 68 else ''
-                duty_paid = str(values[74]).strip().upper() if len(values) >= 75 else ''
-                duty_paid_amount_error = validate_row_76_duty_paid_amount(
-                    duty_paid_amount,
-                    buy_american,
-                    duty_paid
-                )
-                if duty_paid_amount_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=76).first()
-                    missing_fields.append({
-                        'position': 76,
-                        'column_name': f"{field_def.column_name if field_def else 'Duty Paid Amount'}: {duty_paid_amount_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                for position, message in validate_rows_78_95_price_breaks(values):
-                    field_def = ExportFieldDefinition.objects.filter(position=position).first()
-                    missing_fields.append({
-                        'position': position,
-                        'column_name': f"{field_def.column_name if field_def else 'Quantity Price Breaks'}: {message}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                quantity_variance_plus_error = validate_row_96_quantity_variance_plus(
-                    values[95] if len(values) >= 96 else ''
-                )
-                if quantity_variance_plus_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=96).first()
-                    missing_fields.append({
-                        'position': 96,
-                        'column_name': f"{field_def.column_name if field_def else 'Quantity Variance Plus'}: {quantity_variance_plus_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                quantity_variance_minus_error = validate_row_97_quantity_variance_minus(
-                    values[96] if len(values) >= 97 else ''
-                )
-                if quantity_variance_minus_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=97).first()
-                    missing_fields.append({
-                        'position': 97,
-                        'column_name': f"{field_def.column_name if field_def else 'Quantity Variance Minus'}: {quantity_variance_minus_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                minimum_order_quantity_code_error = validate_row_98_minimum_order_quantity_code(
-                    values[97] if len(values) >= 98 else '',
-                    values[1] if len(values) >= 2 else '',
-                )
-                if minimum_order_quantity_code_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=98).first()
-                    missing_fields.append({
-                        'position': 98,
-                        'column_name': f"{field_def.column_name if field_def else 'Minimum Order Quantity Code'}: {minimum_order_quantity_code_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                minimum_order_maximum_quantity_error = validate_row_99_minimum_order_maximum_quantity(
-                    values[98] if len(values) >= 99 else '',
-                    values[97] if len(values) >= 98 else '',
-                )
-                if minimum_order_maximum_quantity_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=99).first()
-                    missing_fields.append({
-                        'position': 99,
-                        'column_name': f"{field_def.column_name if field_def else 'Minimum Order Maximum Quantity'}: {minimum_order_maximum_quantity_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                immediate_shipment_available_error = validate_row_100_immediate_shipment_available(
-                    values[99] if len(values) >= 100 else '',
-                    values[1] if len(values) >= 2 else '',
-                )
-                if immediate_shipment_available_error:
-                    field_def = ExportFieldDefinition.objects.filter(position=100).first()
-                    missing_fields.append({
-                        'position': 100,
-                        'column_name': f"{field_def.column_name if field_def else 'Immediate Shipment Available'}: {immediate_shipment_available_error}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                for position, message in validate_rows_101_116_conditional(values):
-                    already_missing = any(item.get('position') == position for item in missing_fields)
-                    if already_missing:
-                        continue
-                    field_def = ExportFieldDefinition.objects.filter(position=position).first()
-                    missing_fields.append({
-                        'position': position,
-                        'column_name': f"{field_def.column_name if field_def else 'Export Field ' + str(position)}: {message}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                for position, message in validate_rows_118_121_quality_labor_remarks(values):
-                    already_missing = any(item.get('position') == position for item in missing_fields)
-                    if already_missing:
-                        continue
-                    field_def = ExportFieldDefinition.objects.filter(position=position).first()
-                    missing_fields.append({
-                        'position': position,
-                        'column_name': f"{field_def.column_name if field_def else 'Export Field ' + str(position)}: {message}"
-                    })
-            except Exception:
-                pass
-
-            try:
-                manufacturer_dealer = str(values[101]).strip().upper() if len(values) >= 102 else ''
-                source_cage = str(values[102]).strip() if len(values) >= 103 else ''
-                source_name_address = str(values[103]).strip() if len(values) >= 104 else ''
-                already_has_source_error = any(item.get('position') in {103, 104} for item in missing_fields)
-                if manufacturer_dealer in {'DD', 'QD'} and not source_cage and not source_name_address and not already_has_source_error:
-                    missing_fields.append({
-                        'position': 104,
-                        'column_name': 'Actual Manufacturing/Production Source Name and Address'
-                    })
-            except Exception:
-                pass
-
-            if missing_fields:
+            # In single-RFQ mode, validate mandatory fields against the override
+            # we just saved above, using the same validator as the batch export path.
+            is_valid, missing_fields = validate_mandatory_fields(user, rfq_reply)
+            if not is_valid:
                 missing_list = [
                     f"Position {f['position']} ({f['column_name']})" for f in missing_fields]
-                messages.warning(
+                messages.error(
                     request,
-                    f"Exporting with empty mandatory fields: {', '.join(missing_list)}"
+                    f"Cannot export RFQ reply until these fields are fixed: {'; '.join(missing_list)}"
                 )
+                return redirect('solicitations:export-single-rfq-reply-preview', rfq_id)
 
             # In single-RFQ mode, create a temporary file and store in session for download
             import tempfile
@@ -4496,11 +3940,14 @@ def send_rfqs(request):
 def get_chart_data(request):
     # Get current date for comparing return dates
     current_date = timezone.now().date()
+    cutoff_date = current_date - timedelta(days=14)
 
-    # First filter out solicitations with empty/dash cage codes
+    # First filter out solicitations with empty/dash cage codes, scoped to the
+    # same recent window as the rest of the dashboard (avoids a full-table scan)
     all_valid_solicitations = Solicitation.objects.filter(
-        ~Q(cage='') & ~Q(cage='-')  # Exclude empty or dash cage codes
-    )
+        ~Q(cage='') & ~Q(cage='-'),  # Exclude empty or dash cage codes
+        scraped_date__gte=cutoff_date
+    ).only('id', 'return_by_date')
 
     valid_solicitations = []
     for sol in all_valid_solicitations:
@@ -6273,6 +5720,13 @@ def commit_and_push_changes():
 # view to show client detail
 
 
+def _get_profile_target(request, client):
+    _c = str(client).strip()
+    if _c.isdigit():
+        return get_object_or_404(CustomUser, id=int(_c))
+    return get_object_or_404(CustomUser, username__iexact=_c)
+
+
 def user_profile(request, client):
     # Prevent AnonymousUser from being passed into ModelForms.
     if not request.user.is_authenticated:
@@ -6280,33 +5734,21 @@ def user_profile(request, client):
         next_url = f"{settings.BASE_URL}{reverse('solicitations:user-profile', args=[client])}"
         return redirect(f"{login_url}?next={next_url}")
 
-    # Load the profile target from URL param instead of always using request.user.
-    _c = str(client).strip()
-    if _c.isdigit():
-        client_user = get_object_or_404(CustomUser, id=int(_c))
-    else:
-        client_user = get_object_or_404(CustomUser, username__iexact=_c)
-    # Allow self-access and staff access only.
+    client_user = _get_profile_target(request, client)
     if not request.user.is_staff and request.user != client_user:
         messages.error(request, "You don't have permission to view this profile.")
         return redirect('solicitations:user-profile', client=request.user.id)
+
     logo_form = LogoUpdateForm(instance=client_user)
     user_form = UserUpdateForm(instance=client_user)
     password_form = CustomPasswordChangeForm(user=client_user)
 
     if request.method == 'POST':
         if 'logo_update' in request.POST:
-            print("Processing logo update")
-            print(f"FILES: {request.FILES}")
-
-            logo_form = LogoUpdateForm(
-                request.POST, request.FILES, instance=client_user)
+            logo_form = LogoUpdateForm(request.POST, request.FILES, instance=client_user)
             if logo_form.is_valid():
-                print("Logo form is valid")
                 logo_form.save()
-                messages.success(
-                    request, 'Your logo has been updated successfully!')
-                # Stay on the same page to avoid subpath/redirect issues.
+                messages.success(request, 'Your logo has been updated successfully!')
                 client_user.refresh_from_db()
                 return render(
                     request,
@@ -6318,18 +5760,13 @@ def user_profile(request, client):
                         'password_form': CustomPasswordChangeForm(user=client_user),
                     },
                 )
-            else:
-                print(f"Logo form errors: {logo_form.errors}")
-                messages.error(
-                    request, 'Error updating logo. Please check the form.')
+            messages.error(request, 'Error updating logo. Please check the form.')
 
         elif 'details_update' in request.POST:
             user_form = UserUpdateForm(request.POST, instance=client_user)
             if user_form.is_valid():
                 user_form.save()
-                messages.success(
-                    request, 'Your profile has been updated successfully!')
-                # Stay on the same page to avoid subpath/redirect issues.
+                messages.success(request, 'Your profile has been updated successfully!')
                 client_user.refresh_from_db()
                 return render(
                     request,
@@ -6341,20 +5778,14 @@ def user_profile(request, client):
                         'password_form': CustomPasswordChangeForm(user=client_user),
                     },
                 )
-            else:
-                messages.error(
-                    request, 'Error updating profile. Please check the form.')
+            messages.error(request, 'Error updating profile. Please check the form.')
 
         elif 'password_update' in request.POST:
-            password_form = CustomPasswordChangeForm(
-                user=client_user, data=request.POST)
+            password_form = CustomPasswordChangeForm(user=client_user, data=request.POST)
             if password_form.is_valid():
                 updated_user = password_form.save()
-                # Important: Update the session to prevent logout after password change
                 update_session_auth_hash(request, updated_user)
-                messages.success(
-                    request, 'Your password has been updated successfully!')
-                # Stay on the same page to avoid subpath/redirect issues.
+                messages.success(request, 'Your password has been updated successfully!')
                 client_user.refresh_from_db()
                 return render(
                     request,
@@ -6366,9 +5797,7 @@ def user_profile(request, client):
                         'password_form': CustomPasswordChangeForm(user=client_user),
                     },
                 )
-            else:
-                messages.error(
-                    request, 'Error updating password. Please check the form.')
+            messages.error(request, 'Error updating password. Please check the form.')
 
     context = {
         'client': client_user,
@@ -6378,6 +5807,52 @@ def user_profile(request, client):
     }
 
     return render(request, 'solicitations/clients/user-profile.html', context)
+
+
+@login_required
+def edit_user_profile(request, client):
+    client_user = _get_profile_target(request, client)
+    if not request.user.is_staff and request.user != client_user:
+        messages.error(request, "You don't have permission to edit this profile.")
+        return redirect('solicitations:user-profile', client=request.user.id)
+
+    logo_form = LogoUpdateForm(instance=client_user)
+    user_form = UserUpdateForm(instance=client_user)
+    password_form = CustomPasswordChangeForm(user=client_user)
+
+    if request.method == 'POST':
+        if 'logo_update' in request.POST:
+            logo_form = LogoUpdateForm(request.POST, request.FILES, instance=client_user)
+            if logo_form.is_valid():
+                logo_form.save()
+                messages.success(request, 'Your logo has been updated successfully!')
+                return redirect('solicitations:user-profile-edit', client=client_user.id)
+            messages.error(request, 'Error updating logo. Please check the form.')
+
+        elif 'details_update' in request.POST:
+            user_form = UserUpdateForm(request.POST, instance=client_user)
+            if user_form.is_valid():
+                user_form.save()
+                messages.success(request, 'Your profile has been updated successfully!')
+                return redirect('solicitations:user-profile', client=client_user.id)
+            messages.error(request, 'Error updating profile. Please check the form.')
+
+        elif 'password_update' in request.POST:
+            password_form = CustomPasswordChangeForm(user=client_user, data=request.POST)
+            if password_form.is_valid():
+                updated_user = password_form.save()
+                update_session_auth_hash(request, updated_user)
+                messages.success(request, 'Your password has been updated successfully!')
+                return redirect('solicitations:user-profile-edit', client=client_user.id)
+            messages.error(request, 'Error updating password. Please check the form.')
+
+    context = {
+        'client': client_user,
+        'logo_form': logo_form,
+        'user_form': user_form,
+        'password_form': password_form,
+    }
+    return render(request, 'solicitations/clients/user-profile-edit.html', context)
 
 
 # view for DLA export configuration
@@ -6464,13 +5939,16 @@ def export_config(request):
     reserved_configs = export_configs.filter(
         field_definition__field_type='reserved')
 
-    # Positions whose values are fully dynamic/system-controlled and must not be overridden
+    # Positions whose values are fully dynamic/system-controlled and must not be overridden.
+    # Every position UserExportConfiguration.get_value() special-cases (always derives
+    # from the matched Solicitation/RfqReply, ignoring custom_value/source_field) must be
+    # listed here too, or the UI shows it as editable while get_value() silently ignores it.
     locked_positions = [
-        1, 5, 6, 7, 26,
+        1, 2, 3, 5, 6, 7, 26, 32, 36,
         44, 46, 47, 48, 49, 50, 51, 52, 53, 54, 59, 60,
         78, 79, 80, 81, 82, 83, 84, 85, 86, 87,
         88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
-        117,
+        100, 103, 109, 111, 117, 119, 121,
     ]
 
     if request.method == 'POST':

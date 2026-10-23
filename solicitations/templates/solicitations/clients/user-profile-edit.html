@@ -1,0 +1,366 @@
+{% extends 'solicitations/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="pagetitle">
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:user-profile' client.id %}">User Profile</a></li>
+      <li class="breadcrumb-item active">Edit Profile</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-3 d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-pencil-square text-secondary"></i>
+        <span class="fw-semibold">Edit Profile</span>
+      </div>
+      <a href="{% url 'solicitations:user-profile' client.id %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i>Back to profile
+      </a>
+    </div>
+
+    <div class="card-body p-4">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="row g-4">
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-person-vcard text-secondary"></i>
+                <div class="fw-semibold">Account Details</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label class="form-label">First Name</label>
+                  {{ user_form.first_name }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Last Name</label>
+                  {{ user_form.last_name }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Position</label>
+                  {{ user_form.title }}
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Email</label>
+                  {{ user_form.email }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Personal Email</label>
+                  {{ user_form.personal_email }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Phone</label>
+                  {{ user_form.phone }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-building text-secondary"></i>
+                <div class="fw-semibold">Company Details</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Business Name</label>
+                  {{ user_form.companyName }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Company Initial</label>
+                  {{ user_form.company_initial }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">CAGE</label>
+                  {{ user_form.cage }}
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Legal Name</label>
+                  {{ user_form.legal_name }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">UEI</label>
+                  {{ user_form.uei }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">NAICS</label>
+                  {{ user_form.naics_code }}
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Business Size</label>
+                  {{ user_form.business_size }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Website</label>
+                  {{ user_form.website }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Fax</label>
+                  {{ user_form.fax }}
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">Address</label>
+                  {{ user_form.address }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-shield-check text-secondary"></i>
+                <div class="fw-semibold">Agreement &amp; Compliance</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label class="form-label">Agreement Type</label>
+                  {{ user_form.agreement_type }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Contract Number</label>
+                  {{ user_form.contract_number }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Agreement Expiry</label>
+                  {{ user_form.agreement_expiry }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-people text-secondary"></i>
+                <div class="fw-semibold">Joint Venture &amp; Compliance Responses</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label">Joint Venture</label>
+                  {{ user_form.joint_venture_code }}
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Joint Venture Remarks</label>
+                  {{ user_form.joint_venture_remarks }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Affirmative Action Code</label>
+                  {{ user_form.affirmative_action_code }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Previous Contracts &amp; Compliance Reports</label>
+                  {{ user_form.previous_contracts_code }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Alternate Disputes Resolution</label>
+                  {{ user_form.alternate_disputes_resolution }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Prompt Payment Discount Terms</label>
+                  {{ user_form.prompt_payment_terms_code }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Child Labor Certification</label>
+                  {{ user_form.child_labor_certification_code }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Packaging Inspection CAGE</label>
+                  {{ user_form.inspection_packaging_cage }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Supplies Inspection CAGE</label>
+                  {{ user_form.inspection_supplies_cage }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-currency-dollar text-secondary"></i>
+                <div class="fw-semibold">Quote Defaults</div>
+              </div>
+              <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label">Default FOB</label>
+                  {{ user_form.default_fob }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Origin</label>
+                  {{ user_form.default_origin_country }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Delivery Padding Days</label>
+                  {{ user_form.added_days }}
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Default MOQ</label>
+                  {{ user_form.default_moq }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Lead Time Days</label>
+                  {{ user_form.default_lead_time_days }}
+                </div>
+                <div class="col-md-4">
+                  <div class="d-flex align-items-center justify-content-start h-100" style="min-height: 38px;">
+                    <div class="form-check mb-0">
+                      {{ user_form.immediate_shipment_allowed }}
+                      <label class="form-check-label" for="{{ user_form.immediate_shipment_allowed.id_for_label }}">Immediate Shipment Allowed</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-clipboard-check text-secondary"></i>
+                <div class="fw-semibold">Business Representation &amp; Quote Policy Defaults</div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label class="form-label">Small Business Representation</label>
+                  {{ user_form.small_business_representation_code }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Quote Valid Days</label>
+                  {{ user_form.default_quote_valid_days }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Meets Packaging Requirement</label>
+                  {{ user_form.default_meets_packaging }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Material Requirements</label>
+                  {{ user_form.default_material_requirements }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Quantity Variance Plus %</label>
+                  {{ user_form.default_quantity_variance_plus }}
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Default Quantity Variance Minus %</label>
+                  {{ user_form.default_quantity_variance_minus }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="border rounded p-3 bg-light-subtle">
+              <div class="d-flex align-items-center gap-2 mb-3">
+                <i class="bi bi-award text-secondary"></i>
+                <div class="fw-semibold">Certifications</div>
+              </div>
+              <div class="row g-2">
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_wosb }}
+                  <label class="form-check-label" for="{{ user_form.is_wosb.id_for_label }}">WOSB</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_edwosb }}
+                  <label class="form-check-label" for="{{ user_form.is_edwosb.id_for_label }}">EDWOSB</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_hubzone }}
+                  <label class="form-check-label" for="{{ user_form.is_hubzone.id_for_label }}">HubZone</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_8a }}
+                  <label class="form-check-label" for="{{ user_form.is_8a.id_for_label }}">Certified Small Business</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_sdvosb }}
+                  <label class="form-check-label" for="{{ user_form.is_sdvosb.id_for_label }}">SDVOSB</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_iso_9001_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_iso_9001_certified.id_for_label }}">ISO 9001</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_as9100_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_as9100_certified.id_for_label }}">AS9100</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_as9003_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_as9003_certified.id_for_label }}">AS9003</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_jcp_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_jcp_certified.id_for_label }}">JCP</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_qsl_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_qsl_certified.id_for_label }}">QSL</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_qpl_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_qpl_certified.id_for_label }}">QPL</label>
+                </div>
+                <div class="col-md-3 form-check">
+                  {{ user_form.is_qml_certified }}
+                  <label class="form-check-label" for="{{ user_form.is_qml_certified.id_for_label }}">QML</label>
+                </div>
+              </div>
+
+              <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                  <label class="form-label">ISO 9001 Expiry</label>
+                  {{ user_form.iso_9001_expiry }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">AS9100 Expiry</label>
+                  {{ user_form.as9100_expiry }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">AS9003 Expiry</label>
+                  {{ user_form.as9003_expiry }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">JCP Expiry</label>
+                  {{ user_form.jcp_expiry }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">QSL Expiry</label>
+                  {{ user_form.qsl_expiry }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">QPL Expiry</label>
+                  {{ user_form.qpl_expiry }}
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">QML Expiry</label>
+                  {{ user_form.qml_expiry }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2 mt-4">
+          <a href="{% url 'solicitations:user-profile' client.id %}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" name="details_update" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}

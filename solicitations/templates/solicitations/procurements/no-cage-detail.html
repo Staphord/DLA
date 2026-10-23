@@ -1,0 +1,132 @@
+{% extends 'solicitations/base.html' %}
+
+{% block content %}
+
+<div class="pagetitle">
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:no-cage-solicitations' %}">No-CAGE Solicitations</a></li>
+      <li class="breadcrumb-item active">{{ record.nsn }}</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+
+  <!-- Summary Banner -->
+  <div class="card mb-4 shadow-sm border-0">
+    <div class="card-body py-4 px-4">
+      <div class="row align-items-center g-3">
+        <div class="col-auto">
+          <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:56px;height:56px;background:#d0d5de;">
+            <i class="bi bi-file-earmark-text-fill text-secondary" style="font-size:1.6rem;"></i>
+          </div>
+        </div>
+        <div class="col">
+          <div class="text-muted small mb-1">National Stock Number</div>
+          <div class="fs-5 text-dark">{{ record.nsn }}</div>
+          <div class="text-muted small mt-1">{{ record.nomenclature|title }}</div>
+        </div>
+        <div class="col-12 col-md-auto">
+          <a href="{% url 'solicitations:no-cage-solicitations' %}" class="btn btn-sm btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+
+    <!-- Left Column -->
+    <div class="col-lg-8">
+
+      <!-- Solicitation Info -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-clipboard-data-fill text-secondary"></i>
+          <span class="fw-semibold">Solicitation Information</span>
+        </div>
+        <div class="card-body py-3">
+          <div class="row g-3">
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Solicitation No</div>
+              <div class="fw-semibold">{{ record.solicitation|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">NSN</div>
+              <div class="fw-semibold">{{ record.nsn|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Nomenclature</div>
+              <div class="fw-semibold">{{ record.nomenclature|title|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Quantity</div>
+              <div class="fw-semibold">{{ record.quantity|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Purchase Request No</div>
+              <div class="fw-semibold">{{ record.purchase_request|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Issued Date</div>
+              <div class="fw-semibold">{{ record.issued_date|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Return By Date</div>
+              <div class="fw-semibold">{{ record.return_by_date|default:"—" }}</div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="text-muted small mb-1">Scraped Date</div>
+              <div class="fw-semibold">{{ record.scraped_date|default:"—" }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column -->
+    <div class="col-lg-4">
+
+      <!-- Handling -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-person-check-fill text-secondary"></i>
+          <span class="fw-semibold">Your Handling Status</span>
+        </div>
+        <div class="card-body py-3">
+          {% if handled_by_me %}
+            <span class="badge bg-success mb-2"><i class="bi bi-check-circle"></i> Handled</span>
+            {% if handled_at_for_me %}
+              <div class="text-muted small mb-3">you marked this handled on {{ handled_at_for_me|date:"M d, Y" }}</div>
+            {% endif %}
+          {% else %}
+            <span class="badge bg-secondary mb-3"><i class="bi bi-circle"></i> Needs Action</span>
+          {% endif %}
+          <form method="POST" action="{% url 'solicitations:mark-no-cage-handled' record.id %}" class="mt-2">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'solicitations:no-cage-detail' record.id %}">
+            {% if handled_by_me %}
+              <button type="submit" class="btn btn-outline-secondary btn-sm w-100">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Mark Not Handled
+              </button>
+            {% else %}
+              <button type="submit" class="btn btn-success btn-sm w-100">
+                <i class="bi bi-check2-circle me-1"></i>Mark Handled
+              </button>
+            {% endif %}
+          </form>
+          <div class="text-muted small mt-2">This status is per user — marking it here only affects your own view.</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+
+{% endblock content %}
