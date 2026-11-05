@@ -29,7 +29,12 @@
           <div class="fs-5 text-dark">{{ solicitation_detail.NSN }}</div>
           <div class="text-muted small mt-1">{{ solicitation_detail.nomenclature|title }}</div>
         </div>
-        <div class="col-12 col-md-auto">
+        <div class="col-12 col-md-auto d-flex gap-2">
+          {% if solicitation_detail.nsn_detail_url %}
+          <a href="{{ solicitation_detail.nsn_detail_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-box-arrow-up-right me-1"></i>View on DIBBS
+          </a>
+          {% endif %}
           <a href="{% url 'solicitations:solicitations' %}" class="btn btn-sm btn-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back
           </a>

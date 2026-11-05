@@ -28,7 +28,12 @@
           <div class="fs-5 text-dark">{{ record.nsn }}</div>
           <div class="text-muted small mt-1">{{ record.nomenclature|title }}</div>
         </div>
-        <div class="col-12 col-md-auto">
+        <div class="col-12 col-md-auto d-flex gap-2">
+          {% if record.nsn_detail_url %}
+          <a href="{{ record.nsn_detail_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-box-arrow-up-right me-1"></i>View on DIBBS
+          </a>
+          {% endif %}
           <a href="{% url 'solicitations:government-email-solicitations' %}" class="btn btn-sm btn-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back
           </a>

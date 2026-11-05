@@ -2395,6 +2395,7 @@ def process_nsn_links_comprehensive(driver, start_time, nsns_to_process=None,
                         'Buyer Info': buyer_info,
                         'Higher Level Quality Indicator': higher_level_quality_indicator,
                         'Extra Fields': additional_fields,
+                        'NSN Detail URL': nsn_link,
                     }
 
                     print(
@@ -2914,14 +2915,15 @@ def save_no_cage_solicitations(nsn, nsn_rows):
     sql_query = """
     INSERT INTO solicitations_nocagesolicitation
     (nsn, nomenclature, solicitation, quantity, purchase_request, issued_date, return_by_date,
-     scraped_date)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, CURDATE())
+     scraped_date, nsn_detail_url)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, CURDATE(), %s)
     ON DUPLICATE KEY UPDATE
         nomenclature = VALUES(nomenclature),
         quantity = VALUES(quantity),
         purchase_request = VALUES(purchase_request),
         issued_date = VALUES(issued_date),
-        return_by_date = VALUES(return_by_date)
+        return_by_date = VALUES(return_by_date),
+        nsn_detail_url = VALUES(nsn_detail_url)
     """
     try:
         db_connection = MySQLdb.connect(
@@ -2944,6 +2946,7 @@ def save_no_cage_solicitations(nsn, nsn_rows):
                 row.get('purchase_request', ''),
                 row.get('issued_date', 'N/A'),
                 row.get('return_by_date', 'N/A'),
+                row.get('nsn_link', ''),
             ))
             saved += 1
         print(f"  Saved {saved} no-CAGE record(s) for NSN {nsn} for manual handling")
@@ -2997,8 +3000,8 @@ def save_government_email_solicitation(record_data, cage_details):
     sql_query = """
     INSERT INTO solicitations_governmentemailsolicitation
     (cage, email, nsn, nomenclature, part_number, organization_name, solicitation, quantity,
-     purchase_request, issued_date, return_by_date, scraped_date)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURDATE())
+     purchase_request, issued_date, return_by_date, scraped_date, nsn_detail_url)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURDATE(), %s)
     ON DUPLICATE KEY UPDATE
         quantity = CAST(quantity AS SIGNED) + CAST(VALUES(quantity) AS SIGNED),
         nomenclature = VALUES(nomenclature),
@@ -3006,7 +3009,8 @@ def save_government_email_solicitation(record_data, cage_details):
         email = VALUES(email),
         solicitation = VALUES(solicitation),
         purchase_request = VALUES(purchase_request),
-        issued_date = VALUES(issued_date)
+        issued_date = VALUES(issued_date),
+        nsn_detail_url = VALUES(nsn_detail_url)
     """
     try:
         db_connection = MySQLdb.connect(
@@ -3024,6 +3028,7 @@ def save_government_email_solicitation(record_data, cage_details):
             organization_name, solicitation, new_quantity,
             record_data.get('Purchase Request', ''),
             record_data.get('Issued Date', 'N/A'), return_by,
+            record_data.get('NSN Detail URL', ''),
         ))
         print(f"  GOV-EMAIL: saved (NSN={nsn}, CAGE={cage_code}, PART={part_number}, EMAIL={email}) for manual handling")
         return True, True
@@ -3097,9 +3102,9 @@ def save_single_record_to_db(record_data, cage_details_list):
     (cage, nsn, nomenclature, solicitation, status, quantity, issued_date, return_by_date,
      organization_name, street_name, city, postal_code, phone, fax, email, part_number, unit,
      inspection_point, acceptance_point, deliver_fob, deliver_days, buyer_info, prep_for_delivery, scraped_date, solicitation_line_number, procurement_history, purchase_request_number, is_set_aside, higher_level_quality_indicator,
-     naics_code, qty_variance_plus, qty_variance_minus, original_required_delivery_date, need_ship_date, rdd_days, fast_pay_note, approved_sources, packaging_details, ship_to_address, fda_regulated, regulatory_notes, set_aside_code, solicitation_type)
+     naics_code, qty_variance_plus, qty_variance_minus, original_required_delivery_date, need_ship_date, rdd_days, fast_pay_note, approved_sources, packaging_details, ship_to_address, fda_regulated, regulatory_notes, set_aside_code, solicitation_type, nsn_detail_url)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     try:
@@ -3169,6 +3174,7 @@ def save_single_record_to_db(record_data, cage_details_list):
             extra.get('regulatory_notes', ''),
             extra.get('set_aside_code', ''),
             '',
+            record_data.get('NSN Detail URL', ''),
         )
 
         cursor.execute(sql_query, db_record)

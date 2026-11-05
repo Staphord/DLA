@@ -124,6 +124,10 @@ class Solicitation(models.Model):
         max_length=1, blank=True, default='', choices=FDA_REGULATED_CHOICES)
     regulatory_notes = models.TextField(blank=True)
 
+    nsn_detail_url = models.URLField(
+        max_length=500, blank=True, default='',
+        help_text="DIBBS NSN detail page URL this record was scraped from")
+
     class Meta:
         indexes = [
             # Single field indexes
@@ -169,6 +173,7 @@ class NoCageSolicitation(models.Model):
     issued_date = models.CharField(max_length=20, blank=True)
     return_by_date = models.CharField(max_length=20, blank=True)
     scraped_date = models.DateField(auto_now_add=True)
+    nsn_detail_url = models.URLField(max_length=500, blank=True, default='')
 
     class Meta:
         verbose_name = "No-CAGE Solicitation"
@@ -224,6 +229,7 @@ class GovernmentEmailSolicitation(models.Model):
     issued_date = models.CharField(max_length=20, blank=True)
     return_by_date = models.CharField(max_length=20, blank=True)
     scraped_date = models.DateField(auto_now_add=True)
+    nsn_detail_url = models.URLField(max_length=500, blank=True, default='')
 
     class Meta:
         verbose_name = "Government Solicitation"
