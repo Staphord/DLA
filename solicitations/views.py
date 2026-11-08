@@ -172,6 +172,11 @@ def solicitations(request):
         # CORRECTED: Only exclude explicitly disabled
         Exists(disabled_oems_subquery)
     ).filter(
+        # Manually-added records (via No-CAGE -> CAGE conversion) are only
+        # visible to the user who created them; normal scraped records
+        # (added_by_user is null) remain visible to everyone.
+        Q(added_by_user__isnull=True) | Q(added_by_user=request.user)
+    ).filter(
         scraped_date__gte=cutoff_date
     ).order_by('-id')
 
@@ -1411,6 +1416,35 @@ def filtered_solicitations(request):
         })
 
 
+@login_required
+def missing_info_followup_settings(request):
+    """
+    Per-user, opt-in: pick which pricing/shipping fields, if left blank in a
+    captured OEM reply, should trigger an automatic follow-up email asking
+    the OEM for them. There's no separate on/off switch - checking at least
+    one field turns it on, clearing all of them turns it off.
+    """
+    from .models import MissingInfoFollowUpSettings
+
+    config, _ = MissingInfoFollowUpSettings.objects.get_or_create(user=request.user)
+
+    if request.method == 'POST':
+        selected_fields = request.POST.getlist('tracked_fields')
+        valid_fields = set(MissingInfoFollowUpSettings.TRACKABLE_FIELD_NAMES)
+        config.tracked_fields = [f for f in selected_fields if f in valid_fields]
+        config.enabled = bool(config.tracked_fields)
+        config.save()
+        messages.success(request, "Missing-info follow-up settings saved.")
+        return redirect('solicitations:missing-info-followup-settings')
+
+    context = {
+        'config': config,
+        'pricing_fields': MissingInfoFollowUpSettings.PRICING_FIELDS,
+        'shipping_fee_fields': MissingInfoFollowUpSettings.SHIPPING_FEE_FIELDS,
+    }
+    return render(request, 'solicitations/missing_info_followup_settings.html', context)
+
+
 def email_settings(request):
     """View for managing email automation settings"""
     # Get or create settings for the current user
@@ -2133,7 +2167,7 @@ def no_cage_solicitations(request):
     per-user: one user marking a record handled must not hide it from
     anyone else, since each user works these manually and independently.
     """
-    from .models import NoCageSolicitation, NoCageSolicitationHandledBy
+    from .models import NoCageSolicitation, NoCageSolicitationHandledBy, NoCageSolicitationConversion
 
     show_handled = request.GET.get('show') == 'handled'
     search_query = (request.GET.get('q') or '').strip()
@@ -2141,9 +2175,14 @@ def no_cage_solicitations(request):
     handled_by_me = NoCageSolicitationHandledBy.objects.filter(
         user=request.user, solicitation=OuterRef('pk')
     )
+    # A record this user has converted (pending or done) is gone from their
+    # own list, but stays untouched for every other user.
+    converted_by_me = NoCageSolicitationConversion.objects.filter(
+        user=request.user, solicitation=OuterRef('pk')
+    ).exclude(status=NoCageSolicitationConversion.STATUS_FAILED)
     base_queryset = NoCageSolicitation.objects.annotate(
         handled_by_me=Exists(handled_by_me)
-    )
+    ).exclude(Exists(converted_by_me))
     active_count = base_queryset.filter(handled_by_me=False).count()
     handled_count = base_queryset.filter(handled_by_me=True).count()
 
@@ -2236,18 +2275,70 @@ def export_no_cage_solicitations(request):
 
 @login_required
 def no_cage_detail(request, pk):
-    """Full-detail, read-only view of a single no-CAGE record, plus this user's handled status."""
-    from .models import NoCageSolicitation, NoCageSolicitationHandledBy
+    """Detail view of a single no-CAGE record: this user's handled status,
+    plus the state of this user's own CAGE-conversion attempt (if any)."""
+    from .models import NoCageSolicitation, NoCageSolicitationHandledBy, NoCageSolicitationConversion
 
     record = get_object_or_404(NoCageSolicitation, pk=pk)
     handling = NoCageSolicitationHandledBy.objects.filter(
+        solicitation=record, user=request.user).first()
+    conversion = NoCageSolicitationConversion.objects.filter(
         solicitation=record, user=request.user).first()
     context = {
         'record': record,
         'handled_by_me': handling is not None,
         'handled_at_for_me': handling.handled_at if handling else None,
+        'conversion': conversion,
     }
     return render(request, 'solicitations/procurements/no-cage-detail.html', context)
+
+
+@login_required
+def convert_no_cage_solicitation(request, pk):
+    """
+    Start converting a no-CAGE record into a real Solicitation by looking up
+    a CAGE code the user supplies. Runs the lookup in the background (it's a
+    live scrape of the NATO CAGE Tool); this view only queues it.
+
+    Per-user: the shared NoCageSolicitation row is untouched, so this never
+    affects any other user's view of the same record.
+    """
+    from .models import NoCageSolicitation, NoCageSolicitationConversion
+
+    record = get_object_or_404(NoCageSolicitation, pk=pk)
+
+    if request.method != 'POST':
+        return redirect('solicitations:no-cage-detail', pk=pk)
+
+    cage = (request.POST.get('cage') or '').strip().upper()
+    if not cage:
+        messages.error(request, "Enter a CAGE code.")
+        return redirect('solicitations:no-cage-detail', pk=pk)
+    if len(cage) > 10:
+        messages.error(request, "CAGE code is too long.")
+        return redirect('solicitations:no-cage-detail', pk=pk)
+
+    existing = NoCageSolicitationConversion.objects.filter(
+        solicitation=record, user=request.user).first()
+    if existing and existing.status != NoCageSolicitationConversion.STATUS_FAILED:
+        # Already pending or done for this user - nothing to do.
+        return redirect('solicitations:no-cage-detail', pk=pk)
+
+    if existing:
+        existing.cage = cage
+        existing.status = NoCageSolicitationConversion.STATUS_PENDING
+        existing.error_message = ''
+        existing.save(update_fields=['cage', 'status', 'error_message', 'updated_at'])
+        conversion = existing
+    else:
+        conversion = NoCageSolicitationConversion.objects.create(
+            solicitation=record, user=request.user, cage=cage
+        )
+
+    async_task('solicitations.tasks.convert_no_cage_solicitation', conversion.id)
+    messages.success(
+        request, f"Looking up CAGE {cage} - this NSN will move to Solicitations once it's found.")
+    return redirect('solicitations:no-cage-detail', pk=pk)
 
 
 @login_required

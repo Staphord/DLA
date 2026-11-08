@@ -1,0 +1,189 @@
+{% extends 'solicitations/base.html' %}
+
+{% block content %}
+
+<div class="pagetitle">
+  <nav>
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:home' %}">Home</a></li>
+      <li class="breadcrumb-item"><a href="{% url 'solicitations:settings' %}">Settings</a></li>
+      <li class="breadcrumb-item active">Missing-Info Follow-Up</li>
+    </ol>
+  </nav>
+</div>
+
+<section class="section">
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show py-2" role="alert">
+        <i class="bi bi-check-circle me-1"></i>{{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="POST" id="followup-form">
+    {% csrf_token %}
+
+    <!-- Summary Banner -->
+    <div class="card mb-4 shadow-sm border-0">
+      <div class="card-body py-4 px-4">
+        <div class="row align-items-center g-3">
+          <div class="col-auto">
+            <div class="rounded-circle d-flex align-items-center justify-content-center" style="width:56px;height:56px;background:#d0d5de;">
+              <i class="bi bi-envelope-paper-heart-fill text-secondary" style="font-size:1.6rem;"></i>
+            </div>
+          </div>
+          <div class="col">
+            <div class="text-muted small mb-1">Settings</div>
+            <div class="fs-5 text-dark">Missing-Info Follow-Up</div>
+          </div>
+          <div class="col-12 col-md-auto d-flex align-items-center gap-2">
+            <button type="submit" class="btn btn-sm btn-primary">
+              <i class="bi bi-check2-circle me-1"></i>Save Settings
+            </button>
+            <a href="{% url 'solicitations:settings' %}" class="btn btn-sm btn-secondary">
+              <i class="bi bi-arrow-left me-1"></i>Back
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+
+      <!-- Left Column -->
+      <div class="col-lg-8">
+
+        <!-- Pricing -->
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+            <i class="bi bi-currency-dollar text-secondary"></i>
+            <span class="fw-semibold">Pricing</span>
+            <div class="ms-auto btn-group btn-group-sm group-toggle-actions" data-group="pricing">
+              <button type="button" class="btn btn-outline-secondary select-all">Select all</button>
+              <button type="button" class="btn btn-outline-secondary clear-all">Clear</button>
+            </div>
+          </div>
+          <div id="pricing-fields" class="card-body py-3">
+            <div class="row g-3">
+              {% for value, label in pricing_fields %}
+              <div class="col-6 col-md-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="tracked_fields" value="{{ value }}"
+                         id="field_{{ value }}" data-group="pricing" {% if value in config.tracked_fields %}checked{% endif %}>
+                  <label class="form-check-label fw-semibold" for="field_{{ value }}">{{ label }}</label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Shipping & Fees -->
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+            <i class="bi bi-truck text-secondary"></i>
+            <span class="fw-semibold">Shipping &amp; Fees</span>
+            <div class="ms-auto btn-group btn-group-sm group-toggle-actions" data-group="shipping">
+              <button type="button" class="btn btn-outline-secondary select-all">Select all</button>
+              <button type="button" class="btn btn-outline-secondary clear-all">Clear</button>
+            </div>
+          </div>
+          <div id="shipping-fields" class="card-body py-3">
+            <div class="row g-3">
+              {% for value, label in shipping_fee_fields %}
+              <div class="col-6 col-md-4">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="tracked_fields" value="{{ value }}"
+                         id="field_{{ value }}" data-group="shipping" {% if value in config.tracked_fields %}checked{% endif %}>
+                  <label class="form-check-label fw-semibold" for="field_{{ value }}">{{ label }}</label>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column -->
+      <div class="col-lg-4">
+
+        <!-- Status -->
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+            <i class="bi bi-toggle2-on text-secondary"></i>
+            <span class="fw-semibold">Follow-Up Status</span>
+          </div>
+          <div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between py-1">
+              <div class="fw-semibold">Follow-Up Emails</div>
+              <span id="status-badge-2" class="badge {% if config.enabled %}bg-success{% else %}bg-secondary{% endif %}">
+                <i class="bi {% if config.enabled %}bi-check-circle{% else %}bi-circle{% endif %}"></i>
+                {% if config.enabled %}ON{% else %}OFF{% endif %}
+              </span>
+            </div>
+            <hr class="my-3">
+            <div class="d-flex align-items-start gap-2 text-muted small mb-0">
+              <i class="bi bi-info-circle mt-1"></i>
+              <div>Turns on automatically once at least one field below is checked, and off again if you clear all of them.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- How It Works -->
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+            <i class="bi bi-info-circle text-secondary"></i>
+            <span class="fw-semibold">How It Works</span>
+          </div>
+          <div class="card-body py-3">
+            <ul class="mb-0 small text-secondary ps-3" style="line-height:1.8;">
+              <li>Only checked fields are ever asked about &mdash; leave fees that often don't
+                apply (e.g. customs duty) unchecked.</li>
+              <li>Sent from the same email account you use to send RFQs.</li>
+              <li>At most one follow-up per reply.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </form>
+</section>
+
+<script>
+  (function () {
+    const fieldBoxes = document.querySelectorAll('input[name="tracked_fields"]');
+    const statusBadge = document.getElementById('status-badge-2');
+
+    function syncEnabledState() {
+      const on = Array.prototype.some.call(fieldBoxes, function (b) { return b.checked; });
+      const icon = statusBadge.querySelector('i');
+      icon.classList.toggle('bi-check-circle', on);
+      icon.classList.toggle('bi-circle', !on);
+      statusBadge.lastChild.textContent = on ? ' ON' : ' OFF';
+      statusBadge.classList.toggle('bg-success', on);
+      statusBadge.classList.toggle('bg-secondary', !on);
+    }
+    fieldBoxes.forEach(function (b) { b.addEventListener('change', syncEnabledState); });
+
+    document.querySelectorAll('.group-toggle-actions').forEach(function (group) {
+      const name = group.getAttribute('data-group');
+      const boxes = document.querySelectorAll('input[data-group="' + name + '"]');
+      group.querySelector('.select-all').addEventListener('click', function () {
+        boxes.forEach(function (b) { b.checked = true; });
+        syncEnabledState();
+      });
+      group.querySelector('.clear-all').addEventListener('click', function () {
+        boxes.forEach(function (b) { b.checked = false; });
+        syncEnabledState();
+      });
+    });
+  })();
+</script>
+
+{% endblock content %}

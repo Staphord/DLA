@@ -128,6 +128,15 @@ class Solicitation(models.Model):
         max_length=500, blank=True, default='',
         help_text="DIBBS NSN detail page URL this record was scraped from")
 
+    added_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='manually_added_solicitations',
+        help_text="Set when a user manually created this record by adding a CAGE "
+                   "code to a No-CAGE Solicitation; null for normal scraped records "
+                   "that every user sees. A manually-added record is only shown to "
+                   "the user who created it, but is otherwise treated like any other "
+                   "solicitation (including for auto-send).")
+
     class Meta:
         indexes = [
             # Single field indexes
@@ -211,6 +220,54 @@ class NoCageSolicitationHandledBy(models.Model):
 
     def __str__(self):
         return f"{self.solicitation} handled by user {self.user_id}"
+
+
+class NoCageSolicitationConversion(models.Model):
+    """
+    Tracks one user's attempt to add a CAGE code to a shared NoCageSolicitation
+    record, converting it into a real Solicitation they can send an RFQ for.
+
+    Per-user, like NoCageSolicitationHandledBy: the shared NoCageSolicitation row
+    is never touched or deleted, so one user converting it has no effect on any
+    other user, who still sees and can act on it independently. A STATUS_PENDING
+    row hides the record from that user's No-CAGE list while the background CAGE
+    lookup runs; STATUS_FAILED makes it visible again so they can retry;
+    STATUS_DONE hides it permanently and points at the Solicitation it created.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_DONE = 'done'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_DONE, 'Done'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+
+    solicitation = models.ForeignKey(
+        NoCageSolicitation, on_delete=models.CASCADE, related_name='conversions'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='no_cage_conversions'
+    )
+    cage = models.CharField(max_length=10)
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    error_message = models.CharField(max_length=255, blank=True, default='')
+    created_solicitation = models.ForeignKey(
+        'Solicitation', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='+'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "No-CAGE Solicitation Conversion"
+        verbose_name_plural = "No-CAGE Solicitation Conversions"
+        unique_together = [('solicitation', 'user')]
+
+    def __str__(self):
+        return f"{self.solicitation} -> CAGE {self.cage} ({self.status}) for user {self.user_id}"
 
 
 class GovernmentEmailSolicitation(models.Model):
@@ -2088,6 +2145,28 @@ class RfqReply(models.Model):
         help_text="When this RFQ reply was archived"
     )
 
+    # Missing-info follow-up (opt-in, see MissingInfoFollowUpSettings)
+    missing_info_requested_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When a follow-up email asking the OEM for missing pricing/"
+                   "shipping fields was sent for this reply. Set at most once, "
+                   "so the OEM is never asked twice for the same reply."
+    )
+    missing_info_fields_requested = models.JSONField(
+        default=list, blank=True,
+        help_text="RfqReply field names that were blank and asked about in the "
+                   "follow-up email."
+    )
+    missing_info_checked_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When this reply was last evaluated for the missing-info "
+                   "follow-up, regardless of outcome. The periodic check "
+                   "(check_missing_info_followups) uses this to find replies "
+                   "it hasn't looked at yet - replies are captured by a separate "
+                   "system outside this app, so there's no Django signal to "
+                   "rely on."
+    )
+
     class Meta:
         verbose_name = "RFQ Reply"
         verbose_name_plural = "RFQ Replies"
@@ -2503,6 +2582,64 @@ class RfqReply(models.Model):
             return self._cached_has_matching_solicitation
         # Fallback to original method if not cached
         return self.find_matching_solicitation() is not None
+
+
+class MissingInfoFollowUpSettings(models.Model):
+    """
+    Per-user, opt-in (off by default): when a captured RfqReply is missing
+    one of this user's selected fields, automatically email the OEM (from
+    the same account used to send the RFQ) asking them to provide it.
+
+    Only fires once per reply - see RfqReply.missing_info_requested_at.
+    """
+    PRICING_FIELDS = [
+        ('unit_price', 'Unit Price'),
+        ('total_price', 'Total Price'),
+        ('minimum_order_qty', 'Minimum Order Quantity'),
+        ('minimum_order_charge', 'Minimum Order Charge'),
+    ]
+    SHIPPING_FEE_FIELDS = [
+        ('total_shipping_weight', 'Total Shipping Weight'),
+        ('shipping_cost_to_company', 'Shipping Cost to Company'),
+        ('oem_delivery_days', 'OEM Delivery Days'),
+        ('payment_term', 'Payment Term'),
+        ('tax', 'Tax'),
+        ('packaging_cost', 'Packaging Cost'),
+        ('handling_fee', 'Handling Fee'),
+        ('insurance_cost', 'Insurance Cost'),
+        ('customs_duty', 'Customs Duty'),
+        ('setup_cost', 'Setup Cost'),
+        ('rush_delivery_fee', 'Rush Delivery Fee'),
+        ('environmental_fee', 'Environmental Fee'),
+        ('certification_cost', 'Certification Cost'),
+        ('documentation_fee', 'Documentation Fee'),
+    ]
+    TRACKABLE_FIELD_CHOICES = PRICING_FIELDS + SHIPPING_FEE_FIELDS
+    TRACKABLE_FIELD_NAMES = [key for key, _ in TRACKABLE_FIELD_CHOICES]
+    TRACKABLE_FIELD_LABELS = dict(TRACKABLE_FIELD_CHOICES)
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='missing_info_followup_settings'
+    )
+    enabled = models.BooleanField(
+        default=False,
+        help_text="When on, an OEM is automatically emailed asking for any "
+                   "field below that's left blank in their reply."
+    )
+    tracked_fields = models.JSONField(
+        default=list, blank=True,
+        help_text="RfqReply field names to check for on each new reply; see "
+                   "TRACKABLE_FIELD_CHOICES for the available set."
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Missing-Info Follow-Up Settings"
+        verbose_name_plural = "Missing-Info Follow-Up Settings"
+
+    def __str__(self):
+        return f"Missing-info follow-up settings for user {self.user_id} (enabled={self.enabled})"
 
 
 # Embedded field definitions - all 121 DLA export fields

@@ -96,6 +96,43 @@
     <!-- Right Column -->
     <div class="col-lg-4">
 
+      <!-- Add CAGE Code -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">
+          <i class="bi bi-upc-scan text-secondary"></i>
+          <span class="fw-semibold">Add CAGE Code</span>
+        </div>
+        <div class="card-body py-3">
+          {% if conversion and conversion.status == 'done' %}
+            <span class="badge bg-success mb-2"><i class="bi bi-check-circle"></i> Converted</span>
+            <div class="text-muted small mb-3">CAGE {{ conversion.cage }} was found and this NSN was moved to your Solicitations list.</div>
+            {% if conversion.created_solicitation_id %}
+              <a href="{% url 'solicitations:solicitation-detail' conversion.created_solicitation_id %}" class="btn btn-outline-primary btn-sm w-100">
+                <i class="bi bi-box-arrow-up-right me-1"></i>View Solicitation
+              </a>
+            {% endif %}
+          {% elif conversion and conversion.status == 'pending' %}
+            <span class="badge bg-warning text-dark mb-2"><i class="bi bi-hourglass-split"></i> Looking Up</span>
+            <div class="text-muted small mb-0">Looking up CAGE {{ conversion.cage }} on the NATO CAGE Tool. This can take up to a minute — refresh the page to check.</div>
+          {% else %}
+            {% if conversion and conversion.status == 'failed' %}
+              <div class="alert alert-danger small py-2 px-3 mb-3">{{ conversion.error_message }}</div>
+            {% endif %}
+            <div class="text-muted small mb-2">Know the CAGE code for this NSN? Add it here to fetch its details and move this NSN to Solicitations.</div>
+            <form method="POST" action="{% url 'solicitations:convert-no-cage-solicitation' record.id %}">
+              {% csrf_token %}
+              <div class="input-group input-group-sm">
+                <input type="text" name="cage" maxlength="10" class="form-control" placeholder="CAGE code" value="{{ conversion.cage|default:'' }}" required>
+                <button type="submit" class="btn btn-primary">
+                  <i class="bi bi-search me-1"></i>Look Up
+                </button>
+              </div>
+            </form>
+            <div class="text-muted small mt-2">This only affects your own view — other users still see this NSN as No-CAGE until they add a CAGE code themselves.</div>
+          {% endif %}
+        </div>
+      </div>
+
       <!-- Handling -->
       <div class="card shadow-sm mb-4">
         <div class="card-header bg-white border-bottom py-3 d-flex align-items-center gap-2">

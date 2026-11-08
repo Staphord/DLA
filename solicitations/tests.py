@@ -24,7 +24,7 @@ from solicitations.export_utils import (
     validate_rows_52_55_aidc,
 )
 from solicitations.forms import UserUpdateForm
-from solicitations.models import ExportFieldDefinition, GovernmentEmailSolicitation, GovernmentEmailSolicitationHandledBy, NoCageSolicitation, NoCageSolicitationHandledBy, RfqReply, Solicitation, UserExportConfiguration
+from solicitations.models import ExportFieldDefinition, GovernmentEmailSolicitation, GovernmentEmailSolicitationHandledBy, MissingInfoFollowUpSettings, NoCageSolicitation, NoCageSolicitationConversion, NoCageSolicitationHandledBy, RfqReply, Solicitation, UserEmailConfig, UserExportConfiguration
 
 
 def blank_values():
@@ -722,6 +722,369 @@ class NoCageSolicitationPageTests(TestCase):
         """Purchase Request moved to the detail page; the list row should not print it."""
         response = self.client.get(self._path('no-cage-solicitations'))
         self.assertNotContains(response, self.record.purchase_request)
+
+
+class NoCageSolicitationConversionTests(TestCase):
+    """
+    Covers adding a CAGE code to a No-CAGE Solicitation: the view that queues
+    the lookup, and the background task that actually performs it (with the
+    live NATO CAGE Tool scrape stubbed out - these tests never touch Selenium
+    or the network).
+
+    Per-user, like NoCageSolicitationHandledBy: the shared NoCageSolicitation
+    row must never be touched, and the resulting Solicitation must be visible
+    only to the user who converted it.
+    """
+
+    def _path(self, url_name, *args):
+        from django.conf import settings
+        path = reverse(f'solicitations:{url_name}', args=args)
+        prefix = (settings.FORCE_SCRIPT_NAME or '').rstrip('/')
+        if prefix and path.startswith(prefix):
+            path = path[len(prefix):] or '/'
+        return path
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            username="convert-test-user",
+            password="test-pass-12345",
+            email="convert-user@example.com",
+            companyName="Test Vendor Inc",
+            phone="5555550100",
+            address="123 Test St",
+        )
+        self.other_user = CustomUser.objects.create_user(
+            username="convert-other-user",
+            password="test-pass-12345",
+            email="convert-other@example.com",
+            companyName="Other Vendor Inc",
+            phone="5555550101",
+            address="456 Test Ave",
+        )
+        self.client.force_login(self.user)
+        self.record = NoCageSolicitation.objects.create(
+            nsn="5306007778888",
+            nomenclature="TEST CONVERTIBLE WIDGET",
+            solicitation="SPE7L1-26-T-CONVERT1",
+            quantity="20",
+            purchase_request="7018477777",
+            # Dash format, matching what DIBBS actually gives extract_data_from_page
+            # for both normal and no-CAGE rows - the main Solicitations list only
+            # accepts this format (see its return_by_date__regex filter).
+            issued_date="10-01-2026",
+            return_by_date="11-01-2026",
+            nsn_detail_url="https://www.dibbs.bsm.dla.mil/Rfq/RfqNsn.aspx?value=fake",
+        )
+
+    def _fake_cage_details(self, cage="1A2B3", email="sales@acme.example"):
+        return [{
+            "CAGE Code": cage,
+            "Organization Name": "Acme Corp",
+            "Street Name": "123 Main St",
+            "City": "Springfield",
+            "Postal Code": "12345",
+            "Phone": "555-1234",
+            "Fax": "N/A",
+            "Email": email,
+        }]
+
+    def test_submitting_a_cage_code_queues_a_pending_conversion(self):
+        from unittest import mock
+        with mock.patch('solicitations.views.async_task') as mock_async:
+            response = self.client.post(
+                self._path('convert-no-cage-solicitation', self.record.pk),
+                {'cage': '1a2b3'},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(mock_async.called)
+        conversion = NoCageSolicitationConversion.objects.get(
+            solicitation=self.record, user=self.user)
+        self.assertEqual(conversion.cage, '1A2B3')
+        self.assertEqual(conversion.status, NoCageSolicitationConversion.STATUS_PENDING)
+
+    def test_pending_conversion_hides_record_from_my_list_only(self):
+        from unittest import mock
+        with mock.patch('solicitations.views.async_task'):
+            self.client.post(
+                self._path('convert-no-cage-solicitation', self.record.pk),
+                {'cage': '1A2B3'},
+            )
+
+        mine = self.client.get(self._path('no-cage-solicitations'))
+        self.assertNotContains(mine, self.record.nsn)
+
+        self.client.force_login(self.other_user)
+        theirs = self.client.get(self._path('no-cage-solicitations'))
+        self.assertContains(theirs, self.record.nsn)
+
+    def test_blank_cage_code_is_rejected(self):
+        from unittest import mock
+        with mock.patch('solicitations.views.async_task') as mock_async:
+            response = self.client.post(
+                self._path('convert-no-cage-solicitation', self.record.pk), {'cage': ''})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(mock_async.called)
+        self.assertFalse(
+            NoCageSolicitationConversion.objects.filter(solicitation=self.record).exists())
+
+    def test_background_task_creates_solicitation_visible_only_to_converting_user(self):
+        from unittest import mock
+        import extractSolicitations as es
+        from solicitations.tasks import convert_no_cage_solicitation as run_conversion
+
+        conversion = NoCageSolicitationConversion.objects.create(
+            solicitation=self.record, user=self.user, cage='1A2B3')
+
+        with mock.patch.object(es, 'initialize_driver', return_value=mock.Mock()), \
+             mock.patch.object(es, 'lookup_part_number_for_cage', return_value='PN-777'), \
+             mock.patch.object(es, 'extract_cage_details_comprehensive',
+                                return_value=self._fake_cage_details()):
+            run_conversion(conversion.id)
+
+        conversion.refresh_from_db()
+        self.assertEqual(conversion.status, NoCageSolicitationConversion.STATUS_DONE)
+        self.assertIsNotNone(conversion.created_solicitation)
+
+        new_solicitation = conversion.created_solicitation
+        self.assertEqual(new_solicitation.cage, '1A2B3')
+        self.assertEqual(new_solicitation.NSN, self.record.nsn)
+        self.assertEqual(new_solicitation.part_number, 'PN-777')
+        self.assertEqual(new_solicitation.organization_name, 'Acme Corp')
+        self.assertEqual(new_solicitation.added_by_user, self.user)
+
+        # The shared NoCageSolicitation row itself is never touched.
+        self.record.refresh_from_db()
+        self.assertEqual(self.record.nsn, "5306007778888")
+
+        # Only the converting user sees the new Solicitation in their list.
+        my_list = self.client.get(self._path('solicitations'))
+        self.assertContains(my_list, new_solicitation.solicitation)
+
+        self.client.force_login(self.other_user)
+        their_list = self.client.get(self._path('solicitations'))
+        self.assertNotContains(their_list, new_solicitation.solicitation)
+
+    def test_background_task_marks_failed_when_cage_has_no_data(self):
+        from unittest import mock
+        import extractSolicitations as es
+        from solicitations.tasks import convert_no_cage_solicitation as run_conversion
+
+        conversion = NoCageSolicitationConversion.objects.create(
+            solicitation=self.record, user=self.user, cage='00000')
+        empty_cage_details = [{
+            "CAGE Code": "00000", "Organization Name": "N/A", "Street Name": "N/A",
+            "City": "N/A", "Postal Code": "N/A", "Phone": "N/A", "Fax": "N/A", "Email": "N/A",
+        }]
+
+        with mock.patch.object(es, 'initialize_driver', return_value=mock.Mock()), \
+             mock.patch.object(es, 'lookup_part_number_for_cage', return_value=''), \
+             mock.patch.object(es, 'extract_cage_details_comprehensive',
+                                return_value=empty_cage_details):
+            run_conversion(conversion.id)
+
+        conversion.refresh_from_db()
+        self.assertEqual(conversion.status, NoCageSolicitationConversion.STATUS_FAILED)
+        self.assertIsNone(conversion.created_solicitation)
+        self.assertIn('00000', conversion.error_message)
+
+        # A failed conversion makes the record visible again, so the user can retry.
+        mine = self.client.get(self._path('no-cage-solicitations'))
+        self.assertContains(mine, self.record.nsn)
+
+
+class MissingInfoFollowUpTests(TestCase):
+    """
+    Covers the opt-in "ask the OEM for missing pricing/shipping fields"
+    follow-up: the settings page where a user picks which fields to track,
+    and the background task that checks a captured reply and emails the OEM
+    (never touching the network - EmailMessage.send is mocked throughout).
+    """
+
+    def _path(self, url_name, *args):
+        from django.conf import settings
+        path = reverse(f'solicitations:{url_name}', args=args)
+        prefix = (settings.FORCE_SCRIPT_NAME or '').rstrip('/')
+        if prefix and path.startswith(prefix):
+            path = path[len(prefix):] or '/'
+        return path
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            username="followup-test-user",
+            password="test-pass-12345",
+            email="me@myshop.example",
+            companyName="My Shop",
+            phone="5555550100",
+            address="1 Test Way",
+        )
+        UserEmailConfig.objects.create(
+            user=self.user,
+            email_host="smtp.myshop.example",
+            email_port=587,
+            email_use_tls=True,
+            email_host_user="me@myshop.example",
+            email_host_password="fake-password",
+            default_from_email="me@myshop.example",
+        )
+        self.client.force_login(self.user)
+
+    def _make_reply(self, message_id, **overrides):
+        defaults = dict(
+            user=self.user, oem_name="Acme Corp", replied_email="sales@acme.example",
+            solicitation_number="SPE123-24-R-0001", nsn="1234567890123",
+            email_message_id=message_id,
+        )
+        defaults.update(overrides)
+        return RfqReply.objects.create(**defaults)
+
+    def test_settings_page_renders_and_saves(self):
+        response = self.client.get(self._path('missing-info-followup-settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pricing")
+        self.assertContains(response, "Shipping &amp; Fees")
+
+        response = self.client.post(self._path('missing-info-followup-settings'), {
+            'tracked_fields': ['unit_price', 'total_price', 'tax'],
+        })
+        self.assertEqual(response.status_code, 302)
+
+        config = MissingInfoFollowUpSettings.objects.get(user=self.user)
+        self.assertTrue(config.enabled)
+        self.assertEqual(set(config.tracked_fields), {'unit_price', 'total_price', 'tax'})
+
+    def test_unchecking_everything_disables_and_clears_fields(self):
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True, tracked_fields=['unit_price'])
+        response = self.client.post(self._path('missing-info-followup-settings'), {})
+        self.assertEqual(response.status_code, 302)
+        config = MissingInfoFollowUpSettings.objects.get(user=self.user)
+        self.assertFalse(config.enabled)
+        self.assertEqual(config.tracked_fields, [])
+
+    def test_disabled_settings_sends_nothing(self):
+        from unittest import mock
+        from solicitations.tasks import send_missing_info_followup
+
+        reply = self._make_reply('msg-1', unit_price=None, total_price=None)
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send:
+            send_missing_info_followup(reply.id)
+        self.assertFalse(m_send.called)
+        reply.refresh_from_db()
+        self.assertIsNone(reply.missing_info_requested_at)
+
+    def test_enabled_with_missing_tracked_fields_sends_once(self):
+        from unittest import mock
+        from solicitations.tasks import send_missing_info_followup
+
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True,
+            tracked_fields=['unit_price', 'total_price', 'oem_delivery_days'])
+        reply = self._make_reply(
+            'msg-2', unit_price=None, total_price=None, oem_delivery_days=30)
+
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send:
+            send_missing_info_followup(reply.id)
+        self.assertTrue(m_send.called)
+        reply.refresh_from_db()
+        self.assertIsNotNone(reply.missing_info_requested_at)
+        self.assertEqual(set(reply.missing_info_fields_requested), {'unit_price', 'total_price'})
+
+        # Running it again for the same reply must never re-send.
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send_again:
+            send_missing_info_followup(reply.id)
+        self.assertFalse(m_send_again.called)
+
+    def test_nothing_tracked_is_missing_sends_nothing(self):
+        from unittest import mock
+        from solicitations.tasks import send_missing_info_followup
+
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True, tracked_fields=['unit_price', 'total_price'])
+        reply = self._make_reply('msg-3', unit_price=12.50, total_price=1250.00)
+
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send:
+            send_missing_info_followup(reply.id)
+        self.assertFalse(m_send.called)
+        reply.refresh_from_db()
+        self.assertIsNone(reply.missing_info_requested_at)
+
+    def test_untracked_blank_field_is_ignored(self):
+        from unittest import mock
+        from solicitations.tasks import send_missing_info_followup
+
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True, tracked_fields=['unit_price', 'total_price'])
+        reply = self._make_reply(
+            'msg-4', unit_price=9.99, total_price=99.90, oem_delivery_days=None)
+
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send:
+            send_missing_info_followup(reply.id)
+        self.assertFalse(m_send.called)
+
+    def test_sent_reply_is_marked_checked(self):
+        """missing_info_checked_at must be set whenever a reply is actually
+        evaluated, successful send included - this is what lets the periodic
+        poll skip it on every later pass."""
+        from unittest import mock
+        from solicitations.tasks import send_missing_info_followup
+
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True, tracked_fields=['unit_price'])
+        reply = self._make_reply('msg-5', unit_price=None)
+
+        with mock.patch('django.core.mail.EmailMessage.send'):
+            send_missing_info_followup(reply.id)
+        reply.refresh_from_db()
+        self.assertIsNotNone(reply.missing_info_checked_at)
+
+    def test_failed_send_leaves_reply_unchecked_for_retry(self):
+        """A send error must NOT set missing_info_checked_at, so the periodic
+        poll retries it on its next pass instead of silently giving up."""
+        from unittest import mock
+        from solicitations.tasks import send_missing_info_followup
+
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True, tracked_fields=['unit_price'])
+        reply = self._make_reply('msg-6', unit_price=None)
+
+        with mock.patch('django.core.mail.EmailMessage.send', side_effect=Exception("SMTP down")):
+            send_missing_info_followup(reply.id)
+        reply.refresh_from_db()
+        self.assertIsNone(reply.missing_info_checked_at)
+        self.assertIsNone(reply.missing_info_requested_at)
+
+    def test_periodic_check_evaluates_replies_the_other_system_inserted(self):
+        """
+        The real reply-capture happens in a separate (non-Django) system that
+        writes straight to this table, so there's no post_save signal for it.
+        check_missing_info_followups() is the catch-all: it must pick up any
+        reply with missing_info_checked_at still null, regardless of how it
+        got into the table, and never touch one it already evaluated.
+        """
+        from unittest import mock
+        from django.utils import timezone
+        from solicitations.tasks import check_missing_info_followups
+
+        MissingInfoFollowUpSettings.objects.create(
+            user=self.user, enabled=True, tracked_fields=['unit_price'])
+        unevaluated = self._make_reply('msg-7', unit_price=None)
+        already_done = self._make_reply('msg-8', unit_price=None)
+        already_done.missing_info_checked_at = timezone.now()
+        already_done.save(update_fields=['missing_info_checked_at'])
+
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send:
+            result = check_missing_info_followups()
+
+        self.assertEqual(m_send.call_count, 1)
+        unevaluated.refresh_from_db()
+        self.assertIsNotNone(unevaluated.missing_info_requested_at)
+        self.assertEqual(result['checked'], 1)
+
+        # Running it again finds nothing left to do.
+        with mock.patch('django.core.mail.EmailMessage.send') as m_send_again:
+            result_again = check_missing_info_followups()
+        self.assertFalse(m_send_again.called)
+        self.assertEqual(result_again['checked'], 0)
 
 
 class GovernmentEmailSolicitationPageTests(TestCase):

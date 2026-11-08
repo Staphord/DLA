@@ -10,11 +10,14 @@ from .models import (
     DEFAULT_RESALE_NOTICE_TEXT,
     EmailSettings,
     MailTemplate,
+    MissingInfoFollowUpSettings,
+    NoCageSolicitationConversion,
     OEM,
     OEMImportJob,
     OEMUser,
     RfqAutoFetchSettings,
     RfqAutoFetchStatus,
+    RfqReply,
     ScrapeNSNStatus,
     ScrapingSchedule,
     Solicitation,
@@ -1079,6 +1082,7 @@ def _create_schedules():
     Schedule.objects.filter(name='check_rfq_auto_fetch').delete()
     Schedule.objects.filter(name='fetch_replied_rfqs_30min').delete()
     Schedule.objects.filter(name='auto_scrape_solicitations').delete()
+    Schedule.objects.filter(name='check_missing_info_followups').delete()
 
     # Create schedules with all required fields for django-q2
     check_schedule = Schedule.objects.create(
@@ -1198,6 +1202,31 @@ def _create_schedules():
     except Exception as e:
         logger.error(f"Error creating auto-scrape schedule: {e}")
         # Don't raise - allow other schedules to be created even if scraping schedule fails
+
+    # Missing-info follow-up: replies are inserted by a separate (non-Django)
+    # system, so there's no ORM signal for new rows - poll for unevaluated
+    # ones every 5 minutes instead.
+    try:
+        missing_info_schedule = Schedule.objects.create(
+            name='check_missing_info_followups',
+            func='solicitations.tasks.check_missing_info_followups',
+            hook=None,
+            args=None,
+            kwargs=None,
+            schedule_type=Schedule.MINUTES,
+            minutes=5,
+            repeats=-1,
+            cron=None,
+            task=None,
+            cluster=None,
+            intended_date_kwarg=None
+        )
+        logger.info(
+            f"Created missing-info follow-up schedule: {missing_info_schedule.name} "
+            f"(runs every {missing_info_schedule.minutes} minutes)")
+    except Exception as e:
+        logger.error(f"Error creating missing-info follow-up schedule: {e}")
+        # Don't raise - allow other schedules to be created even if this one fails
 
     logger.info("Django-Q2 scheduled tasks created successfully")
 
@@ -3316,4 +3345,240 @@ def fetch_replied_rfqs_30min():
     except Exception as e:
         logger.error(f"Fatal error in fetch_replied_rfqs_30min: {e}")
         logger.error(traceback.format_exc())
-        return {'success': False, 'error': str(e)}
+
+
+def convert_no_cage_solicitation(conversion_id):
+    """
+    Background job for a user manually adding a CAGE code to a shared
+    NoCageSolicitation record. Looks up that CAGE on the NATO CAGE Tool
+    (reusing extractSolicitations.py's scraper code and 180-day cache, so an
+    already-known CAGE resolves without even launching a browser) and, on
+    success, creates a Solicitation visible only to the user who converted it.
+
+    The shared NoCageSolicitation row is never modified or deleted here, so
+    this has no effect on any other user.
+    """
+    try:
+        conversion = NoCageSolicitationConversion.objects.select_related(
+            'solicitation', 'user').get(id=conversion_id)
+    except NoCageSolicitationConversion.DoesNotExist:
+        logger.error(f"No-CAGE conversion {conversion_id} not found")
+        return
+
+    if conversion.status != NoCageSolicitationConversion.STATUS_PENDING:
+        return
+
+    no_cage = conversion.solicitation
+    cage_code = conversion.cage
+
+    import extractSolicitations as es
+
+    def clean(value):
+        return '' if value in (None, 'N/A') else value
+
+    driver = None
+    try:
+        driver = es.initialize_driver()
+
+        part_number = es.lookup_part_number_for_cage(
+            driver, no_cage.nsn_detail_url, cage_code)
+
+        cage_details_list = es.extract_cage_details_comprehensive(driver, [cage_code])
+        cage_details = cage_details_list[0] if cage_details_list else None
+
+        meaningful_fields = ['Organization Name', 'City', 'Phone', 'Street Name', 'Email']
+        has_data = bool(cage_details) and any(
+            clean(cage_details.get(f)) for f in meaningful_fields)
+
+        if not has_data:
+            conversion.status = NoCageSolicitationConversion.STATUS_FAILED
+            conversion.error_message = (
+                f"CAGE {cage_code} was not found or has no data on the NATO CAGE Tool.")
+            conversion.save(update_fields=['status', 'error_message', 'updated_at'])
+            return
+
+        new_solicitation = Solicitation.objects.create(
+            cage=cage_code,
+            nomenclature=no_cage.nomenclature,
+            solicitation=no_cage.solicitation,
+            part_number=part_number,
+            quantity=no_cage.quantity,
+            NSN=no_cage.nsn,
+            issued_date=no_cage.issued_date,
+            return_by_date=no_cage.return_by_date,
+            organization_name=clean(cage_details.get('Organization Name')),
+            street_name=clean(cage_details.get('Street Name')),
+            city=clean(cage_details.get('City')),
+            postal_code=clean(cage_details.get('Postal Code')),
+            phone=clean(cage_details.get('Phone')),
+            fax=clean(cage_details.get('Fax')),
+            email=clean(cage_details.get('Email')),
+            purchase_request_number=no_cage.purchase_request,
+            nsn_detail_url=no_cage.nsn_detail_url,
+            added_by_user=conversion.user,
+        )
+
+        conversion.status = NoCageSolicitationConversion.STATUS_DONE
+        conversion.created_solicitation = new_solicitation
+        conversion.error_message = ''
+        conversion.save(update_fields=[
+            'status', 'created_solicitation', 'error_message', 'updated_at'])
+
+    except Exception as e:
+        logger.error(f"No-CAGE conversion {conversion_id} failed: {e}")
+        logger.error(traceback.format_exc())
+        conversion.status = NoCageSolicitationConversion.STATUS_FAILED
+        conversion.error_message = f"Lookup failed: {e}"[:255]
+        conversion.save(update_fields=['status', 'error_message', 'updated_at'])
+    finally:
+        if driver is not None:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
+def send_missing_info_followup(rfq_reply_id):
+    """
+    Opt-in, per-user: if this OEM reply is missing any of the fields the user
+    selected in MissingInfoFollowUpSettings, email the OEM (from the same
+    account used to send the original RFQ) asking them to fill in just those
+    fields. Sends at most once per reply - see RfqReply.missing_info_requested_at.
+
+    Called by check_missing_info_followups(), which polls for replies not yet
+    evaluated - replies are captured by a separate (non-Django) system, so
+    there's no ORM signal to trigger this directly. Every exit below marks
+    missing_info_checked_at so the periodic check never re-evaluates a reply
+    twice - except when sending itself fails, which deliberately leaves it
+    unmarked so the next periodic pass retries it.
+    """
+    from django.utils import timezone as dj_timezone
+
+    try:
+        rfq_reply = RfqReply.objects.select_related('user', 'rfq', 'rfq__oem').get(id=rfq_reply_id)
+    except RfqReply.DoesNotExist:
+        logger.error(f"Missing-info follow-up: RfqReply {rfq_reply_id} not found")
+        return
+
+    if rfq_reply.missing_info_requested_at is not None:
+        return
+
+    def mark_checked():
+        rfq_reply.missing_info_checked_at = dj_timezone.now()
+        rfq_reply.save(update_fields=['missing_info_checked_at'])
+
+    try:
+        followup_settings = MissingInfoFollowUpSettings.objects.get(user=rfq_reply.user)
+    except MissingInfoFollowUpSettings.DoesNotExist:
+        mark_checked()
+        return
+
+    if not followup_settings.enabled or not followup_settings.tracked_fields:
+        mark_checked()
+        return
+
+    def is_blank(value):
+        return value is None or value == ''
+
+    tracked = [f for f in followup_settings.tracked_fields
+               if f in MissingInfoFollowUpSettings.TRACKABLE_FIELD_NAMES]
+    missing_fields = [f for f in tracked if is_blank(getattr(rfq_reply, f, None))]
+
+    if not missing_fields:
+        mark_checked()
+        return
+
+    recipient = rfq_reply.replied_email or (rfq_reply.rfq.oem.email if rfq_reply.rfq and rfq_reply.rfq.oem else '')
+    if not recipient:
+        logger.warning(f"Missing-info follow-up: no recipient email for RfqReply {rfq_reply_id}")
+        mark_checked()
+        return
+
+    missing_labels = [MissingInfoFollowUpSettings.TRACKABLE_FIELD_LABELS.get(f, f) for f in missing_fields]
+    reference = rfq_reply.solicitation_number or rfq_reply.nsn or rfq_reply.rfq_unique_id or 'your quote'
+
+    subject = f"Follow-up: Additional Pricing Details Needed for {reference}"
+    body_lines = [
+        f"Hello{(' ' + rfq_reply.oem_name) if rfq_reply.oem_name else ''},",
+        "",
+        f"Thank you for your quote for {reference}"
+        + (f" (NSN {rfq_reply.nsn})" if rfq_reply.nsn else '') + ".",
+        "",
+        "Could you also provide the following, if applicable:",
+        "",
+    ]
+    body_lines += [f"  - {label}" for label in missing_labels]
+    body_lines += [
+        "",
+        "Please reply to this email with that information at your earliest convenience.",
+        "",
+        "Thank you,",
+    ]
+    body = "\n".join(body_lines)
+
+    try:
+        from django.core.mail import get_connection, EmailMessage
+
+        connection = get_connection(
+            'solicitations.email_backend.UserConfigurableEmailBackend',
+            user=rfq_reply.user
+        )
+        from_email = getattr(connection, 'from_email', None) or rfq_reply.user.email
+
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=[recipient],
+            connection=connection,
+        )
+        email.send()
+
+        now = dj_timezone.now()
+        rfq_reply.missing_info_requested_at = now
+        rfq_reply.missing_info_fields_requested = missing_fields
+        rfq_reply.missing_info_checked_at = now
+        rfq_reply.save(update_fields=[
+            'missing_info_requested_at', 'missing_info_fields_requested', 'missing_info_checked_at'])
+
+        logger.info(
+            f"Missing-info follow-up sent to {recipient} for RfqReply {rfq_reply_id}: {missing_fields}")
+
+    except Exception as e:
+        # Deliberately leave missing_info_checked_at unset: check_missing_info_followups()
+        # will pick this reply up again on its next pass and retry the send.
+        logger.error(f"Missing-info follow-up failed for RfqReply {rfq_reply_id}: {e}")
+        logger.error(traceback.format_exc())
+
+
+def check_missing_info_followups(batch_size=500):
+    """
+    Periodic fallback for the missing-info follow-up feature.
+
+    The system that actually reads OEM reply emails and creates RfqReply rows
+    is a separate (non-Django) application, so its inserts never go through
+    this app's ORM and never trigger the post_save signal that would
+    otherwise queue send_missing_info_followup() immediately. This scan is
+    what catches those: it finds every reply not yet evaluated
+    (missing_info_checked_at is null) and evaluates it, oldest first.
+
+    Also doubles as an automatic retry for replies whose follow-up email
+    previously failed to send, since a failed send leaves checked_at unset.
+    """
+    reply_ids = list(
+        RfqReply.objects.filter(missing_info_checked_at__isnull=True)
+        .order_by('id')
+        .values_list('id', flat=True)[:batch_size]
+    )
+    if not reply_ids:
+        return {'checked': 0}
+
+    for reply_id in reply_ids:
+        try:
+            send_missing_info_followup(reply_id)
+        except Exception as e:
+            logger.error(f"check_missing_info_followups: error processing RfqReply {reply_id}: {e}")
+            logger.error(traceback.format_exc())
+
+    logger.info(f"check_missing_info_followups: evaluated {len(reply_ids)} reply(ies)")
+    return {'checked': len(reply_ids)}

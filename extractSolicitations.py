@@ -2902,6 +2902,43 @@ def process_row_data(row_data_list):
     return consolidated_data
 
 
+def lookup_part_number_for_cage(driver, nsn_detail_url, cage_code):
+    """
+    Visit an NSN detail page's Approved Source Data table and return the part
+    number listed for a specific CAGE code, or '' if that CAGE isn't an
+    approved source for this NSN (or the page/table can't be loaded).
+
+    Used when a user manually adds a CAGE code to a No-CAGE Solicitation: the
+    NSN page may list that CAGE with a part number even though it wasn't one
+    of the CAGEs the scraper originally found (or the page had no CAGEs at all
+    when it was first scraped).
+    """
+    if not nsn_detail_url:
+        return ''
+
+    try:
+        if not safe_get(driver, nsn_detail_url):
+            return ''
+
+        cage_table = WebDriverWait(driver, 30).until(
+            EC.presence_of_element_located(
+                (By.XPATH, "//table[@summary='Table conatins Approved Source Data']"))
+        )
+        for cage_row in cage_table.find_elements(By.XPATH, ".//tbody/tr"):
+            try:
+                row_cage = cage_row.find_element(
+                    By.XPATH, "./td[@headers='h1']").text.strip()
+                if row_cage == cage_code:
+                    return cage_row.find_element(
+                        By.XPATH, "./td[@headers='h2']").text.strip()
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"  Could not look up part number for CAGE {cage_code} on {nsn_detail_url}: {e}")
+
+    return ''
+
+
 def save_no_cage_solicitations(nsn, nsn_rows):
     """
     Persist listing-level data for an NSN that DIBBS shows with no approved-
